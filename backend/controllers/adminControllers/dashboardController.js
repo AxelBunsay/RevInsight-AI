@@ -20,7 +20,8 @@ const {
   groupRevenueByCategory,
   groupRevenueContributors,
   projectNextQuarter,
-  parseManilaDateBound
+  parseManilaDateBound,
+  getManilaDateParts
 } = require('../../utils/revenue');
 const { getAvailableStock, isLowStock } = require('../../utils/inventory');
 
@@ -201,11 +202,20 @@ const getRevenueRisk = async (req, res) => {
 const getProjectedRevenue = async (req, res) => {
   try {
     const quarterlyData = await getRevenueByPeriod('quarter');
-    const projectedData = projectNextQuarter(quarterlyData);
+    const currentQuarter = getManilaDateParts(new Date());
+    const completedQuarters = quarterlyData.filter((row) =>
+      row._id.year < currentQuarter.year
+      || (row._id.year === currentQuarter.year && row._id.quarter < currentQuarter.quarter)
+    );
+    const insufficientData = completedQuarters.length < 5;
 
     res.json({
       success: true,
-      data: projectedData
+      data: {
+        insufficientData,
+        availableQuarters: completedQuarters.length,
+        projection: insufficientData ? [] : projectNextQuarter(completedQuarters)
+      }
     });
   } catch (error) {
     console.error('[getProjectedRevenue] error', error);
