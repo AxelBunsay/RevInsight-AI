@@ -1,12 +1,19 @@
 const Product = require('../../models/product');
 const mongoose = require('mongoose');
-const { validateProductInput } = require('../../utils/inventoryValidation');
+const Reservation = require('../../models/orderingModels/reservation');
 const { archiveOrDeleteProduct } = require('../../utils/safeDeleteInventoryRecord');
 const {
-  uploadProductImage,
   getProductImagePublicId,
   removeProductImageSafely
 } = require('../../utils/productImage');
+const { prepareProductMutation, serializePublicVariants } = require('../../utils/productVariants');
+
+const serializeProduct = (product) => ({
+  ...product.toObject(),
+  image: product.image || product.imageUrl || null,
+  imageUrl: product.imageUrl || product.image || null,
+  variants: serializePublicVariants(product.variants || [])
+});
 
 const validateProductId = (id, res) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -21,40 +28,28 @@ const validateProductId = (id, res) => {
 };
 
 const createProduct = async (req, res) => {
-  let uploadedImage;
+  let prepared;
   try {
-    const { name, price, quantity, category } = req.body;
-    const fieldErrors = validateProductInput(req.body);
-    if (Object.keys(fieldErrors).length) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please correct the highlighted fields.',
-        fieldErrors
-      });
-    }
-    if (req.file) uploadedImage = await uploadProductImage(req.file);
-
-    const product = await Product.create({
-      name,
-      price,
-      quantity,
-      category,
-      image: uploadedImage?.imageUrl || null,
-      ...(uploadedImage || {})
+    prepared = await prepareProductMutation({
+      input: req.body,
+      productFile: req.file,
+      variantFiles: req.variantFiles,
+      Reservation
     });
-
+    const product = await Product.create(prepared.data);
     res.status(201).json({
       success: true,
       message: 'Product created successfully',
-      product: { ...product.toObject(), imageUrl: product.imageUrl || product.image || null }
+      product: serializeProduct(product)
     });
   } catch (error) {
-    if (uploadedImage?.imagePublicId) {
-      await removeProductImageSafely(uploadedImage.imagePublicId, 'createProduct.rollback');
+    for (const image of prepared?.uploadedImages || error.uploadedImages || []) {
+      await removeProductImageSafely(image.imagePublicId, 'createProduct.rollback');
     }
     res.status(error.status || 400).json({
       success: false,
-      message: error.message
+      message: error.message,
+      ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
     });
   }
 };
@@ -64,19 +59,23 @@ const getProducts = async (req, res) => {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
     const skip = (page - 1) * limit;
+    const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const fitment = {};
+    for (const field of ['brand', 'model']) {
+      const value = typeof req.query[field] === 'string' ? req.query[field].trim() : '';
+      if (value) fitment[field] = new RegExp(`^${escapeRegex(value)}$`, 'i');
+    }
+    const filter = { isActive: { $ne: false } };
+    if (Object.keys(fitment).length) filter.variants = { $elemMatch: fitment };
     const [products, total] = await Promise.all([
-      Product.find({ isActive: { $ne: false } }).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Product.countDocuments({ isActive: { $ne: false } })
+      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Product.countDocuments(filter)
     ]);
 
     res.status(200).json({
       success: true,
       count: total,
-      products: products.map(product => ({
-        ...product.toObject(),
-        image: product.image || product.imageUrl || null,
-        imageUrl: product.imageUrl || product.image || null
-      })),
+      products: products.map(serializeProduct),
       pagination: {
         page,
         limit,
@@ -107,11 +106,7 @@ const getProduct = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      product: {
-        ...product.toObject(),
-        image: product.image || product.imageUrl || null,
-        imageUrl: product.imageUrl || product.image || null
-      }
+      product: serializeProduct(product)
     });
   } catch (error) {
     res.status(500).json({
@@ -122,19 +117,10 @@ const getProduct = async (req, res) => {
 };
 
 const updateProduct = async (req, res) => {
-  let uploadedImage;
+  let prepared;
   try {
     if (!validateProductId(req.params.id, res)) return;
 
-    const { name, price, quantity, category } = req.body;
-    const fieldErrors = validateProductInput(req.body);
-    if (Object.keys(fieldErrors).length) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please correct the highlighted fields.',
-        fieldErrors
-      });
-    }
     const currentProduct = await Product.findById(req.params.id);
 
     if (!currentProduct) {
@@ -144,59 +130,32 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    if (Number(quantity) < Number(currentProduct.reservedQty || 0)) {
-      return res.status(400).json({
-        success: false,
-        message: `Stock cannot be lower than the ${currentProduct.reservedQty} units currently reserved.`
-      });
-    }
-
-    if (req.file) uploadedImage = await uploadProductImage(req.file);
-    const oldImagePublicId = currentProduct.imagePublicId
-      || getProductImagePublicId(currentProduct.imageUrl || currentProduct.image);
-    const imageUpdate = uploadedImage
-      ? { ...uploadedImage, image: uploadedImage.imageUrl }
-      : req.body.removeImage === 'true' || req.body.removeImage === true
-        ? { image: null, imageUrl: null, imagePublicId: null }
-        : {};
-    const product = await Product.findByIdAndUpdate(
-      {
-        _id: req.params.id,
-        $or: [
-          { reservedQty: { $lte: Number(quantity) } },
-          { reservedQty: { $exists: false } }
-        ]
-      },
-      { name: name.trim(), price: Number(price), quantity: Number(quantity), category: category.trim(), ...imageUpdate },
-      { new: true, runValidators: true }
-    );
-
-    if (!product) {
-      if (uploadedImage?.imagePublicId) {
-        await removeProductImageSafely(uploadedImage.imagePublicId, 'updateProduct.rollback');
-      }
-      return res.status(409).json({
-        success: false,
-        message: 'Stock changed while saving. It cannot be set below the quantity currently reserved.'
-      });
-    }
-
-    if ((uploadedImage || Object.keys(imageUpdate).length) && oldImagePublicId) {
-      await removeProductImageSafely(oldImagePublicId, 'updateProduct');
+    prepared = await prepareProductMutation({
+      input: req.body,
+      currentProduct,
+      productFile: req.file,
+      variantFiles: req.variantFiles,
+      Reservation
+    });
+    currentProduct.set(prepared.data);
+    const product = await currentProduct.save();
+    for (const publicId of prepared.obsoleteImagePublicIds) {
+      await removeProductImageSafely(publicId, 'updateProduct');
     }
 
     res.status(200).json({
       success: true,
       message: 'Product updated successfully',
-      product: { ...product.toObject(), imageUrl: product.imageUrl || product.image || null }
+      product: serializeProduct(product)
     });
   } catch (error) {
-    if (uploadedImage?.imagePublicId) {
-      await removeProductImageSafely(uploadedImage.imagePublicId, 'updateProduct.rollback');
+    for (const image of prepared?.uploadedImages || error.uploadedImages || []) {
+      await removeProductImageSafely(image.imagePublicId, 'updateProduct.rollback');
     }
     res.status(error.status || 400).json({
       success: false,
-      message: error.message
+      message: error.message,
+      ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
     });
   }
 };
@@ -220,6 +179,12 @@ const deleteProduct = async (req, res) => {
         product.imagePublicId || getProductImagePublicId(product.imageUrl || product.image),
         'deleteProduct'
       );
+      for (const variant of product.variants || []) {
+        await removeProductImageSafely(
+          variant.imagePublicId || getProductImagePublicId(variant.imageUrl),
+          'deleteProduct.variant'
+        );
+      }
     }
     res.status(200).json({
       success: true,

@@ -5,14 +5,13 @@ const Mechanic = require('../../models/mechanic');
 const ServiceRequest = require('../../models/serviceRequest');
 const BusinessRecord = require('../../models/businessRecord');
 const Reservation = require('../../models/orderingModels/reservation');
-const { validateProductInput } = require('../../utils/inventoryValidation');
 const { archiveOrDeleteProduct, hasActiveProductReservation } = require('../../utils/safeDeleteInventoryRecord');
 const { expireReservations } = require('../reservationController');
 const {
-  uploadProductImage,
   getProductImagePublicId,
   removeProductImageSafely
 } = require('../../utils/productImage');
+const { prepareProductMutation } = require('../../utils/productVariants');
 const {
   getRevenueEntries,
   groupRevenueByPeriod,
@@ -24,8 +23,6 @@ const {
   getManilaDateParts
 } = require('../../utils/revenue');
 const { getAvailableStock, isLowStock } = require('../../utils/inventory');
-
-const isRemoveImageRequested = (value) => value === true || value === 'true';
 
 const loadRevenueEntries = (options = {}) => getRevenueEntries({
   Order,
@@ -658,25 +655,15 @@ const getInventoryItem = async (req, res) => {
 
 // Add Inventory Item
 const addInventoryItem = async (req, res) => {
-  let uploadedImage;
+  let prepared;
   try {
-    const fieldErrors = validateProductInput(req.body);
-    if (Object.keys(fieldErrors).length) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please correct the highlighted fields.',
-        fieldErrors
-      });
-    }
-    if (req.file) uploadedImage = await uploadProductImage(req.file);
-    const item = new Product({
-      name: req.body.name,
-      price: req.body.price,
-      quantity: req.body.quantity,
-      category: req.body.category,
-      ...(uploadedImage || {})
+    prepared = await prepareProductMutation({
+      input: req.body,
+      productFile: req.file,
+      variantFiles: req.variantFiles,
+      Reservation
     });
-    await item.save();
+    const item = await Product.create(prepared.data);
 
     res.status(201).json({
       success: true,
@@ -684,74 +671,37 @@ const addInventoryItem = async (req, res) => {
       data: item
     });
   } catch (error) {
-    if (uploadedImage?.imagePublicId) {
-      await removeProductImageSafely(uploadedImage.imagePublicId, 'addInventoryItem.rollback');
+    for (const image of prepared?.uploadedImages || error.uploadedImages || []) {
+      await removeProductImageSafely(image.imagePublicId, 'addInventoryItem.rollback');
     }
     console.error('[addInventoryItem] error', error);
-    res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to add inventory item. Please try again.' });
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Failed to add inventory item. Please try again.',
+      ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
+    });
   }
 };
 
 // Update Inventory Item
 const updateInventoryItem = async (req, res) => {
-  let uploadedImage;
+  let prepared;
   try {
-    const fieldErrors = validateProductInput(req.body);
-    if (Object.keys(fieldErrors).length) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please correct the highlighted fields.',
-        fieldErrors
-      });
-    }
     const currentItem = await Product.findById(req.params.id);
     if (!currentItem) {
       return res.status(404).json({ success: false, message: 'Item not found' });
     }
-    if (Number(req.body.quantity) < Number(currentItem.reservedQty || 0)) {
-      return res.status(400).json({
-        success: false,
-        message: `Stock cannot be lower than the ${currentItem.reservedQty} units currently reserved.`
-      });
-    }
-    if (req.file) uploadedImage = await uploadProductImage(req.file);
-    const oldImagePublicId = currentItem.imagePublicId
-      || getProductImagePublicId(currentItem.imageUrl || currentItem.image);
-    const imageUpdate = uploadedImage
-      ? { ...uploadedImage, image: uploadedImage.imageUrl }
-      : isRemoveImageRequested(req.body.removeImage)
-        ? { image: null, imageUrl: null, imagePublicId: null }
-        : {};
-    const item = await Product.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        $or: [
-          { reservedQty: { $lte: Number(req.body.quantity) } },
-          { reservedQty: { $exists: false } }
-        ]
-      },
-      {
-        name: req.body.name.trim(),
-        price: Number(req.body.price),
-        quantity: Number(req.body.quantity),
-        category: req.body.category.trim(),
-        ...imageUpdate
-      },
-      { new: true, runValidators: true }
-    );
-
-    if (!item) {
-      if (uploadedImage?.imagePublicId) {
-        await removeProductImageSafely(uploadedImage.imagePublicId, 'updateInventoryItem.rollback');
-      }
-      return res.status(409).json({
-        success: false,
-        message: 'Stock changed while saving. It cannot be set below the quantity currently reserved.'
-      });
-    }
-
-    if ((uploadedImage || isRemoveImageRequested(req.body.removeImage)) && oldImagePublicId) {
-      await removeProductImageSafely(oldImagePublicId, 'updateInventoryItem');
+    prepared = await prepareProductMutation({
+      input: req.body,
+      currentProduct: currentItem,
+      productFile: req.file,
+      variantFiles: req.variantFiles,
+      Reservation
+    });
+    currentItem.set(prepared.data);
+    const item = await currentItem.save();
+    for (const publicId of prepared.obsoleteImagePublicIds) {
+      await removeProductImageSafely(publicId, 'updateInventoryItem');
     }
 
     res.json({
@@ -760,11 +710,15 @@ const updateInventoryItem = async (req, res) => {
       data: item
     });
   } catch (error) {
-    if (uploadedImage?.imagePublicId) {
-      await removeProductImageSafely(uploadedImage.imagePublicId, 'updateInventoryItem.rollback');
+    for (const image of prepared?.uploadedImages || error.uploadedImages || []) {
+      await removeProductImageSafely(image.imagePublicId, 'updateInventoryItem.rollback');
     }
     console.error('[updateInventoryItem] error', error);
-    res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to update inventory item. Please try again.' });
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Failed to update inventory item. Please try again.',
+      ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
+    });
   }
 };
 
@@ -791,6 +745,12 @@ const deleteInventoryItem = async (req, res) => {
         item.imagePublicId || getProductImagePublicId(item.imageUrl || item.image),
         'deleteInventoryItem'
       );
+      for (const variant of item.variants || []) {
+        await removeProductImageSafely(
+          variant.imagePublicId || getProductImagePublicId(variant.imageUrl),
+          'deleteInventoryItem.variant'
+        );
+      }
     }
     res.json({
       success: true,

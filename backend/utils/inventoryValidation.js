@@ -1,4 +1,4 @@
-const validateProductInput = (input) => {
+const validateProductInput = (input, { hasVariants = false } = {}) => {
   const fieldErrors = {};
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const price = Number(input.price);
@@ -11,15 +11,15 @@ const validateProductInput = (input) => {
   if (name.length < 2 || name.length > 80) {
     fieldErrors.name = 'Name must be between 2 and 80 characters.';
   }
-  if (!hasNumber(input.price) || price < 0.01 || price > 999999.99) {
-    fieldErrors.price = 'Price must be between 0.01 and 999,999.99.';
+  if (!hasNumber(input.price) || price < (hasVariants ? 0 : 0.01) || price > 999999.99) {
+    fieldErrors.price = `Price must be between ${hasVariants ? '0' : '0.01'} and 999,999.99.`;
   }
-  if (
+  if (!hasVariants && (
     !hasNumber(input.quantity) ||
     !Number.isInteger(quantity) ||
     quantity < 0 ||
     quantity > 99999
-  ) {
+  )) {
     fieldErrors.quantity = 'Stock must be a whole number from 0 to 99,999.';
   }
   if (typeof input.category !== 'string' || !input.category.trim()) {

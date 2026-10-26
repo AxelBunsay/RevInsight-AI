@@ -48,10 +48,21 @@ const customerReservationPayload = (reservation) => {
 async function releaseReservedStock(reservation, session) {
   for (const item of reservation.items) {
     const product = await Product.findById(item.productId).session(session);
-    if (!product || Number(product.reservedQty || 0) < item.qty) {
+    if (!product) {
       throw Object.assign(new Error(`Unable to release reserved stock for ${item.name}. Contact support.`), { status: 409 });
     }
-    product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+    if (item.variantId) {
+      const variant = product.variants?.id(item.variantId);
+      if (!variant || Number(variant.reservedQty || 0) < item.qty) {
+        throw Object.assign(new Error(`Unable to release reserved stock for ${item.name}. Contact support.`), { status: 409 });
+      }
+      variant.reservedQty = Number(variant.reservedQty || 0) - item.qty;
+    } else {
+      if (product.variants?.length || Number(product.reservedQty || 0) < item.qty) {
+        throw Object.assign(new Error(`Unable to release reserved stock for ${item.name}. Contact support.`), { status: 409 });
+      }
+      product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+    }
     await product.save({ session });
   }
 }
@@ -146,10 +157,14 @@ const createReservation = async (req, res) => {
       if (!mongoose.Types.ObjectId.isValid(item.productId)) {
         return res.status(400).json({ success: false, message: 'Each item must have a valid product ID.' });
       }
-      if (itemIds.has(String(item.productId))) {
-        return res.status(400).json({ success: false, message: 'Remove duplicate products before creating a reservation.' });
+      if (item.variantId !== undefined && item.variantId !== null && !mongoose.Types.ObjectId.isValid(item.variantId)) {
+        return res.status(400).json({ success: false, message: 'Each variant ID must be valid.' });
       }
-      itemIds.add(String(item.productId));
+      const itemKey = `${item.productId}:${item.variantId || ''}`;
+      if (itemIds.has(itemKey)) {
+        return res.status(400).json({ success: false, message: 'Remove duplicate products or variants before creating a reservation.' });
+      }
+      itemIds.add(itemKey);
       if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > 99999) {
         return res.status(400).json({ success: false, message: 'Item quantities must be whole numbers from 1 to 99,999.' });
       }
@@ -165,15 +180,31 @@ const createReservation = async (req, res) => {
     for (const requested of requestedItems) {
       const product = await Product.findOne({ _id: requested.productId, isActive: { $ne: false } });
       if (!product) return res.status(404).json({ success: false, message: 'A selected product is no longer available.' });
-      const available = Math.max(0, product.quantity - Number(product.reservedQty || 0));
-      if (available < requested.qty) {
-        return res.status(409).json({ success: false, message: `Only ${available} of ${product.name} are currently available.` });
+      let variant;
+      if (product.variants?.length) {
+        if (!requested.variantId) {
+          return res.status(400).json({ success: false, message: `Choose a variant for ${product.name}.` });
+        }
+        variant = product.variants?.id(requested.variantId);
+        if (!variant) return res.status(400).json({ success: false, message: `The selected variant for ${product.name} is no longer available.` });
+      } else if (requested.variantId) {
+        return res.status(400).json({ success: false, message: `${product.name} does not have selectable variants.` });
       }
-      const unitPrice = money(product.price);
+      const available = variant
+        ? Math.max(0, Number(variant.stock || 0) - Number(variant.reservedQty || 0))
+        : Math.max(0, product.quantity - Number(product.reservedQty || 0));
+      if (available < requested.qty) {
+        const itemName = variant ? `${product.name} - ${variant.label}` : product.name;
+        return res.status(409).json({ success: false, message: `Only ${available} of ${itemName} are currently available.` });
+      }
+      const unitPrice = money(variant ? variant.price : product.price);
+      const variantLabel = variant?.label || '';
       items.push({
         productId: product._id,
-        name: product.name,
-        imageUrl: product.imageUrl || product.image || '',
+        ...(variant ? { variantId: variant._id, variantLabel } : {}),
+        name: variantLabel ? `${product.name} - ${variantLabel}` : product.name,
+        category: product.category,
+        imageUrl: variant?.imageUrl || product.imageUrl || product.image || '',
         unitPrice,
         qty: requested.qty,
         lineTotal: money(unitPrice * requested.qty)
@@ -495,10 +526,21 @@ const confirmReservation = async (req, res) => {
       }
       for (const item of reservation.items) {
         const product = await Product.findOne({ _id: item.productId, isActive: { $ne: false } }).session(session);
-        if (!product || product.quantity - Number(product.reservedQty || 0) < item.qty) {
+        if (!product) {
           throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
         }
-        product.reservedQty = Number(product.reservedQty || 0) + item.qty;
+        if (item.variantId) {
+          const variant = product.variants?.id(item.variantId);
+          if (!variant || Number(variant.stock || 0) - Number(variant.reservedQty || 0) < item.qty) {
+            throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
+          }
+          variant.reservedQty = Number(variant.reservedQty || 0) + item.qty;
+        } else {
+          if (product.variants?.length || product.quantity - Number(product.reservedQty || 0) < item.qty) {
+            throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
+          }
+          product.reservedQty = Number(product.reservedQty || 0) + item.qty;
+        }
         await product.save({ session });
       }
       const settings = await getSettings();
@@ -592,11 +634,23 @@ const completeReservation = async (req, res) => {
       if (!canTransitionReservationStatus(reservation.status, 'Completed')) throw Object.assign(new Error('Only reserved items can be completed.'), { status: 409 });
       for (const item of reservation.items) {
         const product = await Product.findById(item.productId).session(session);
-        if (!product || Number(product.reservedQty || 0) < item.qty || product.quantity < item.qty) {
+        if (!product) {
           throw Object.assign(new Error(`Stock for ${item.name} is inconsistent. Resolve inventory before completing pickup.`), { status: 409 });
         }
-        product.quantity -= item.qty;
-        product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+        if (item.variantId) {
+          const variant = product.variants?.id(item.variantId);
+          if (!variant || Number(variant.reservedQty || 0) < item.qty || Number(variant.stock || 0) < item.qty) {
+            throw Object.assign(new Error(`Stock for ${item.name} is inconsistent. Resolve inventory before completing pickup.`), { status: 409 });
+          }
+          variant.stock -= item.qty;
+          variant.reservedQty = Number(variant.reservedQty || 0) - item.qty;
+        } else {
+          if (product.variants?.length || Number(product.reservedQty || 0) < item.qty || product.quantity < item.qty) {
+            throw Object.assign(new Error(`Stock for ${item.name} is inconsistent. Resolve inventory before completing pickup.`), { status: 409 });
+          }
+          product.quantity -= item.qty;
+          product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+        }
         await product.save({ session });
       }
       reservation.status = 'Completed';
@@ -612,7 +666,7 @@ const completeReservation = async (req, res) => {
           customer: reservation.customerName,
           customerPhone: reservation.customerPhone,
           itemName: reservation.items.map((item) => item.name).join(', '),
-          category: 'Product Sales',
+          category: [...new Set(reservation.items.map((item) => item.category).filter(Boolean))].join(', ') || 'Product Sales',
           amount: reservation.total,
           status: 'completed',
           completedAt: reservation.completedAt,
