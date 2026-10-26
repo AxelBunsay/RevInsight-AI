@@ -1,16 +1,25 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerAuthShell } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import {
+  customerActionReturnPath,
+  customerActionSignInMessage,
+  readCustomerAuthAction
+} from './customerAuthAction';
 import '../styles/auth.css';
 
 export function CustomerLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { updateProfile } = useCustomerPrototype();
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const pendingAction = readCustomerAuthAction();
+  const signInMessage = customerActionSignInMessage(pendingAction);
 
   const submitLogin = async (event) => {
     event.preventDefault();
@@ -21,7 +30,16 @@ export function CustomerLogin() {
       localStorage.setItem('customerToken', response.token);
       localStorage.setItem('customerUser', JSON.stringify(response.user || {}));
       updateProfile(response.user || {});
-      navigate('/customer/shop');
+      const returnTo = searchParams.get('returnTo');
+      const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : null;
+      const from = location.state?.from;
+      const fromPath = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : null;
+      navigate(pendingAction
+        ? customerActionReturnPath(pendingAction)
+        : fromPath || safeReturnTo || '/customer/shop', {
+        replace: true,
+        state: pendingAction ? { resumeAction: true } : undefined
+      });
     } catch (loginError) {
       setError(loginError.message || 'Unable to sign in.');
     } finally {
@@ -31,6 +49,7 @@ export function CustomerLogin() {
 
   return <CustomerAuthShell activeTab="login">
     <div className="customer-auth-heading"><h2>Welcome back!</h2><p>Sign in to your customer account</p></div>
+    {signInMessage && <p className="customer-auth-action-message" role="status">{signInMessage}</p>}
     <form className="customer-auth-form" onSubmit={submitLogin}>
       {error && <p className="customer-error" role="alert">{error}</p>}
       <label>Email Address<input type="email" required placeholder="you@email.com" value={credentials.email} onChange={(event) => setCredentials({ ...credentials, email: event.target.value })} /></label>
@@ -49,6 +68,12 @@ export function CustomerRegister() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const pendingAction = readCustomerAuthAction();
+
+  const continueAfterAuthentication = () => navigate(
+    pendingAction ? customerActionReturnPath(pendingAction) : '/customer/shop',
+    { replace: true, state: pendingAction ? { resumeAction: true } : undefined }
+  );
 
   const handleRegister = async (event) => {
     event.preventDefault();
@@ -78,7 +103,7 @@ export function CustomerRegister() {
       localStorage.setItem('customerToken', response.token);
       localStorage.setItem('customerUser', JSON.stringify(response.user || {}));
       updateProfile(response.user || {});
-      navigate('/customer/shop');
+      continueAfterAuthentication();
     } catch (err) {
       setError(err.message || 'Invalid or expired OTP.');
     } finally {
@@ -100,6 +125,7 @@ export function CustomerRegister() {
   if (step === 'register') {
     return <CustomerAuthShell activeTab="register">
       <div className="customer-auth-heading"><h2>Create your account</h2><p>Register to shop parts and book services</p></div>
+      {customerActionSignInMessage(pendingAction) && <p className="customer-auth-action-message" role="status">{customerActionSignInMessage(pendingAction)}</p>}
       {error && <p className="customer-error" role="alert">{error}</p>}
       {message && <p className="customer-success" role="status">{message}</p>}
       <form className="customer-auth-form" onSubmit={handleRegister}>
@@ -114,6 +140,7 @@ export function CustomerRegister() {
 
   return <CustomerAuthShell activeTab="register">
     <div className="customer-auth-heading"><h2>Verify your email</h2><p>Enter the 6-digit OTP sent to your email</p></div>
+    {customerActionSignInMessage(pendingAction) && <p className="customer-auth-action-message" role="status">{customerActionSignInMessage(pendingAction)}</p>}
     {error && <p className="customer-error" role="alert">{error}</p>}
     {message && <p className="customer-success" role="status">{message}</p>}
     <form className="customer-auth-form" onSubmit={handleVerify}>

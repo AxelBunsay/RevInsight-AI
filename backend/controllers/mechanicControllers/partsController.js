@@ -1,5 +1,37 @@
 const Product = require('../../models/product');
 const ServiceRequest = require('../../models/serviceRequest');
+const { transitionServiceRequestStatus } = require('../serviceRequestController');
+const { getAvailableStock, isLowStock } = require('../../utils/inventory');
+
+const serializeMechanicPart = (product, { host, protocol }) => {
+  const available = getAvailableStock(product);
+  const image = product.imageUrl || product.image || null;
+  const imageUrl = image && !/^https?:\/\//i.test(image)
+    ? `${protocol}://${host}/${image}`
+    : image;
+  return {
+    itemId: product._id.toString(),
+    name: product.name,
+    stock: available,
+    category: product.category,
+    price: product.price,
+    isOutOfStock: available <= 0,
+    stockStatus: available <= 0 ? 'Out of Stock' : isLowStock(available) ? 'Low Stock' : 'In Stock',
+    image: imageUrl
+  };
+};
+
+const summarizeMechanicJobs = (jobs) => {
+  const completed = jobs.filter((job) => job.status === 'completed');
+  return {
+    totalJobs: jobs.length,
+    scheduledJobs: jobs.filter((job) => ['assigned', 'confirmed', 'accepted'].includes(job.status)).length,
+    inProgressJobs: jobs.filter((job) => job.status === 'in-progress').length,
+    completedJobs: completed.length,
+    totalEarnings: completed.reduce((total, job) => total + Number(job.laborFee || 0), 0),
+    paidJobs: completed.length
+  };
+};
 
 const serializeServiceRequest = (request) => {
   const user = request.user;
@@ -33,16 +65,7 @@ const getPartsForMechanic = async (req, res) => {
     const host = req.get('host');
     const protocol = req.protocol;
 
-    const parts = products.map(p => ({
-      itemId: p._id.toString(),
-      name: p.name,
-      stock: p.quantity,
-      category: p.category,
-      price: p.price,
-      isOutOfStock: Number(p.quantity) <= 0,
-      stockStatus: Number(p.quantity) <= 0 ? 'Out of Stock' : 'In Stock',
-      image: p.image ? `${protocol}://${host}/${p.image}` : null
-    }));
+    const parts = products.map((product) => serializeMechanicPart(product, { host, protocol }));
 
     res.status(200).json(parts);
   } catch (error) {
@@ -123,21 +146,8 @@ const getMechanicStats = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const jobs = await ServiceRequest.find({ mechanic: mechanicId });
-    const totalJobs = jobs.length;
-    const scheduledJobs = jobs.filter(job => job.status === 'pending').length;
-    const inProgressJobs = jobs.filter(job => job.status === 'in-progress').length;
-    const completedJobs = jobs.filter(job => job.status === 'completed').length;
-    const totalEarnings = completedJobs * 1500;
-
-    res.status(200).json({
-      totalJobs,
-      scheduledJobs,
-      inProgressJobs,
-      completedJobs,
-      totalEarnings,
-      paidJobs: completedJobs
-    });
+    const jobs = await ServiceRequest.find({ $or: [{ mechanic: mechanicId }, { mechanicId }] });
+    res.status(200).json(summarizeMechanicJobs(jobs));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -145,50 +155,48 @@ const getMechanicStats = async (req, res) => {
 
 const acceptMechanicJob = async (req, res) => {
   try {
-    const jobId = req.params.jobId;
-    const mechanicId = req.user?.userId;
-
-    const job = await ServiceRequest.findOne({ _id: jobId, mechanic: mechanicId });
-    if (!job) return res.status(404).json({ message: 'Job not found' });
-    if (job.status !== 'confirmed') {
-      return res.status(400).json({ message: 'Job is not available for acceptance.' });
-    }
-
-    job.status = 'accepted';
-    await job.save();
-
+    const currentJob = await ServiceRequest.findById(req.params.jobId);
+    if (!currentJob) return res.status(404).json({ message: 'Service request not found' });
+    const status = currentJob.status === 'pending' && !currentJob.mechanic && !currentJob.mechanicId
+      ? 'assigned'
+      : 'accepted';
+    const job = await transitionServiceRequestStatus({
+      requestId: req.params.jobId,
+      mechanicId: req.user?.userId,
+      status,
+      requirePayment: true
+    });
     res.status(200).json({ message: 'Job accepted', job: serializeServiceRequest(job) });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     res.status(500).json({ message: error.message });
   }
 };
 
 const startMechanicJob = async (req, res) => {
   try {
-    const job = await ServiceRequest.findOne({ _id: req.params.jobId, mechanic: req.user.userId });
-    if (!job) return res.status(404).json({ message: 'Job not found' });
-    if (job.status !== 'accepted') return res.status(400).json({ message: 'Only accepted jobs can be started.' });
-
-    job.status = 'in-progress';
-    await job.save();
-
+    const job = await transitionServiceRequestStatus({
+      requestId: req.params.jobId,
+      mechanicId: req.user?.userId,
+      status: 'in-progress'
+    });
     res.status(200).json({ message: 'Job started', job: serializeServiceRequest(job) });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     res.status(500).json({ message: error.message });
   }
 };
 
 const completeMechanicJob = async (req, res) => {
   try {
-    const job = await ServiceRequest.findOne({ _id: req.params.jobId, mechanic: req.user.userId });
-    if (!job) return res.status(404).json({ message: 'Job not found' });
-    if (job.status !== 'in-progress') return res.status(400).json({ message: 'Only in-progress jobs can be completed.' });
-
-    job.status = 'completed';
-    await job.save();
-
+    const job = await transitionServiceRequestStatus({
+      requestId: req.params.jobId,
+      mechanicId: req.user?.userId,
+      status: 'completed'
+    });
     res.status(200).json({ message: 'Job completed', job: serializeServiceRequest(job) });
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     res.status(500).json({ message: error.message });
   }
 };
@@ -202,5 +210,7 @@ module.exports = {
   getMechanicStats,
   acceptMechanicJob,
   startMechanicJob,
-  completeMechanicJob
+  completeMechanicJob,
+  summarizeMechanicJobs,
+  serializeMechanicPart
 };

@@ -5,7 +5,7 @@ const signup = async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
         message: 'Please provide username and password'
       });
@@ -51,16 +51,16 @@ const login = async (req, res) => {
     const {username, password} = req.body;
 
     if (!username || !password) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
-        message: 'Please provide username and password'
+        message: 'Invalid credentials'
       });
     }
 
     const admin = await Admin.findOne({ username }).select('+password');
 
     if (!admin){
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
@@ -69,7 +69,7 @@ const login = async (req, res) => {
     const isPasswordMatch = await admin.comparePassword(password);
 
     if (!isPasswordMatch) {
-      return res.status(400).json({
+      return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });

@@ -50,7 +50,7 @@ const getMechanicsSummary = async (req, res) => {
           }
         }
       ]),
-      Mechanic.find().select('_id').lean()
+      Mechanic.find({ isActive: { $ne: false } }).select('_id').lean()
     ]);
 
     const repairsByMechanic = new Map(
@@ -76,6 +76,10 @@ const getMechanicsSummary = async (req, res) => {
 const createMechanic = async (req, res) => {
     try {
     const { email, password, firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications } = req.body;
+
+    if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters and include a letter and a number.' });
+    }
 
     // Check if mechanic exists (normalize email to match schema lowercase/trim)
     const normalizedEmail = email.toLowerCase().trim();
@@ -240,7 +244,7 @@ const updateProfile = async (req, res) => {
 
 const listAllMechanics = async (req, res) => {
   try {
-    const mechanics = await Mechanic.find().select('firstName lastName email specialization totalRepairs averageRating isActive createdBy photoUrl bio availabilityStatus successRate yearsOfExperience');
+    const mechanics = await Mechanic.find({ isActive: { $ne: false } }).select('firstName lastName email specialization totalRepairs averageRating isActive createdBy photoUrl bio availabilityStatus successRate yearsOfExperience');
 
     const formatted = mechanics.map(m => ({
       id: m._id,
@@ -268,7 +272,7 @@ const listAllMechanics = async (req, res) => {
 
 const listAvailableMechanics = async (req, res) => {
   try {
-    const mechanics = await Mechanic.find({ isActive: true }).select('firstName lastName specialization isActive availabilityStatus');
+    const mechanics = await Mechanic.find({ isActive: { $ne: false } }).select('firstName lastName specialization isActive availabilityStatus');
     res.status(200).json({ mechanics });
   } catch (error) {
     console.error('[listAvailableMechanics] error', error);
@@ -284,7 +288,19 @@ const deleteMechanic = async (req, res) => {
       return res.status(400).json({ message: 'Mechanic id required' });
     }
 
-    const deletedMechanic = await Mechanic.findByIdAndDelete(mechanicId);
+    const activeJobs = await ServiceRequest.exists({
+      $or: [{ mechanic: mechanicId }, { mechanicId }],
+      status: { $in: ['assigned', 'confirmed', 'accepted', 'in-progress'] }
+    });
+    if (activeJobs) {
+      return res.status(409).json({ message: "Reassign or finish this mechanic's jobs first." });
+    }
+
+    const deletedMechanic = await Mechanic.findByIdAndUpdate(
+      mechanicId,
+      { $set: { isActive: false } },
+      { new: true }
+    );
 
     if (!deletedMechanic) {
       return res.status(404).json({ message: 'Mechanic not found' });
@@ -321,7 +337,9 @@ const updateMechanic = async (req, res) => {
     };
 
     if (password) {
-      if (password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+      if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+        return res.status(400).json({ message: 'Password must be at least 8 characters and include a letter and a number.' });
+      }
       const hashed = await bcrypt.hash(password, 10);
       update.password = hashed;
     }

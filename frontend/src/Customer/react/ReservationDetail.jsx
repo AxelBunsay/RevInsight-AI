@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
+import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -177,7 +178,7 @@ export default function ReservationDetail() {
       {message && <p className="customer-success" role="status">{message}</p>}
       <section className="customer-reservation-detail-card">
         <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">ITEM RESERVATION · {reservation.code}</p><h1>{reservation.items.map((item) => item.name).join(', ')}</h1><p>Created {formatDate(reservation.createdAt)}</p></div><span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span></div>
-        <div className="customer-review-lines">{reservation.items.map((item) => <div key={item.productId}><span><strong>{item.name}</strong><small>{money(item.unitPrice)} each × {item.qty}</small></span><strong>{money(item.lineTotal)}</strong></div>)}</div>
+        <div className="customer-review-lines">{reservation.items.map((item) => <div key={item.productId}><span className="customer-reservation-item-row"><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><span><strong>{item.name}</strong><small>{money(item.unitPrice)} each × {item.qty}</small></span></span><strong>{money(item.lineTotal)}</strong></div>)}</div>
         <div className="customer-reservation-detail-meta customer-reservation-money">
           <div><span>Total</span><strong>{money(reservation.total)}</strong></div>
           <div><span>Down payment</span><strong>{money(reservation.downPaymentAmount)}</strong></div>

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
 import '../styles/customer-flow.css';
 
 function formatDuration(minutes) {
@@ -74,7 +75,12 @@ export default function ServiceDetail() {
   const [loadedServiceId, setLoadedServiceId] = useState('');
   const [serviceRetryKey, setServiceRetryKey] = useState(0);
   const isLoadingService = loadedServiceId !== serviceId;
-  const [bookingDate, setBookingDate] = useState(() => location.state?.bookingDate || manilaDateKey());
+  const [bookingDate, setBookingDate] = useState(() => {
+    const action = location.state?.resumeAction ? readCustomerAuthAction() : null;
+    return action?.type === 'service' && action.serviceId === serviceId
+      ? action.date
+      : location.state?.bookingDate || manilaDateKey();
+  });
   const [timeSlot, setTimeSlot] = useState('');
   const [vehicle, setVehicle] = useState('');
   const [notes, setNotes] = useState('');
@@ -87,6 +93,10 @@ export default function ServiceDetail() {
   const [isFindingNext, setIsFindingNext] = useState(false);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [vehicleForm, setVehicleForm] = useState({ make: '', model: '', year: '', plate: '' });
+  const resumedActionRef = useRef('');
+  const resumeRequestedRef = useRef(Boolean(location.state?.resumeAction));
+  const slotRequestRef = useRef(0);
+  const nextAvailableRequestRef = useRef(0);
   const today = manilaDateKey();
 
   useEffect(() => {
@@ -107,23 +117,65 @@ export default function ServiceDetail() {
   }, [serviceId, serviceRetryKey]);
 
   const loadSlots = useCallback(async (date) => {
+    const requestId = ++slotRequestRef.current;
+    if (!date) {
+      setSchedule(null);
+      setSlots([]);
+      setClosedMessage('');
+      setAvailabilityError('');
+      setTimeSlot('');
+      setIsLoadingSlots(false);
+      return;
+    }
     setIsLoadingSlots(true);
     setAvailabilityError('');
     setTimeSlot('');
     try {
       const response = await api.getServiceSlots(serviceId, date);
+      if (requestId !== slotRequestRef.current) return;
       setSchedule(response);
       setSlots(response.slots || []);
       setClosedMessage(response.open ? '' : response.closedMessage || '');
+      if (resumeRequestedRef.current) {
+        const action = readCustomerAuthAction();
+        if (action?.type === 'service' && action.serviceId === serviceId && action.date === date && action.returnPath === location.pathname) {
+          const actionKey = `${action.createdAt}:${action.serviceId}:${action.date}:${action.time}`;
+          if (resumedActionRef.current !== actionKey) {
+            resumedActionRef.current = actionKey;
+            const matchingSlot = response.slots?.find((slot) => slot.startTime === action.time);
+            if (matchingSlot?.status === 'available') {
+              setTimeSlot(action.time);
+              setVehicle('');
+              setBookingError('Choose a saved motorcycle to continue with this booking.');
+            } else {
+              setTimeSlot('');
+              setBookingError('That booking time is no longer available. Please choose another time.');
+            }
+            clearCustomerAuthAction();
+            resumeRequestedRef.current = false;
+            navigate(location.pathname, { replace: true, state: null });
+          }
+        } else {
+          clearCustomerAuthAction();
+          resumeRequestedRef.current = false;
+          navigate(location.pathname, { replace: true, state: null });
+        }
+      }
     } catch (error) {
+      if (requestId !== slotRequestRef.current) return;
       setSchedule(error.details || null);
       setSlots([]);
       setClosedMessage('');
       setAvailabilityError(error.message || 'Booking times could not be loaded.');
+      if (resumeRequestedRef.current) {
+        clearCustomerAuthAction();
+        resumeRequestedRef.current = false;
+        navigate(location.pathname, { replace: true, state: null });
+      }
     } finally {
-      setIsLoadingSlots(false);
+      if (requestId === slotRequestRef.current) setIsLoadingSlots(false);
     }
-  }, [serviceId]);
+  }, [location.pathname, navigate, serviceId]);
 
   useEffect(() => {
     if (service) void Promise.resolve().then(() => loadSlots(bookingDate));
@@ -151,6 +203,8 @@ export default function ServiceDetail() {
   const durationLabel = formatDuration(service.durationMinutes);
   const handleDateChange = (event) => {
     const nextDate = event.target.value;
+    slotRequestRef.current += 1;
+    nextAvailableRequestRef.current += 1;
     if (!nextDate) {
       setBookingDate('');
       setTimeSlot('');
@@ -170,11 +224,13 @@ export default function ServiceDetail() {
   const handleNextAvailable = async () => {
     setIsFindingNext(true);
     setBookingError('');
+    const requestId = ++nextAvailableRequestRef.current;
     try {
       for (let offset = 1; offset <= nextDateLimit; offset += 1) {
         const date = addDays(bookingDate || today, offset);
         if (date > maximumDate) break;
         const response = await api.getServiceSlots(serviceId, date);
+        if (requestId !== nextAvailableRequestRef.current) return;
         const availableSlot = response.slots?.find((slot) => slot.status === 'available');
         if (availableSlot) {
           setBookingDate(date);
@@ -184,9 +240,11 @@ export default function ServiceDetail() {
       }
       setBookingError('No available booking times were found in the current booking window.');
     } catch (error) {
-      setBookingError(error.message || 'Available booking times could not be found.');
+      if (requestId === nextAvailableRequestRef.current) {
+        setBookingError(error.message || 'Available booking times could not be found.');
+      }
     } finally {
-      setIsFindingNext(false);
+      if (requestId === nextAvailableRequestRef.current) setIsFindingNext(false);
     }
   };
 
@@ -201,6 +259,19 @@ export default function ServiceDetail() {
 
   const addBooking = async () => {
     if (!canAddBooking || !selectedSlot) return;
+    const customerToken = localStorage.getItem('customerToken');
+    if (!customerToken || customerToken === 'prototype-guest') {
+      saveCustomerAuthAction({
+        type: 'service',
+        returnPath: location.pathname,
+        serviceId: service._id,
+        date: bookingDate,
+        time: timeSlot,
+        motorcycle: vehicle.trim()
+      });
+      navigate('/customer/login');
+      return;
+    }
     setBookingError('');
     try {
       const latest = await api.getServiceSlots(service._id, bookingDate);

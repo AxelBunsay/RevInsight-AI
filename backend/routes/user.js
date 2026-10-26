@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userControllers/user');
+const createLoginRateLimit = require('../middleware/loginRateLimit');
 const { authenticate } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/authorize');
 const {
@@ -15,7 +16,7 @@ router.post('/verify-otp', userController.verifyOtp);
 router.post('/resend-otp', userController.resendOtp);
 
 // Login (only for verified accounts)
-router.post('/login', validateLogin, userController.login);
+router.post('/login', createLoginRateLimit(), validateLogin, userController.login);
 
 // Protected routes (user only)
 router.get('/profile', authenticate, authorizeRoles('customer'), userController.getProfile);

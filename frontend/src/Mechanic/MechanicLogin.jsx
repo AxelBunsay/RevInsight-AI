@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { loginMechanic } from './mechanicService';
 
 export default function MechanicLogin() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState('miguel@workshop.ph');
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -17,7 +19,11 @@ export default function MechanicLogin() {
       const response = await loginMechanic({ email, password });
       localStorage.setItem('mechanicToken', response.token);
       localStorage.setItem('mechanicUser', JSON.stringify(response.mechanic || {}));
-      navigate('/mechanic/dashboard', { replace: true });
+      const from = location.state?.from;
+      const fromPath = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : null;
+      const returnTo = searchParams.get('returnTo');
+      const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : null;
+      navigate(fromPath || safeReturnTo || '/mechanic/dashboard', { replace: true });
     } catch (loginError) {
       setError(loginError.message || 'Unable to sign in. Check your email and password.');
     } finally {
@@ -32,7 +38,6 @@ export default function MechanicLogin() {
       <label className="mechanic-field"><span>Password</span><input autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
       {error && <p className="mechanic-alert" role="alert">{error}</p>}
       <button className="button-primary mechanic-login-submit" type="submit" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in'}</button>
-      <p className="mechanic-demo-hint">Demo account: <strong>miguel@workshop.ph</strong> · <strong>miguel123</strong><span>Sample data only.</span></p>
     </form>
   </section></main>;
 }

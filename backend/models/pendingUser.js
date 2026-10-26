@@ -35,8 +35,10 @@ const pendingUserSchema = new mongoose.Schema(
         type: Date,
         required: true,
         expires: 0
-      }
-    }
+      },
+      attempts: { type: Number, default: 0, min: 0 },
+      lastSentAt: { type: Date, default: Date.now }
+    },
   },
   { timestamps: true }
 );

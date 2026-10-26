@@ -30,7 +30,11 @@ const userSchema = new mongoose.Schema({
   },
   phoneNumber: {
     type: String,
-    required: [true, 'Phone number is required']
+    default: null
+  },
+  name: {
+    type: String,
+    default: ''
   },
 
   // OTP Verification
@@ -53,6 +57,15 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
   },
   role: {
     type: String,

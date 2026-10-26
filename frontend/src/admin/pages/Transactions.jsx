@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
@@ -8,6 +8,7 @@ function formatBusinessRecord(record) {
     ...record,
     id: record.isReservation ? record.code : record._id,
     customer: record.customer || "Unknown",
+    customerPhone: record.customer === "Deleted customer" ? "" : record.customerPhone,
     date: new Date(record.completedAt || record.createdAt).toLocaleDateString(
       "en-PH",
     ),
@@ -45,7 +46,7 @@ const reservationStatuses = [
   "Expired",
 ];
 
-const transactionStatuses = ["completed", "pending", "cancelled", "Paid", "Payment Submitted", "Payment Pending", "Confirmed"];
+const transactionStatuses = ["completed", "pending", "cancelled", "Paid", "Payment Submitted", "Payment Pending", "Confirmed", "Paid at shop"];
 
 const formatMoney = (value) => `₱${Number(value || 0).toLocaleString("en-PH", {
   minimumFractionDigits: 2,
@@ -54,7 +55,8 @@ const formatMoney = (value) => `₱${Number(value || 0).toLocaleString("en-PH", 
 
 function formatReservationRecord(reservation) {
   const customer = reservation.customerId;
-  const customerName = customer && typeof customer === "object"
+  const isDeletedCustomer = Boolean(customer && typeof customer === "object" && customer.isDeleted);
+  const customerName = customer && typeof customer === "object" && !customer.isDeleted
     ? `${customer.firstName || ""} ${customer.lastName || ""}`.trim()
     : "";
 
@@ -64,8 +66,8 @@ function formatReservationRecord(reservation) {
     isReservation: true,
     recordType: "product",
     recordLabel: "Item",
-    customer: customerName || reservation.customerName || "Unknown",
-    customerPhone: (customer && typeof customer === "object" ? customer.phoneNumber : "") || reservation.customerPhone || "",
+    customer: isDeletedCustomer ? "Deleted customer" : customerName || reservation.customerName || "Unknown",
+    customerPhone: isDeletedCustomer ? "" : (customer && typeof customer === "object" ? customer.phoneNumber : "") || reservation.customerPhone || "",
     date: new Date(reservation.createdAt).toLocaleString("en-PH"),
     items: (reservation.items || []).map((item) => `${item.name} × ${item.qty}`).join(", ") || "N/A",
     reservationItems: reservation.items || [],
@@ -85,6 +87,8 @@ function formatServiceRequestRecord(request) {
       ? "Payment Pending"
       : request.paymentStatus === "Confirmed" && request.status === "pending"
         ? "Confirmed"
+        : request.paymentStatus === "Paid at shop" && request.status === "pending"
+          ? "Paid at shop"
         : request.status || "pending";
   return {
     ...request,
@@ -92,17 +96,19 @@ function formatServiceRequestRecord(request) {
     isServiceRequest: true,
     recordType: "service",
     recordLabel: "Service",
-    customer: customerName || customer.email || "Unknown",
+    customer: customer.isDeleted ? "Deleted customer" : customerName || customer.email || "Unknown",
     date: request.scheduledDate
       ? new Date(request.scheduledDate).toLocaleDateString("en-PH")
       : new Date(request.createdAt).toLocaleDateString("en-PH"),
     items: request.serviceType || "Service booking",
     amount: Number(request.estimatedPrice || 0),
     status,
+    bookingStatus: request.status || "pending",
     mechanic: request.mechanic?.firstName
       ? `${request.mechanic.firstName} ${request.mechanic.lastName || ""}`.trim()
       : "Unassigned",
-    paymentProofUrl: request.paymentProofUrl || "",
+    paymentStatus: request.paymentStatus || "Payment Pending",
+    refundDecision: request.refundDecision || null,
     paymentReference: request.paymentReference || "",
     downPaymentAmount: Number(request.estimatedPrice || 0)
   };
@@ -125,6 +131,7 @@ function Transactions() {
   const [error, setError] = useState("");
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [statusBeingSaved, setStatusBeingSaved] = useState(false);
+  const [markingPaidAtShopId, setMarkingPaidAtShopId] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -142,11 +149,32 @@ function Transactions() {
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isUploadingQr, setIsUploadingQr] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const beginReservationAction = useCallback(async (transaction, action) => {
+    if (action === "review") {
+      try {
+        const recordId = transaction._id || transaction.sourceId;
+        const response = transaction.isServiceRequest
+          ? await api.getServiceRequestReceipts(recordId)
+          : await api.getReservationReceipts(recordId);
+        transaction = { ...transaction, paymentSubmissions: response.paymentSubmissions || [] };
+      } catch (receiptError) {
+        setError(receiptError.message || "Payment receipts could not be loaded.");
+        return;
+      }
+    }
+    setReservationAction({ transaction, action });
+    setReservationActionError("");
+    setRejectingPayment(false);
+    setActionReason("");
+    setRefundDecision("");
+    setBalanceReceived(false);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
-    const loadTransactions = async () => {
-      setIsLoading(true);
+    const loadTransactions = async ({ background = false } = {}) => {
+      if (!background) setIsLoading(true);
       try {
         if (activeTab === "items") {
           const [reservationResponse, summaryResponse] = await Promise.all([
@@ -167,24 +195,28 @@ function Transactions() {
           setTotalPages(pages);
           if (page > pages) setPage(pages);
         } else if (activeTab === "services") {
+          const candidateLimit = page * 10;
           const [response, requestResponse] = await Promise.all([
             api.getTransactions({
               page: 1,
-              limit: 100,
+              limit: candidateLimit,
               type: "service",
               search: search.trim(),
+              status: statusFilter === "All" ? "" : statusFilter,
             }),
-            api.getAdminServiceRequests()
+            api.getAdminServiceRequests({
+              page: 1,
+              limit: candidateLimit,
+              activeOnly: true,
+              search: search.trim(),
+              status: statusFilter === "All" ? "" : statusFilter,
+            })
           ]);
           if (!isMounted) return;
           const businessRecords = (response.data || []).map(formatBusinessRecord);
           const serviceRequests = (requestResponse.requests || []).map(formatServiceRequestRecord);
-          const paymentRequests = serviceRequests.filter((record) => (
-            record.status === "Payment Submitted"
-            || (record.status === "Payment Pending" && record.paymentRejectionReason)
-          ));
-          const submittedPaymentCount = serviceRequests.filter((record) => record.status === "Payment Submitted").length;
-          let combined = [...paymentRequests, ...businessRecords];
+          const submittedPaymentCount = serviceRequests.filter((record) => record.paymentStatus === "Payment Submitted").length;
+          let combined = [...serviceRequests, ...businessRecords];
           if (statusFilter !== "All") combined = combined.filter((record) => record.status === statusFilter);
           if (search.trim()) {
             const term = search.trim().toLowerCase();
@@ -194,16 +226,20 @@ function Transactions() {
           combined.sort((left, right) => {
             const leftNeedsReview = left.status === "Payment Submitted" ? 0 : 1;
             const rightNeedsReview = right.status === "Payment Submitted" ? 0 : 1;
-            return leftNeedsReview - rightNeedsReview || new Date(right.createdAt || 0) - new Date(left.createdAt || 0);
+            const leftDate = left.completedAt || left.createdAt || 0;
+            const rightDate = right.completedAt || right.createdAt || 0;
+            return leftNeedsReview - rightNeedsReview || new Date(rightDate) - new Date(leftDate);
           });
+          const totalRecords = Number(response.pagination?.totalRecords || 0)
+            + Number(requestResponse.pagination?.totalRecords || serviceRequests.length);
           setTransactions(combined.slice((page - 1) * 10, page * 10));
           setError("");
-          setRecordCount(combined.length);
-          setTotalAmount(combined.reduce((total, record) => total + Number(record.amount || 0), 0));
-          setPaymentSubmittedCount(submittedPaymentCount);
-          setCounts((current) => ({ ...current, services: combined.length }));
-          setTotalPages(Math.max(1, Math.ceil(combined.length / 10)));
-          if (page > Math.max(1, Math.ceil(combined.length / 10))) setPage(Math.max(1, Math.ceil(combined.length / 10)));
+          setRecordCount(totalRecords);
+          setTotalAmount(Number(response.totalAmount || 0));
+          setPaymentSubmittedCount(Number(requestResponse.paymentSubmittedCount ?? submittedPaymentCount));
+          setCounts((current) => ({ ...current, services: totalRecords }));
+          setTotalPages(Math.max(1, Math.ceil(totalRecords / 10)));
+          if (page > Math.max(1, Math.ceil(totalRecords / 10))) setPage(Math.max(1, Math.ceil(totalRecords / 10)));
         } else {
           const response = await api.getTransactions({
             page,
@@ -232,12 +268,12 @@ function Transactions() {
           setError(fetchError.message || "Failed to load transactions");
         }
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (isMounted && !background) setIsLoading(false);
       }
     };
 
     loadTransactions();
-    const refreshInterval = window.setInterval(loadTransactions, 30000);
+    const refreshInterval = window.setInterval(() => loadTransactions({ background: true }), 30000);
 
     return () => {
       isMounted = false;
@@ -266,10 +302,8 @@ function Transactions() {
           if (request) transaction = formatServiceRequestRecord(request);
         }
         if (!active || !transaction) return;
-        setReservationAction({ transaction, action: "review" });
-        setReservationActionError("");
-        setRejectingPayment(false);
-        setActionReason("");
+        await beginReservationAction(transaction, "review");
+        if (!active) return;
         const nextParams = new URLSearchParams(searchParams);
         nextParams.delete("review");
         setSearchParams(nextParams, { replace: true });
@@ -279,7 +313,7 @@ function Transactions() {
     };
     openReview();
     return () => { active = false; };
-  }, [activeTab, searchParams, setSearchParams, transactions]);
+  }, [activeTab, beginReservationAction, searchParams, setSearchParams, transactions]);
 
   const tabOptions = [
     { id: "all", label: "All", count: counts.all },
@@ -337,13 +371,18 @@ function Transactions() {
     }
   };
 
-  const beginReservationAction = (transaction, action) => {
-    setReservationAction({ transaction, action });
-    setReservationActionError("");
-    setRejectingPayment(false);
-    setActionReason("");
-    setRefundDecision("");
-    setBalanceReceived(false);
+  const markServicePaidAtShop = async (transaction) => {
+    setMarkingPaidAtShopId(transaction._id);
+    setError("");
+    try {
+      await api.markServicePaidAtShop(transaction._id);
+      setSettingsToast("Service payment marked paid at the shop.");
+      setRefreshKey((key) => key + 1);
+    } catch (paymentError) {
+      setError(paymentError.message || "Service payment could not be updated.");
+    } finally {
+      setMarkingPaidAtShopId("");
+    }
   };
 
   const performReservationAction = async (event, actionOverride) => {
@@ -356,6 +395,13 @@ function Transactions() {
     try {
       if (transaction.isServiceRequest && action === "confirm") await api.confirmServicePayment(transaction._id);
       if (transaction.isServiceRequest && action === "reject") await api.rejectServicePayment(transaction._id, actionReason);
+      if (transaction.isServiceRequest && ["cancel-service", "decline-service"].includes(action)) {
+        await api.updateAdminServiceRequestStatus(
+          transaction._id,
+          action === "cancel-service" ? "cancelled" : "declined",
+          { reason: actionReason, refundDecision },
+        );
+      }
       if (action === "confirm" && !transaction.isServiceRequest) await api.confirmReservation(transaction._id);
       if (action === "reject" && !transaction.isServiceRequest) await api.rejectReservation(transaction._id, actionReason);
       if (action === "complete") await api.completeReservation(transaction._id);
@@ -369,7 +415,7 @@ function Transactions() {
       }
       setReservationAction(null);
       setRefreshKey((key) => key + 1);
-      setSettingsToast(action === "confirm" ? (transaction.isServiceRequest ? "Service payment confirmed." : "Down payment confirmed.") : action === "complete" ? "Pickup completed." : action === "reject" ? "Payment rejected." : action === "refund" ? "Refund decision recorded." : "Reservation cancelled.");
+      setSettingsToast(action === "confirm" ? (transaction.isServiceRequest ? "Service payment confirmed." : "Down payment confirmed.") : action === "complete" ? "Pickup completed." : action === "reject" ? "Payment rejected." : action === "refund" ? "Refund decision recorded." : action === "cancel-service" || action === "decline-service" ? "Service booking updated." : "Reservation cancelled.");
     } catch (actionError) {
       setReservationActionError(actionError.message || "Reservation action could not be completed.");
     } finally {
@@ -502,8 +548,13 @@ function Transactions() {
         }
         return [transaction.id, transaction.date, transaction.recordLabel, transaction.customer, transaction.items, transaction.amount, transaction.recordType === "product" ? transaction.paid : "", transaction.recordType === "product" ? transaction.balance : "", transaction.status, transaction.mechanic];
       });
+      const csvCell = (value) => {
+        let cell = String(value ?? "");
+        if (/^[=+\-@]/.test(cell)) cell = `'${cell}`;
+        return `"${cell.replaceAll('"', '""')}"`;
+      };
       const csv = [[`${activeTab[0].toUpperCase()}${activeTab.slice(1)} Transactions`], headers, ...exportRows]
-        .map((row) => row.map((value) => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","))
+        .map((row) => row.map(csvCell).join(","))
         .join("\r\n");
       const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
       const link = document.createElement("a");
@@ -669,6 +720,7 @@ function Transactions() {
                       {activeTab === "items" && transaction.reservationItems.length
                         ? transaction.reservationItems.map((item) => (
                             <span className="transaction-reservation-item" key={item.productId || item.name}>
+                              {item.imageUrl && <img src={item.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
                               {item.name} × {item.qty} · {formatMoney(item.lineTotal)}
                             </span>
                           ))
@@ -688,22 +740,37 @@ function Transactions() {
                       <td className="transaction-reservation-cell">
                         {transaction.paymentMethod && <strong>{transaction.paymentMethod}</strong>}
                         {transaction.paymentReference && <small className="transaction-reservation-detail">Ref {transaction.paymentReference}</small>}
-                        {transaction.paymentProofUrl && <a className="transaction-reservation-detail" href={transaction.paymentProofUrl} target="_blank" rel="noreferrer">View proof</a>}
-                        {!transaction.paymentMethod && !transaction.paymentReference && !transaction.paymentProofUrl && "—"}
+                        {!transaction.paymentMethod && !transaction.paymentReference && "—"}
                       </td>
                     )}
                     <td>
                       <span className={`status-badge status-${transaction.status.toLowerCase().replaceAll(" ", "-")}`}>
                         {transaction.status}
                       </span>
+                      {activeTab === "services" && transaction.isServiceRequest && (
+                        <small className="transaction-reservation-detail">Payment: {transaction.paymentStatus}</small>
+                      )}
                       {transaction.status === "Payment Submitted" && <small className="transaction-needs-review">Needs review</small>}
                       {activeTab === "items" && transaction.reservedUntil && <small className="transaction-reservation-detail">Hold until {new Date(transaction.reservedUntil).toLocaleString("en-PH")}</small>}
                       {activeTab === "items" && transaction.rejectionReason && <small className="transaction-reservation-detail">Last rejection: {transaction.rejectionReason}</small>}
-                      {activeTab === "items" && transaction.refundDecision && <small className="transaction-reservation-detail">Refund decision: {transaction.refundDecision}</small>}
+                      {transaction.refundDecision && <small className="transaction-reservation-detail">Refund decision: {transaction.refundDecision}</small>}
                     </td>
                     {activeTab === "all" && <td>{transaction.mechanic}</td>}
                     <td className="transaction-actions">
-                      {transaction.isServiceRequest && transaction.status === "Payment Submitted" ? (
+                      {transaction.isServiceRequest && ["pending", "assigned", "confirmed", "accepted", "in-progress"].includes(transaction.bookingStatus) ? (
+                        <>
+                          {transaction.paymentStatus === "Payment Submitted" && (
+                            <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
+                          )}
+                          {transaction.paymentStatus === "Payment Pending" && (
+                            <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : "Mark paid at shop"}</button>
+                          )}
+                          <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel-service")}>Cancel booking</button>
+                          {["assigned", "confirmed"].includes(transaction.bookingStatus) && (
+                            <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "decline-service")}>Decline</button>
+                          )}
+                        </>
+                      ) : transaction.isServiceRequest && transaction.status === "Payment Submitted" ? (
                         <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
                       ) : transaction.isReservation && transaction.status === "Payment Submitted" ? (
                         <>
@@ -808,7 +875,7 @@ function Transactions() {
       )}
       {reservationAction && (
         <AdminDialog
-          title={reservationAction.action === "review" ? "Review payment" : reservationAction.action === "complete" ? "Complete pickup" : reservationAction.action === "refund" ? "Record refund decision" : "Cancel reservation"}
+          title={reservationAction.action === "review" ? "Review payment" : reservationAction.action === "complete" ? "Complete pickup" : reservationAction.action === "refund" ? "Record refund decision" : reservationAction.action === "cancel-service" ? "Cancel service booking" : reservationAction.action === "decline-service" ? "Decline service booking" : "Cancel reservation"}
           onClose={() => {
             if (!isPerformingReservationAction) {
               setReservationAction(null);
@@ -828,11 +895,15 @@ function Transactions() {
                   : reservationAction.transaction.date}</p>
                 <p><strong>Amount due:</strong> {formatMoney(reservationAction.transaction.downPaymentAmount || reservationAction.transaction.amount)}</p>
                 <p><strong>Reference number:</strong> {reservationAction.transaction.paymentReference || "Not provided"}</p>
-                {(reservationAction.transaction.paymentSubmissions?.length
-                  ? reservationAction.transaction.paymentSubmissions
-                  : reservationAction.transaction.paymentProofUrl
-                    ? [{ receiptUrl: reservationAction.transaction.paymentProofUrl, submittedAt: reservationAction.transaction.submittedAt, status: "Payment Submitted" }]
-                    : []).map((submission, index) => submission.receiptUrl && (
+                {reservationAction.transaction.isServiceRequest && (
+                  <>
+                    <p><strong>Payment status:</strong> {reservationAction.transaction.paymentStatus}</p>
+                    {reservationAction.transaction.refundDecision && (
+                      <p><strong>Refund decision:</strong> {reservationAction.transaction.refundDecision}</p>
+                    )}
+                  </>
+                )}
+                {(reservationAction.transaction.paymentSubmissions || []).map((submission, index) => submission.receiptUrl && (
                   <div key={`${submission.paymentProofPublicId || submission.receiptUrl || "receipt"}-${index}`}>
                     <strong>Receipt {index + 1} · {submission.status}{submission.rejectionReason ? ` · ${submission.rejectionReason}` : ""}:</strong>
                     <a href={submission.receiptUrl} target="_blank" rel="noreferrer">
@@ -904,6 +975,39 @@ function Transactions() {
                 <div className="admin-dialog-actions">
                   <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Keep reservation</button>
                   <button className="btn-small btn-delete" type="submit" disabled={isPerformingReservationAction || (reservationAction.transaction.amountPaid > 0 && (reservationAction.transaction.status === "Reserved" || !reservationAction.transaction.refundDecision) && !refundDecision)}>{isPerformingReservationAction ? "Cancelling..." : "Cancel reservation"}</button>
+                </div>
+              </>
+            )}
+            {["cancel-service", "decline-service"].includes(reservationAction.action) && (
+              <>
+                <p><strong>Payment status:</strong> {reservationAction.transaction.paymentStatus}</p>
+                {reservationAction.transaction.refundDecision && (
+                  <p><strong>Recorded refund decision:</strong> {reservationAction.transaction.refundDecision}</p>
+                )}
+                {reservationAction.transaction.bookingStatus === "in-progress" && reservationAction.action === "cancel-service" && (
+                  <label>
+                    Cancellation reason
+                    <textarea minLength="3" maxLength="300" required value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
+                  </label>
+                )}
+                {["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && (
+                  <fieldset className="reservation-refund-choice">
+                    <legend>Service payment decision</legend>
+                    <label><input type="radio" name="service-refund-decision" value="refunded" checked={refundDecision === "refunded"} onChange={(event) => setRefundDecision(event.target.value)} /> Refund</label>
+                    <label><input type="radio" name="service-refund-decision" value="forfeited" checked={refundDecision === "forfeited"} onChange={(event) => setRefundDecision(event.target.value)} /> Forfeit</label>
+                  </fieldset>
+                )}
+                <div className="admin-dialog-actions">
+                  <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Keep booking</button>
+                  <button
+                    className="btn-small btn-delete"
+                    type="submit"
+                    disabled={isPerformingReservationAction
+                      || (["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && !refundDecision)
+                      || (reservationAction.transaction.bookingStatus === "in-progress" && reservationAction.action === "cancel-service" && actionReason.trim().length < 3)}
+                  >
+                    {isPerformingReservationAction ? "Saving..." : "Confirm"}
+                  </button>
                 </div>
               </>
             )}

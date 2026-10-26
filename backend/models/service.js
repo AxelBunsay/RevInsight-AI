@@ -21,6 +21,16 @@ const serviceSchema = new mongoose.Schema({
     min: 0.01,
     max: 999999.99
   },
+  category: {
+    type: String,
+    default: 'General',
+    trim: true
+  },
+  durationMinutes: {
+    type: Number,
+    min: 1,
+    default: 60
+  },
   mechanicFee: {
     type: Number,
     min: 0,
@@ -29,15 +39,6 @@ const serviceSchema = new mongoose.Schema({
     validate: {
       validator(value) {
         return value <= this.price;
-      },
-      category: {
-        type: String,
-        default: 'General'
-      },
-      durationMinutes: {
-        type: Number,
-        min: 1,
-        default: 60
       },
       message: 'Mechanic fee cannot be greater than the service price.'
     }

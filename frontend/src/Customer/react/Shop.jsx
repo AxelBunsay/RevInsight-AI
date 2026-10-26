@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import heroImage from '../../assets/hero.png';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { api } from '../../services/api';
+import ProductImage from './ProductImage';
+import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
 import '../styles/shop.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
@@ -31,6 +33,8 @@ function ProductSkeleton() {
 }
 
 export default function Shop() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All');
   const [sort, setSort] = useState('featured');
@@ -40,22 +44,31 @@ export default function Shop() {
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
   const [error, setError] = useState('');
   const [settingsError, setSettingsError] = useState('');
-  const [failedImages, setFailedImages] = useState({});
   const [showAddedToast, setShowAddedToast] = useState(false);
+  const [resumeError, setResumeError] = useState('');
   const { addCartItem } = useCustomerPrototype();
+  const resumedActionRef = useRef('');
 
   const loadShopData = useCallback(async () => {
+    const loadAllProducts = async () => {
+      const firstPage = await api.getProducts(1, 50);
+      const pages = Number(firstPage.pagination?.pages || 1);
+      if (pages <= 1) return firstPage.products || [];
+      const remainingPages = await Promise.all(
+        Array.from({ length: pages - 1 }, (_, index) => api.getProducts(index + 2, 50))
+      );
+      return [...(firstPage.products || []), ...remainingPages.flatMap((response) => response.products || [])];
+    };
     const [productsResult, settingsResult] = await Promise.allSettled([
-      api.getProducts(),
+      loadAllProducts(),
       api.getShopSettings()
     ]);
 
     if (productsResult.status === 'fulfilled') {
-      setProducts((productsResult.value.products || []).map((product) => ({
+      setProducts(productsResult.value.map((product) => ({
         ...product,
         quantity: Math.max(0, Number(product.quantity || 0) - Number(product.reservedQty || 0))
       })));
-      setFailedImages({});
     } else {
       setError(productsResult.reason.message || 'We could not load products right now.');
     }
@@ -88,6 +101,49 @@ export default function Shop() {
     return () => window.clearTimeout(timeout);
   }, [showAddedToast]);
 
+  useEffect(() => {
+    if (!location.state?.resumeAction) return undefined;
+    const action = readCustomerAuthAction();
+    if (!action || action.type !== 'item' || action.returnPath !== location.pathname) {
+      clearCustomerAuthAction();
+      navigate(location.pathname, { replace: true, state: null });
+      return undefined;
+    }
+    const actionKey = `${action.createdAt}:${action.itemId}`;
+    if (resumedActionRef.current === actionKey) return undefined;
+    resumedActionRef.current = actionKey;
+    let active = true;
+    api.getProduct(action.itemId).then((response) => {
+      if (!active) return;
+      const product = response.product;
+      const available = Math.max(0, Number(product.quantity || 0) - Number(product.reservedQty || 0));
+      if (available < action.quantity) {
+        setResumeError('This item is no longer available in the requested quantity. Please choose another item or quantity.');
+        return;
+      }
+      addCartItem({
+        kind: 'product',
+        id: product._id,
+        name: product.name,
+        price: product.price,
+        stock: available,
+        category: product.category,
+        icon: categoryIcon(product.category),
+        imageUrl: product.imageUrl || product.image || '',
+        quantity: action.quantity
+      });
+      setShowAddedToast(true);
+    }).catch((error) => {
+      if (active) setResumeError(error.message || 'This item is no longer available. Please choose another item.');
+    }).finally(() => {
+      if (active) {
+        clearCustomerAuthAction();
+        navigate(location.pathname, { replace: true, state: null });
+      }
+    });
+    return () => { active = false; };
+  }, [addCartItem, location.pathname, location.state, navigate]);
+
   const productCategories = useMemo(
     () => ['All', ...new Set(products.map((product) => product.category).filter(Boolean))],
     [products]
@@ -109,6 +165,17 @@ export default function Shop() {
   };
 
   const addToCart = (product) => {
+    const customerToken = localStorage.getItem('customerToken');
+    if (!customerToken || customerToken === 'prototype-guest') {
+      saveCustomerAuthAction({
+        type: 'item',
+        returnPath: location.pathname,
+        itemId: product._id,
+        quantity: 1
+      });
+      navigate('/customer/login');
+      return;
+    }
     addCartItem({
       kind: 'product',
       id: product._id,
@@ -116,7 +183,8 @@ export default function Shop() {
       price: product.price,
       stock: product.quantity,
       category: product.category,
-      icon: categoryIcon(product.category)
+      icon: categoryIcon(product.category),
+      imageUrl: product.imageUrl || product.image || ''
     });
     setShowAddedToast(true);
   };
@@ -125,6 +193,8 @@ export default function Shop() {
 
   return <CustomerPage title="Motorcycle Shop" description="Browse available parts and accessories.">
     <div className="shop-content">
+      {location.state?.message && <p className="customer-success" role="status">{location.state.message}</p>}
+      {resumeError && <p className="customer-error" role="alert">{resumeError}</p>}
       <section className="shop-market-hero" style={{ '--shop-hero-image': `url(${heroImage})` }} aria-label="Shop introduction">
         <div className="shop-promo-primary">
           <p>MANOY&apos;S MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>
@@ -188,11 +258,9 @@ export default function Shop() {
                 const isOutOfStock = product.quantity === 0;
                 return <article className={`product-card${isOutOfStock ? ' is-out-of-stock' : ''}`} key={product._id}>
                   <div className="product-image">
-                    {imageUrl && !failedImages[product._id]
-                      ? <img src={imageUrl} alt={product.name} loading="lazy" onError={() => setFailedImages((current) => ({ ...current, [product._id]: true }))} />
-                      : <div className="product-image-placeholder" aria-label={`${product.category || 'Product'} image placeholder`}>
-                        <span aria-hidden="true">{categoryIcon(product.category)}</span>
-                      </div>}
+                    <ProductImage src={imageUrl} alt={product.name} className="product-image-photo" fallback={<div className="product-image-placeholder" aria-label={`${product.category || 'Product'} image placeholder`}>
+                      <span aria-hidden="true">{categoryIcon(product.category)}</span>
+                    </div>} />
                     <span className="product-badge">{product.category}</span>
                   </div>
                   <div className="product-card-body">

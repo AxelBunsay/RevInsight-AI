@@ -1,9 +1,15 @@
 const User = require('../../models/user');
 const PendingUser = require('../../models/pendingUser');
+const Reservation = require('../../models/orderingModels/reservation');
+const ServiceRequest = require('../../models/serviceRequest');
+const BusinessRecord = require('../../models/businessRecord');
+const Notification = require('../../models/notification');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
+const { removeReceipt } = require('../../utils/paymentReceipt');
 
 const transporter = nodemailer.createTransport({
   service: process.env.EMAIL_SERVICE,
@@ -183,7 +189,9 @@ const registerRequest = async (req, res) => {
         phoneNumber,
         otp: {
           code: verificationOtp,
-          expiresAt: verificationOtpExpiry
+          expiresAt: verificationOtpExpiry,
+          attempts: 0,
+          lastSentAt: new Date()
         }
       },
       {
@@ -204,8 +212,7 @@ const registerRequest = async (req, res) => {
     console.error('[registerRequest] error:', error);
 
     return res.status(500).json({
-      message: 'Failed to register user',
-      error: error.message
+      message: 'Failed to register user'
     });
   }
 };
@@ -234,7 +241,29 @@ const verifyOtp = async (req, res) => {
       });
     }
 
+    if (Number(pendingUser.otp.attempts || 0) >= 5) {
+      return res.status(423).json({
+        message: 'OTP verification is locked after too many incorrect attempts. Request a new code to continue.'
+      });
+    }
+
     if (pendingUser.otp.code !== otp) {
+      const updatedPendingUser = await PendingUser.findOneAndUpdate(
+        {
+          _id: pendingUser._id,
+          $or: [
+            { 'otp.attempts': { $lt: 5 } },
+            { 'otp.attempts': { $exists: false } }
+          ]
+        },
+        { $inc: { 'otp.attempts': 1 } },
+        { new: true }
+      );
+      if (!updatedPendingUser || Number(updatedPendingUser.otp.attempts) >= 5) {
+        return res.status(423).json({
+          message: 'OTP verification is locked after too many incorrect attempts. Request a new code to continue.'
+        });
+      }
       return res.status(400).json({
         message: 'Invalid OTP.'
       });
@@ -276,8 +305,7 @@ const verifyOtp = async (req, res) => {
     console.error('[verifyOtp] error:', error);
 
     return res.status(500).json({
-      message: 'Failed to verify OTP',
-      error: error.message
+      message: 'Failed to verify OTP'
     });
   }
 };
@@ -295,12 +323,6 @@ const resendOtp = async (req, res) => {
       });
     }
 
-    if (!pendingUser) {
-      return res.status(404).json({
-        message: 'User not found'
-      });
-    }
-
     if (pendingUser.isEmailVerified) {
       return res.status(400).json({
         message: 'Email is already verified'
@@ -315,24 +337,41 @@ const resendOtp = async (req, res) => {
       Date.now() + 10 * 60 * 1000
     );
 
-    pendingUser.otp = {
-      code: newOtp,
-      expiresAt: newOtpExpiry
-    };
-
-    await pendingUser.save();
-    await sendVerificationEmail(pendingUser, newOtp);
+    const cooldownCutoff = new Date(Date.now() - 60 * 1000);
+    const updatedPendingUser = await PendingUser.findOneAndUpdate(
+      {
+        _id: pendingUser._id,
+        $or: [
+          { 'otp.lastSentAt': { $lte: cooldownCutoff } },
+          { 'otp.lastSentAt': { $exists: false } }
+        ]
+      },
+      {
+        $set: {
+          'otp.code': newOtp,
+          'otp.expiresAt': newOtpExpiry,
+          'otp.attempts': 0,
+          'otp.lastSentAt': new Date()
+        }
+      },
+      { new: true, runValidators: true }
+    );
+    if (!updatedPendingUser) {
+      return res.status(429).json({
+        message: 'Please wait 60 seconds before requesting another verification code.'
+      });
+    }
+    await sendVerificationEmail(updatedPendingUser, newOtp);
 
     return res.status(200).json({
       message: 'A new OTP was sent to your email.',
-      email: pendingUser.email
+      email: updatedPendingUser.email
     });
   } catch (error) {
     console.error('[resendOtp] error:', error);
 
     return res.status(500).json({
-      message: 'Failed to resend OTP',
-      error: error.message
+      message: 'Failed to resend OTP'
     });
   }
 };
@@ -346,6 +385,10 @@ const login = async (req, res) => {
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    if (user.isDeleted) {
+      return res.status(401).json({ message: 'This customer account has been deleted.' });
     }
 
     // Check if email is verified
@@ -448,6 +491,200 @@ const updateProfile = async (req, res) => {
   }
 };
 
+const updateMyProfile = async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.userId,
+      {
+        $set: {
+          firstName: req.body.firstName.trim(),
+          lastName: req.body.lastName.trim(),
+          phoneNumber: req.body.phoneNumber.trim()
+        }
+      },
+      { new: true, runValidators: true }
+    );
+    if (!user || user.isDeleted) {
+      return res.status(404).json({ message: 'Customer account not found.' });
+    }
+
+    return res.status(200).json({
+      message: 'Profile updated successfully.',
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phoneNumber: user.phoneNumber
+      }
+    });
+  } catch (error) {
+    console.error('[updateMyProfile] error', error);
+    return res.status(500).json({ message: 'Failed to update profile. Please try again.' });
+  }
+};
+
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+    if (
+      typeof currentPassword !== 'string' || !currentPassword
+      || typeof newPassword !== 'string' || !newPassword
+      || typeof confirmPassword !== 'string' || !confirmPassword
+    ) {
+      return res.status(400).json({ message: 'Current password, new password, and confirmation are required.' });
+    }
+    if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      return res.status(400).json({ message: 'New password must be at least 8 characters and include a letter and a number.' });
+    }
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: 'New password and confirmation do not match.' });
+    }
+
+    const user = await User.findById(req.user.userId).select('+password');
+    if (!user || user.isDeleted) {
+      return res.status(404).json({ message: 'Customer account not found.' });
+    }
+    if (!(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(401).json({ message: 'Current password is incorrect.' });
+    }
+    if (await bcrypt.compare(newPassword, user.password)) {
+      return res.status(400).json({ message: 'New password must be different from your current password.' });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+    return res.status(200).json({ message: 'Password changed successfully.' });
+  } catch (error) {
+    console.error('[changePassword] error', error);
+    return res.status(500).json({ message: 'Failed to change password. Please try again.' });
+  }
+};
+
+const deleteAccount = async (req, res) => {
+  try {
+    const { password, confirmation } = req.body || {};
+    if (typeof password !== 'string' || !password) {
+      return res.status(400).json({ message: 'Your password is required to delete your account.' });
+    }
+    if (typeof confirmation !== 'string' || confirmation !== 'DELETE') {
+      return res.status(400).json({ message: 'Type DELETE to confirm account deletion.' });
+    }
+
+    const user = await User.findById(req.user.userId).select('+password');
+    if (!user || user.isDeleted) {
+      return res.status(404).json({ message: 'Customer account not found.' });
+    }
+    if (!(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ message: 'Password is incorrect.' });
+    }
+
+    const [activeReservation, activeBooking] = await Promise.all([
+      Reservation.exists({
+        customerId: user._id,
+        status: { $in: ['Pending Down Payment', 'Payment Submitted', 'Reserved'] }
+      }),
+      ServiceRequest.exists({
+        $or: [{ user: user._id }, { customerId: user._id }],
+        status: { $in: ['pending', 'assigned', 'confirmed', 'accepted', 'in-progress'] }
+      })
+    ]);
+    if (activeReservation || activeBooking) {
+      return res.status(409).json({
+        message: 'Finish or cancel your active reservations and bookings first.',
+        records: {
+          reservations: Boolean(activeReservation),
+          bookings: Boolean(activeBooking)
+        }
+      });
+    }
+
+    const [customerReservations, customerBookings] = await Promise.all([
+      Reservation.find({ customerId: user._id }).select('_id customerName customerPhone paymentProofPublicId paymentSubmissions').lean(),
+      ServiceRequest.find({ $or: [{ user: user._id }, { customerId: user._id }] })
+        .select('_id paymentProofPublicId paymentSubmissions')
+        .lean()
+    ]);
+    const deletedAt = new Date();
+    const session = await mongoose.startSession();
+    let result;
+    try {
+      await session.withTransaction(async () => {
+        result = await User.updateOne(
+          { _id: user._id, isDeleted: { $ne: true } },
+          {
+            $set: {
+              isDeleted: true,
+              deletedAt,
+              name: 'Deleted customer',
+              firstName: 'Deleted',
+              lastName: 'customer',
+              email: `deleted-${user._id}@deleted.local`,
+              phoneNumber: null,
+              isActive: false
+            },
+            $unset: {
+              password: 1,
+              passwordHash: 1,
+              savedVehicles: 1,
+              profileImage: 1
+            }
+          },
+          { session }
+        );
+        if (result.modifiedCount === 1) {
+          const reservationIds = customerReservations.map((reservation) => reservation._id);
+          const bookingIds = customerBookings.map((booking) => booking._id);
+          if (reservationIds.length) {
+            await Reservation.updateMany(
+              { _id: { $in: reservationIds } },
+              { $set: { customerName: 'Deleted customer', customerPhone: '' } },
+              { session }
+            );
+          }
+          const sourceIds = [...reservationIds, ...bookingIds];
+          if (sourceIds.length) {
+            await BusinessRecord.updateMany(
+              { sourceId: { $in: sourceIds } },
+              { $set: { customer: 'Deleted customer', customerPhone: '' } },
+              { session }
+            );
+          }
+          await Notification.deleteMany({ audience: 'customer', customerId: user._id }, { session });
+        }
+      });
+    } finally {
+      await session.endSession();
+    }
+    if (result.modifiedCount !== 1) {
+      return res.status(409).json({ message: 'This customer account has already been deleted.' });
+    }
+
+    const receiptIds = new Set([
+      ...customerReservations.flatMap((reservation) => [
+        reservation.paymentProofPublicId,
+        ...(reservation.paymentSubmissions || []).map((submission) => submission.paymentProofPublicId)
+      ]),
+      ...customerBookings.flatMap((booking) => [
+        booking.paymentProofPublicId,
+        ...(booking.paymentSubmissions || []).map((submission) => submission.paymentProofPublicId)
+      ])
+    ].filter(Boolean));
+    for (const publicId of receiptIds) {
+      try {
+        await removeReceipt(publicId);
+      } catch (receiptError) {
+        console.error(`[deleteAccount] failed to remove receipt ${publicId} from Cloudinary`, receiptError);
+      }
+    }
+
+    return res.status(200).json({ message: 'Your account was deleted.' });
+  } catch (error) {
+    console.error('[deleteAccount] error', error);
+    return res.status(500).json({ message: 'Failed to delete account. Please try again.' });
+  }
+};
+
 // Get purchase history
 const getPurchaseHistory = async (req, res) => {
   try {
@@ -492,6 +729,9 @@ module.exports = {
   login,
   getProfile,
   updateProfile,
+  updateMyProfile,
+  changePassword,
+  deleteAccount,
   getPurchaseHistory,
   getReceipts
 };

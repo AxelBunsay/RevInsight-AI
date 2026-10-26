@@ -203,7 +203,7 @@ export default function Checkout() {
                   </div>
                   : <div><p>{result.message}</p>{result.cartItem && <Link to={`/customer/services/${result.cartItem.id}`} state={{ bookingDate: result.cartItem.bookingDate, replaceBookingKey: result.cartKey, message: result.message === 'That time was just booked. Please choose another.' ? result.message : '' }}>Choose another time</Link>}</div>}
               </article>)}
-              <Link className="customer-secondary-button" to="/customer/account">View your bookings</Link>
+              <Link className="customer-secondary-button" to="/customer/profile">View your bookings</Link>
             </section>}
             <div className="customer-review-lines">{serviceItems.map((item) => <div key={item.key}><span><strong>{item.name}</strong><small>{item.bookingDate} · {item.timeSlot} · {item.vehicle}</small></span><strong>{money(item.price)}</strong></div>)}</div>
             <div className="customer-review-meta"><p><span>Service total</span><strong>{money(serviceTotal)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>

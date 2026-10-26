@@ -35,8 +35,11 @@ const validateServiceInput = (input, current = {}) => {
   const description = input.description ?? current.description ?? '';
   const priceValue = input.price ?? current.price;
   const mechanicFeeValue = input.mechanicFee ?? current.mechanicFee;
+  const categoryValue = input.category ?? current.category ?? 'General';
+  const durationMinutesValue = input.durationMinutes ?? current.durationMinutes ?? 60;
   const price = Number(priceValue);
   const mechanicFee = Number(mechanicFeeValue);
+  const durationMinutes = Number(durationMinutesValue);
   const hasNumber = (value) =>
     (typeof value === 'number' || typeof value === 'string') &&
     String(value).trim() !== '' &&
@@ -60,6 +63,12 @@ const validateServiceInput = (input, current = {}) => {
     fieldErrors.mechanicFee = 'Mechanic fee must be between 0 and 999,999.99.';
   } else if (Number.isFinite(price) && mechanicFee > price) {
     fieldErrors.mechanicFee = 'Mechanic fee cannot be greater than the service price.';
+  }
+  if (typeof categoryValue !== 'string' || !categoryValue.trim() || categoryValue.length > 80) {
+    fieldErrors.category = 'Category must be between 1 and 80 characters.';
+  }
+  if (!hasNumber(durationMinutesValue) || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
+    fieldErrors.durationMinutes = 'Duration must be a whole number from 1 to 1,440 minutes.';
   }
 
   return fieldErrors;

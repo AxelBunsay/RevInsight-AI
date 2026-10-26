@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const paymentSubmissionSchema = new mongoose.Schema({
   reference: { type: String, required: true },
   paymentProofPublicId: { type: String, required: true },
+  format: { type: String, default: 'jpg' },
   submittedAt: { type: Date, required: true },
   status: { type: String, enum: ['Payment Submitted', 'Confirmed', 'Rejected'], default: 'Payment Submitted' },
   rejectionReason: { type: String, default: '' },
@@ -52,13 +53,15 @@ const serviceRequestSchema = new mongoose.Schema({
   code: { type: String, default: '' },
   paymentStatus: {
     type: String,
-    enum: ['Payment Pending', 'Payment Submitted', 'Confirmed'],
+    enum: ['Payment Pending', 'Payment Submitted', 'Confirmed', 'Paid at shop'],
     default: 'Payment Pending',
     index: true
   },
+  paymentDueAt: { type: Date, default: null, index: true },
   paymentMethod: { type: String, default: '' },
   paymentReference: { type: String, default: '' },
   paymentProofPublicId: { type: String, default: '' },
+  paymentProofFormat: { type: String, default: 'jpg' },
   paymentSubmissions: { type: [paymentSubmissionSchema], default: [] },
   paymentSubmittedAt: { type: Date, default: null },
   paymentConfirmedAt: { type: Date, default: null },
@@ -66,10 +69,13 @@ const serviceRequestSchema = new mongoose.Schema({
   paymentRejectedAt: { type: Date, default: null },
   paymentRejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null },
   paymentRejectionReason: { type: String, default: '' },
+  refundDecision: { type: String, enum: ['refunded', 'forfeited', null], default: null },
+  refundDecisionBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null },
+  refundDecisionAt: { type: Date, default: null },
   laborFee: {
     type: Number,
     min: 0,
-    default: 50
+    default: 0
   },
   completedAt: {
     type: Date,
@@ -118,18 +124,10 @@ const serviceRequestSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  cancelReason: { type: String, default: '' },
   vehicle: {
     type: String,
     default: ''
-  },
-  slotAllocationId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'ServiceSlot',
-    default: null
-  },
-  slotReleased: {
-    type: Boolean,
-    default: false
   },
   scheduledDate: {
     type: Date,

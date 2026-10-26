@@ -1,12 +1,17 @@
 // Runtime validation coverage for payment reference and receipt validation.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
 import paymentReceipt from '../utils/paymentReceipt.js';
 
-const { validateReceipt, validateReference } = paymentReceipt;
+const require = createRequire(import.meta.url);
+const cloudinary = require('../config/cloudinary');
+const { validateReceipt, validateReference, getTemporaryReceiptUrl } = paymentReceipt;
 const validPng = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII=',
   'base64',
 );
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('payment reference validation', () => {
   it('accepts a 10-to-20 digit reference', () => {
@@ -28,6 +33,23 @@ describe('receipt validation', () => {
       size: validPng.length,
       buffer: validPng,
     })).not.toThrow();
+  });
+
+  describe('temporary receipt URLs', () => {
+    it('generates an authenticated download URL expiring in five minutes', () => {
+      const now = Math.floor(Date.now() / 1000);
+      const downloadUrl = vi.spyOn(cloudinary.utils, 'private_download_url').mockReturnValue('temporary-url');
+
+      expect(getTemporaryReceiptUrl('receipt-public-id', 'png')).toBe('temporary-url');
+
+      expect(downloadUrl).toHaveBeenCalledWith('receipt-public-id', 'png', {
+        resource_type: 'image',
+        type: 'authenticated',
+        expires_at: expect.any(Number)
+      });
+      expect(downloadUrl.mock.calls[0][2].expires_at).toBeGreaterThanOrEqual(now + 300);
+      expect(downloadUrl.mock.calls[0][2].expires_at).toBeLessThanOrEqual(now + 301);
+    });
   });
 
   it('rejects a file whose claimed type does not match its bytes', () => {

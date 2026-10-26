@@ -4,7 +4,6 @@ const Order = require('../models/orderingModels/order');
 const Product = require('../models/product');
 const ServiceRequest = require('../models/serviceRequest');
 const Service = require('../models/service');
-const ServiceLaborRate = require('../models/serviceLaborRate');
 const Reservation = require('../models/orderingModels/reservation');
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -13,22 +12,6 @@ const hasActiveProductReservation = (productId) => Reservation.exists({
   status: { $in: ['Pending Down Payment', 'Payment Submitted', 'Reserved'] },
   'items.productId': productId
 });
-
-const deactivateServiceLaborRate = async (service) => {
-  const serviceTypePattern = new RegExp(`^\\s*${escapeRegex(service.name)}\\s*$`, 'i');
-  const rate = await ServiceLaborRate.findOne({ serviceType: serviceTypePattern });
-  if (rate) {
-    rate.isActive = false;
-    await rate.save();
-    return;
-  }
-
-  await ServiceLaborRate.create({
-    serviceType: service.name,
-    laborFee: service.mechanicFee,
-    isActive: false
-  });
-};
 
 const archiveOrDeleteProduct = async (product) => {
   const itemNamePattern = new RegExp(`(^|,\\s*)${escapeRegex(product.name)}(\\s*,|$)`, 'i');
@@ -75,11 +58,9 @@ const archiveOrDeleteService = async (service) => {
   if (serviceRequest || businessRecord) {
     service.isActive = false;
     await service.save();
-    await deactivateServiceLaborRate(service);
     return { archived: true };
   }
 
-  await deactivateServiceLaborRate(service);
   await Service.deleteOne({ _id: service._id });
   return { archived: false };
 };

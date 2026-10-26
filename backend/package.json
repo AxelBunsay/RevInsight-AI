@@ -12,7 +12,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.123.0",
     "@google/generative-ai": "^0.24.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.11.0",
@@ -22,14 +21,14 @@
     "express-rate-limit": "^8.6.2",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
-    "mongodb": "^7.2.0",
     "mongoose": "^8.0.0",
     "multer": "^2.2.0",
-    "nodemailer": "^10.0.12",
-    "stripe": "^16.0.0"
+    "nodemailer": "^10.0.12"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^11.3.0",
     "nodemon": "^3.1.0",
+    "supertest": "^7.3.1",
     "vitest": "^4.0.0"
   }
 }

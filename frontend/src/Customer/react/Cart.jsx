@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
@@ -39,10 +40,9 @@ export default function Cart() {
           const product = response.product;
           const available = Math.max(0, Number(product.quantity || 0) - Number(product.reservedQty || 0));
           if (isMounted) setCartItemStock(item.key, available, Number(product.price), product.name);
-        } catch (requestError) {
+        } catch {
           if (isMounted) {
-            setCartItemStock(item.key, 0);
-            setError(requestError.message || `${item.name} is no longer available.`);
+            setError('Could not check stock');
           }
         }
       }));
@@ -58,7 +58,9 @@ export default function Cart() {
       {cart.length === 0 ? <section className="customer-empty-cart"><span aria-hidden="true">▱</span><h2>Your cart is empty</h2><p>Add a part or book a service to get started.</p><div><Link className="customer-primary-button" to="/customer/shop">Browse parts</Link><Link className="customer-secondary-button" to="/customer/services">Explore services</Link></div></section> : <div className="customer-cart-layout">
         <section className="customer-cart-items" aria-label="Cart items and bookings">
           {cart.map((item) => <article className="customer-cart-item" key={item.key}>
-            <div className={`customer-cart-item-art${item.kind === 'service' ? ' is-service' : ''}`} aria-hidden="true">{item.icon || (item.kind === 'service' ? '🔧' : '▣')}</div>
+            <div className={`customer-cart-item-art${item.kind === 'service' ? ' is-service' : ''}${item.kind === 'product' && item.imageUrl ? ' has-image' : ''}`} aria-hidden="true">{item.kind === 'product'
+              ? <ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" loading="lazy" fallback={<span>{item.icon || '▣'}</span>} />
+              : item.icon || '🔧'}</div>
             <div className="customer-cart-item-copy"><span className="customer-cart-item-kind">{item.kind === 'service' ? 'SERVICE BOOKING' : 'ITEM RESERVATION'}</span><h2>{item.name}</h2><p>{item.kind === 'service' ? `${item.bookingDate} · ${item.timeSlot} · ${item.vehicle}` : `${money(item.price)} each · Only ${item.stock} left`}</p>{item.notes && <small>Note: {item.notes}</small>}</div>
             <div className="customer-cart-item-actions">{item.kind === 'product' && <div className="customer-quantity-control"><div><button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1} onClick={() => updateCartItem(item.key, item.quantity - 1)}>−</button><output>{item.quantity}</output><button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock} onClick={() => updateCartItem(item.key, item.quantity + 1)}>+</button></div></div>}<strong>{money(item.price * item.quantity)}</strong><button type="button" className="customer-remove-item" onClick={() => removeCartItem(item.key)}>Remove</button></div>
           </article>)}

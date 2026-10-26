@@ -157,7 +157,7 @@
 .product-image {
   display: grid;
   place-items: center;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1;
   background: linear-gradient(135deg, #ffd5bd, #f9a477);
   color: #9b421f;
   font: 700 15px 'Segoe UI', sans-serif;

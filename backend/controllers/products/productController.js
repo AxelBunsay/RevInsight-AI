@@ -1,8 +1,12 @@
 const Product = require('../../models/product');
-const cloudinary = require('../../config/cloudinary');
 const mongoose = require('mongoose');
 const { validateProductInput } = require('../../utils/inventoryValidation');
-const { archiveOrDeleteProduct, hasActiveProductReservation } = require('../../utils/safeDeleteInventoryRecord');
+const { archiveOrDeleteProduct } = require('../../utils/safeDeleteInventoryRecord');
+const {
+  uploadProductImage,
+  getProductImagePublicId,
+  removeProductImageSafely
+} = require('../../utils/productImage');
 
 const validateProductId = (id, res) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -16,20 +20,8 @@ const validateProductId = (id, res) => {
   return true;
 };
 
-const uploadToCloudinary = (file) =>
-  new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: 'revinsight/products' },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      }
-    );
-
-    stream.end(file.buffer);
-  });
-
 const createProduct = async (req, res) => {
+  let uploadedImage;
   try {
     const { name, price, quantity, category } = req.body;
     const fieldErrors = validateProductInput(req.body);
@@ -40,25 +32,27 @@ const createProduct = async (req, res) => {
         fieldErrors
       });
     }
-    const uploadResult = req.file
-      ? await uploadToCloudinary(req.file)
-      : null;
+    if (req.file) uploadedImage = await uploadProductImage(req.file);
 
     const product = await Product.create({
       name,
       price,
       quantity,
       category,
-      image: uploadResult?.secure_url || null
+      image: uploadedImage?.imageUrl || null,
+      ...(uploadedImage || {})
     });
 
     res.status(201).json({
       success: true,
       message: 'Product created successfully',
-      product
+      product: { ...product.toObject(), imageUrl: product.imageUrl || product.image || null }
     });
   } catch (error) {
-    res.status(400).json({
+    if (uploadedImage?.imagePublicId) {
+      await removeProductImageSafely(uploadedImage.imagePublicId, 'createProduct.rollback');
+    }
+    res.status(error.status || 400).json({
       success: false,
       message: error.message
     });
@@ -80,7 +74,8 @@ const getProducts = async (req, res) => {
       count: total,
       products: products.map(product => ({
         ...product.toObject(),
-        image: product.image || null
+        image: product.image || product.imageUrl || null,
+        imageUrl: product.imageUrl || product.image || null
       })),
       pagination: {
         page,
@@ -110,18 +105,12 @@ const getProduct = async (req, res) => {
       });
     }
 
-    if (await hasActiveProductReservation(product._id)) {
-      return res.status(409).json({
-        success: false,
-        message: 'This item cannot be deleted while it has an active reservation.'
-      });
-    }
-
     res.status(200).json({
       success: true,
       product: {
         ...product.toObject(),
-        image: product.image || null
+        image: product.image || product.imageUrl || null,
+        imageUrl: product.imageUrl || product.image || null
       }
     });
   } catch (error) {
@@ -133,6 +122,7 @@ const getProduct = async (req, res) => {
 };
 
 const updateProduct = async (req, res) => {
+  let uploadedImage;
   try {
     if (!validateProductId(req.params.id, res)) return;
 
@@ -161,6 +151,14 @@ const updateProduct = async (req, res) => {
       });
     }
 
+    if (req.file) uploadedImage = await uploadProductImage(req.file);
+    const oldImagePublicId = currentProduct.imagePublicId
+      || getProductImagePublicId(currentProduct.imageUrl || currentProduct.image);
+    const imageUpdate = uploadedImage
+      ? { ...uploadedImage, image: uploadedImage.imageUrl }
+      : req.body.removeImage === 'true' || req.body.removeImage === true
+        ? { image: null, imageUrl: null, imagePublicId: null }
+        : {};
     const product = await Product.findByIdAndUpdate(
       {
         _id: req.params.id,
@@ -169,24 +167,34 @@ const updateProduct = async (req, res) => {
           { reservedQty: { $exists: false } }
         ]
       },
-      { name: name.trim(), price: Number(price), quantity: Number(quantity), category: category.trim() },
+      { name: name.trim(), price: Number(price), quantity: Number(quantity), category: category.trim(), ...imageUpdate },
       { new: true, runValidators: true }
     );
 
     if (!product) {
+      if (uploadedImage?.imagePublicId) {
+        await removeProductImageSafely(uploadedImage.imagePublicId, 'updateProduct.rollback');
+      }
       return res.status(409).json({
         success: false,
         message: 'Stock changed while saving. It cannot be set below the quantity currently reserved.'
       });
     }
 
+    if ((uploadedImage || Object.keys(imageUpdate).length) && oldImagePublicId) {
+      await removeProductImageSafely(oldImagePublicId, 'updateProduct');
+    }
+
     res.status(200).json({
       success: true,
       message: 'Product updated successfully',
-      product
+      product: { ...product.toObject(), imageUrl: product.imageUrl || product.image || null }
     });
   } catch (error) {
-    res.status(400).json({
+    if (uploadedImage?.imagePublicId) {
+      await removeProductImageSafely(uploadedImage.imagePublicId, 'updateProduct.rollback');
+    }
+    res.status(error.status || 400).json({
       success: false,
       message: error.message
     });
@@ -207,6 +215,12 @@ const deleteProduct = async (req, res) => {
     }
 
     const { archived } = await archiveOrDeleteProduct(product);
+    if (!archived) {
+      await removeProductImageSafely(
+        product.imagePublicId || getProductImagePublicId(product.imageUrl || product.image),
+        'deleteProduct'
+      );
+    }
     res.status(200).json({
       success: true,
       archived,

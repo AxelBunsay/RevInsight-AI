@@ -1,7 +1,10 @@
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
 
 export async function request(path, options = {}) {
-  const token = localStorage.getItem(options.tokenKey || 'adminToken');
+  const tokenKey = Object.prototype.hasOwnProperty.call(options, 'tokenKey')
+    ? options.tokenKey
+    : 'adminToken';
+  const token = tokenKey ? localStorage.getItem(tokenKey) : null;
   const requestOptions = { ...options };
   delete requestOptions.tokenKey;
   const headers = new Headers(options.headers);
@@ -25,10 +28,17 @@ export async function request(path, options = {}) {
   const body = contentType.includes('application/json') ? await response.json() : await response.text();
 
   if (!response.ok) {
-    if (response.status === 401) {
-      localStorage.removeItem(options.tokenKey || 'adminToken');
-      if (options.tokenKey === undefined) {
+    const isAuthException = /\/(?:users|mechanics)\/login(?:[/?]|$)/.test(path)
+      || /\/customers\/me\/password(?:[/?]|$)/.test(path)
+      || (path === '/api/customers/me' && requestOptions.method === 'DELETE');
+    if (response.status === 401 && token && tokenKey && !isAuthException) {
+      localStorage.removeItem(tokenKey);
+      if (tokenKey === 'adminToken') {
         window.dispatchEvent(new Event('admin-auth-expired'));
+      } else if (tokenKey === 'customerToken' || tokenKey === 'mechanicToken') {
+        const loginPath = tokenKey === 'customerToken' ? '/customer/login' : '/mechanic/login';
+        const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.assign(`${loginPath}?returnTo=${encodeURIComponent(returnPath)}`);
       }
     }
 
@@ -46,15 +56,27 @@ export async function request(path, options = {}) {
 export const api = {
   loginCustomer: (credentials) => request('/api/users/login', {
     method: 'POST',
-    body: JSON.stringify(credentials)
+    body: JSON.stringify(credentials),
+    tokenKey: null
   }),
   loginMechanic: (credentials) => request('/api/mechanics/login', {
     method: 'POST',
-    body: JSON.stringify(credentials)
+    body: JSON.stringify(credentials),
+    tokenKey: null
   }),
-  updateCustomerProfile: (profile) => request('/api/users/profile', {
+  updateCustomerProfile: (profile) => request('/api/customers/me', {
     method: 'PUT',
     body: JSON.stringify(profile),
+    tokenKey: 'customerToken'
+  }),
+  changeCustomerPassword: (passwords) => request('/api/customers/me/password', {
+    method: 'POST',
+    body: JSON.stringify(passwords),
+    tokenKey: 'customerToken'
+  }),
+  deleteCustomerAccount: (confirmation) => request('/api/customers/me', {
+    method: 'DELETE',
+    body: JSON.stringify(confirmation),
     tokenKey: 'customerToken'
   }),
   registerCustomer: (userData) => request('/api/users/register-request', {
@@ -79,8 +101,6 @@ export const api = {
   removeFromCart: (productId) => request(`/api/cart/remove/${productId}`, { method: 'DELETE', tokenKey: 'customerToken' }),
   clearCart: () => request('/api/cart/clear', { method: 'DELETE', tokenKey: 'customerToken' }),
   checkout: () => request('/api/orders/checkout', { method: 'POST', tokenKey: 'customerToken' }),
-  createPaymentIntent: () => request('/api/payments/create-payment-intent', { method: 'POST', tokenKey: 'customerToken' }),
-  confirmPayment: (paymentIntentId) => request('/api/payments/confirm-payment', { method: 'POST', body: JSON.stringify({ paymentIntentId }), tokenKey: 'customerToken' }),
   getCustomerOrders: () => request('/api/orders', { tokenKey: 'customerToken' }),
   getReservationSettings: () => request('/api/reservations/settings', { tokenKey: 'customerToken' }),
   getShopSettings: () => request('/api/reservations/shop-settings', { tokenKey: 'customerToken' }),
@@ -97,7 +117,6 @@ export const api = {
   markCustomerNotificationRead: (id) => request(`/api/notifications/${id}/read`, { method: 'POST', tokenKey: 'customerToken' }),
   cancelCustomerReservation: (reservationId, reason) => request(`/api/reservations/${reservationId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }), tokenKey: 'customerToken' }),
   reorder: (orderId) => request(`/api/orders/${orderId}/reorder`, { method: 'POST', tokenKey: 'customerToken' }),
-  createServiceRequest: (serviceRequest) => request('/api/service-requests', { method: 'POST', body: JSON.stringify(serviceRequest), tokenKey: 'customerToken' }),
   getCustomerServiceRequests: () => request('/api/service-requests/my', { tokenKey: 'customerToken' }),
   submitServiceRequestPayment: (requestId, payment) => {
     const body = new FormData();
@@ -108,7 +127,8 @@ export const api = {
   getServiceSlots: (serviceId, date) => request(`/api/services/${encodeURIComponent(serviceId)}/slots?date=${encodeURIComponent(date)}`, { tokenKey: 'customerToken', cache: 'no-store' }),
   createServiceBookings: (bookings) => request('/api/services/bookings', { method: 'POST', body: JSON.stringify({ bookings }), tokenKey: 'customerToken' }),
   getAvailableMechanics: () => request('/api/mechanics/available', { tokenKey: 'customerToken' }),
-  getMechanicProfile: () => request('/api/mechanics/profile', { tokenKey: 'mechanicToken' })
+  getMechanicProfile: () => request('/api/mechanics/profile', { tokenKey: 'mechanicToken' }),
+  getMechanicStats: (mechanicId) => request(`/api/mechanic/${encodeURIComponent(mechanicId)}/stats`, { tokenKey: 'mechanicToken' })
   ,updateMechanicProfile: (profile) => request('/api/mechanics/profile', { method: 'PUT', body: JSON.stringify(profile), tokenKey: 'mechanicToken' })
   ,getMechanicJobs: () => request('/api/service-requests/mechanic', { tokenKey: 'mechanicToken' })
   ,acceptMechanicJob: (requestId, startTime) => request('/api/service-requests/accept', { method: 'PUT', body: JSON.stringify({ requestId, startTime }), tokenKey: 'mechanicToken' })

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
-import { AdminPageFrame } from "./ManagementPageComponents";
+import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 
 function ServiceRequests() {
   const [requests, setRequests] = useState([]);
@@ -8,8 +8,9 @@ function ServiceRequests() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState("");
-  const [savingFeeId, setSavingFeeId] = useState("");
-  const [laborFeeDrafts, setLaborFeeDrafts] = useState({});
+  const [transitionDraft, setTransitionDraft] = useState(null);
+  const [transitionReason, setTransitionReason] = useState("");
+  const [transitionRefund, setTransitionRefund] = useState("");
 
   const loadRequests = () =>
     Promise.all([api.getAdminServiceRequests(), api.getMechanics()]).then(
@@ -45,44 +46,44 @@ function ServiceRequests() {
     }
   };
 
-  const updateStatus = async (requestId, status) => {
-    setSavingId(requestId);
+  const updateStatus = async (request, status, details = {}) => {
+    const requiresRefund = ["cancelled", "declined"].includes(status)
+      && ["Confirmed", "Paid at shop"].includes(request.paymentStatus);
+    const requiresReason = request.status === "in-progress" && status === "cancelled";
+    if (requiresRefund || requiresReason) {
+      setTransitionDraft({ request, status, requiresRefund, requiresReason });
+      setTransitionReason("");
+      setTransitionRefund("");
+      return;
+    }
+    await saveStatus(request, status, details);
+  };
+
+  const saveStatus = async (request, status, details = {}) => {
+    setSavingId(request._id);
+    setError("");
     try {
-      await api.updateAdminServiceRequestStatus(requestId, status);
+      await api.updateAdminServiceRequestStatus(request._id, status, details);
       await loadRequests();
+      return true;
     } catch (saveError) {
       setError(saveError.message || "Failed to update booking status");
+      return false;
     } finally {
       setSavingId("");
     }
   };
 
-  const saveLaborFee = async (request) => {
-    const feeValue = laborFeeDrafts[request._id] ?? request.laborFee ?? 50;
-    if (String(feeValue).trim() === "") {
-      setError("Enter a valid non-negative labor fee.");
-      return;
-    }
-    const laborFee = Number(feeValue);
-    if (!Number.isFinite(laborFee) || laborFee < 0) {
-      setError("Enter a valid non-negative labor fee.");
-      return;
-    }
-
-    setSavingFeeId(request._id);
+  const markPaidAtShop = async (request) => {
+    setSavingId(request._id);
     setError("");
     try {
-      await api.updateServiceRequestLaborFee(request._id, laborFee);
+      await api.markServicePaidAtShop(request._id);
       await loadRequests();
-      setLaborFeeDrafts((currentDrafts) => {
-        const nextDrafts = { ...currentDrafts };
-        delete nextDrafts[request._id];
-        return nextDrafts;
-      });
     } catch (saveError) {
-      setError(saveError.message || "Failed to update labor fee");
+      setError(saveError.message || "Failed to update booking payment");
     } finally {
-      setSavingFeeId("");
+      setSavingId("");
     }
   };
 
@@ -124,49 +125,21 @@ function ServiceRequests() {
                       {Number(request.estimatedPrice || 0).toLocaleString(
                         "en-PH",
                       )}{" "}
-                      · Labor fee: ₱
-                      {Number(request.laborFee ?? 50).toLocaleString("en-PH", {
+                      · Labor fee: ₱{Number(request.laborFee || 0).toLocaleString("en-PH", {
                         minimumFractionDigits: 2,
-                      })}
+                      })} · Payment: {request.paymentStatus || "Payment Pending"}
                     </small>
+                    {request.refundDecision && <small>Refund decision: {request.refundDecision}</small>}
                   </div>
                   <span className={`status-badge status-${request.status}`}>
                     {request.status.replaceAll("-", " ")}
                   </span>
                 </div>
-                <div className="service-labor-fee-control">
-                  <label>
-                    Labor fee (₱)
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={
-                        laborFeeDrafts[request._id] ?? request.laborFee ?? 50
-                      }
-                      aria-label={`Labor fee for ${request.serviceType}`}
-                      onChange={(event) =>
-                        setLaborFeeDrafts((currentDrafts) => ({
-                          ...currentDrafts,
-                          [request._id]: event.target.value,
-                        }))
-                      }
-                    />
-                  </label>
-                  <button
-                    className="btn-small btn-edit"
-                    type="button"
-                    disabled={savingFeeId === request._id}
-                    onClick={() => saveLaborFee(request)}
-                  >
-                    {savingFeeId === request._id ? "Saving..." : "Save fee"}
-                  </button>
-                </div>
                 <div className="mechanic-actions">
                   <select
                     aria-label={`Assign mechanic for ${request.serviceType}`}
                     value={request.mechanic?._id || request.mechanic || request.mechanicId?._id || request.mechanicId || ""}
-                    disabled={savingId === request._id}
+                    disabled={savingId === request._id || request.status !== "pending"}
                     onChange={(event) =>
                       confirmAssignment(request._id, event.target.value)
                     }
@@ -186,7 +159,7 @@ function ServiceRequests() {
                     value={request.status}
                     disabled={savingId === request._id}
                     onChange={(event) =>
-                      updateStatus(request._id, event.target.value)
+                      updateStatus(request, event.target.value)
                     }
                   >
                     <option value="pending">Pending</option>
@@ -194,16 +167,72 @@ function ServiceRequests() {
                     <option value="confirmed">Confirmed</option>
                     <option value="accepted">Accepted</option>
                     <option value="in-progress">In progress</option>
-                    <option value="completed">Completed</option>
+                    <option value="completed" disabled>Completed</option>
                     <option value="declined">Declined</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
+                  {request.paymentStatus === "Payment Pending"
+                    && !["completed", "declined", "cancelled"].includes(request.status)
+                    && (
+                      <button
+                        className="btn-small btn-edit"
+                        type="button"
+                        disabled={savingId === request._id}
+                        onClick={() => markPaidAtShop(request)}
+                      >
+                        Mark paid at shop
+                      </button>
+                    )}
                 </div>
               </article>
             ))
           )}
         </div>
       </section>
+      {transitionDraft && (
+        <AdminDialog
+          title={transitionDraft.status === "declined" ? "Decline service booking" : "Cancel service booking"}
+          onClose={() => setTransitionDraft(null)}
+        >
+          <form
+            className="admin-dialog-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const saved = await saveStatus(transitionDraft.request, transitionDraft.status, {
+                reason: transitionReason,
+                refundDecision: transitionRefund
+              });
+              if (saved) setTransitionDraft(null);
+            }}
+          >
+            {transitionDraft.requiresReason && (
+              <label>
+                Cancellation reason
+                <textarea minLength="3" maxLength="300" required value={transitionReason} onChange={(event) => setTransitionReason(event.target.value)} />
+              </label>
+            )}
+            {transitionDraft.requiresRefund && (
+              <fieldset className="reservation-refund-choice">
+                <legend>Service payment decision</legend>
+                <label><input type="radio" name="service-refund-decision" value="refunded" checked={transitionRefund === "refunded"} onChange={(event) => setTransitionRefund(event.target.value)} /> Refund</label>
+                <label><input type="radio" name="service-refund-decision" value="forfeited" checked={transitionRefund === "forfeited"} onChange={(event) => setTransitionRefund(event.target.value)} /> Forfeit</label>
+              </fieldset>
+            )}
+            <div className="admin-dialog-actions">
+              <button className="btn-small" type="button" onClick={() => setTransitionDraft(null)}>Cancel</button>
+              <button
+                className="btn-small btn-delete"
+                type="submit"
+                disabled={savingId === transitionDraft.request._id
+                  || (transitionDraft.requiresRefund && !transitionRefund)
+                  || (transitionDraft.requiresReason && transitionReason.trim().length < 3)}
+              >
+                {savingId === transitionDraft.request._id ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </form>
+        </AdminDialog>
+      )}
     </AdminPageFrame>
   );
 }

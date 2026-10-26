@@ -10,12 +10,12 @@ const {
 } = require('../../controllers/products/productController');
 
 const { adminOnly } = require('../../middleware/auth');
-const upload = require('../../middleware/upload');
+const productImageUpload = require('../../middleware/productImageUpload');
 
-router.post('/', adminOnly, upload.single('image'), createProduct);
+router.post('/', adminOnly, productImageUpload, createProduct);
 router.get('/', getProducts);
 router.get('/:id', getProduct);
-router.put('/:id', adminOnly, upload.single('image'), updateProduct);
+router.put('/:id', adminOnly, productImageUpload, updateProduct);
 router.delete('/:id', adminOnly, deleteProduct);
 
 module.exports = router;

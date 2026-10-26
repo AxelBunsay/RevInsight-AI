@@ -17,7 +17,8 @@ const generateReply = async (message) => {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
         const model = gemini.getGenerativeModel({
-          model: modelName
+          model: modelName,
+          systemInstruction: 'You are a helpful assistant for a motorcycle parts and service shop. Only answer questions about motorcycle parts, maintenance, services, reservations, and shop operations. For unrelated requests, briefly explain that you can only help with motorcycle and shop questions.'
         });
 
         const result = await model.generateContent(message);
@@ -42,9 +43,14 @@ const chat = async (req, res) => {
   try {
     const { message } = req.body;
 
-    if (!message || !message.trim()) {
+    if (typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({
         message: 'Message is required'
+      });
+    }
+    if (message.length > 500) {
+      return res.status(400).json({
+        message: 'Message must be 500 characters or fewer.'
       });
     }
 

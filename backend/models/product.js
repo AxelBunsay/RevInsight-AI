@@ -47,6 +47,14 @@ const productSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  imageUrl: {
+    type: String,
+    required: false
+  },
+  imagePublicId: {
+    type: String,
+    required: false
+  },
 
   isActive: {
     type: Boolean,

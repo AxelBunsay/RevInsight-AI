@@ -193,6 +193,7 @@
   color: #4f3b31;
   font-size: 86px;
 }
+.customer-detail-product-image { width: 100%; height: 100%; min-height: 340px; object-fit: cover; }
 
 .customer-detail-art small {
   position: absolute;
@@ -578,6 +579,24 @@
 .customer-cart-item-art.is-service {
   background: linear-gradient(135deg, #ddcffd, #b9a1ed);
 }
+.customer-inline-product-image,
+.customer-inline-product-placeholder {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  place-items: center;
+  border-radius: 8px;
+  object-fit: cover;
+}
+.customer-inline-product-placeholder { background: #eee; color: #777; font-size: 22px; }
+.customer-cart-item-art.has-image { overflow: hidden; background: #eee; }
+.customer-cart-item-art .customer-inline-product-image { width: 100%; height: 100%; border-radius: inherit; }
+.customer-reservation-item-list { display: grid; gap: 7px; margin-top: 8px; }
+.customer-reservation-item-row { display: flex; align-items: center; gap: 9px; }
+.customer-reservation-item-row strong { color: #29231f; font-size: 11px; }
+.customer-reservation-item-row .customer-inline-product-image,
+.customer-reservation-item-row .customer-inline-product-placeholder { width: 42px; height: 42px; flex-basis: 42px; }
 
 .customer-cart-item-kind {
   color: #dc651a;
@@ -1127,7 +1146,8 @@
 }
 
 .customer-review-lines { display: grid; gap: 13px; }
-.customer-review-lines > div { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #f0e7df; font-size: 11px; }
+.customer-review-lines > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #f0e7df; font-size: 11px; }
+.customer-review-lines > div > span { display: flex; align-items: center; gap: 9px; }
 .customer-review-lines span strong,
 .customer-review-lines span small { display: block; }
 .customer-review-lines small { margin-top: 4px; color: #82756c; font-size: 10px; }
@@ -1336,6 +1356,13 @@
 }
 
 .customer-account-panel .customer-flow-section-heading { margin: 0 0 16px; }
+.customer-account-subsection { margin-top: 30px; padding-top: 22px; border-top: 1px solid #eee3da; }
+.customer-account-subsection .customer-flow-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.customer-password-toggle { border: 0; background: transparent; color: #d94d22; font: 700 11px 'Segoe UI', sans-serif; cursor: pointer; }
+.customer-account-delete { margin-top: 30px; padding: 18px; border: 1px solid #b3261e; border-radius: 10px; background: #fffafa; }
+.customer-account-delete h2 { margin: 0 0 8px; color: #322a25; font: 700 15px 'Segoe UI', sans-serif; }
+.customer-account-delete p { max-width: 720px; margin: 0 0 14px; color: #6f5f4e; font: 12px/1.6 'Segoe UI', sans-serif; }
+.customer-account-delete .customer-danger-button { justify-self: start; }
 .customer-account-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .customer-account-form label { display: grid; gap: 6px; color: #51463f; font-size: 10px; font-weight: 700; }
 .customer-account-form input,
@@ -1918,6 +1945,14 @@
   gap: 10px;
   margin-top: 20px;
 }
+
+.customer-confirmation-dialog form { display: grid; gap: 12px; }
+.customer-confirmation-dialog .customer-delete-field { display: grid; gap: 6px; color: #51463f; font: 700 12px 'Segoe UI', sans-serif; }
+.customer-confirmation-dialog .customer-delete-field input { min-width: 0; padding: 10px; border: 1px solid #e8dcd2; border-radius: 7px; color: #322a25; font: 13px 'Segoe UI', sans-serif; }
+.customer-confirmation-dialog form > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+.customer-delete-record-links { display: flex; gap: 14px; }
+.customer-delete-record-links a { color: #b3261e; font: 700 12px 'Segoe UI', sans-serif; }
+.customer-confirmation-dialog button:disabled { opacity: .55; cursor: not-allowed; }
 
 .customer-danger-button {
   min-height: 40px;

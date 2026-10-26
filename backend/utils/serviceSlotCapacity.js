@@ -1,5 +1,4 @@
 const ServiceRequest = require('../models/serviceRequest');
-const ServiceSlot = require('../models/serviceSlot');
 const ServiceSlotLock = require('../models/serviceSlotLock');
 
 const capacityStatuses = ['pending', 'assigned', 'confirmed', 'accepted', 'in-progress', 'completed'];
@@ -39,24 +38,8 @@ const serializeSlotBooking = async ({ dateKey, startTime, session }) => {
   ).select('_id');
 };
 
-const releaseServiceSlot = async (serviceRequest) => {
-  if (!serviceRequest?.slotAllocationId || serviceRequest.slotReleased) return false;
-  const releasedRequest = await ServiceRequest.findOneAndUpdate(
-    { _id: serviceRequest._id, slotAllocationId: serviceRequest.slotAllocationId, slotReleased: { $ne: true } },
-    { $set: { slotReleased: true } },
-    { new: false }
-  ).select('slotAllocationId');
-  if (!releasedRequest) return false;
-  await ServiceSlot.updateOne(
-    { _id: releasedRequest.slotAllocationId, booked: { $gt: 0 } },
-    { $inc: { booked: -1 } }
-  );
-  return true;
-};
-
 module.exports = {
   countActiveBookings,
   serializeSlotBooking,
-  readSlotCount,
-  releaseServiceSlot
+  readSlotCount
 };

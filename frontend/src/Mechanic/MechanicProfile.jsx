@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import MechanicLayout from './MechanicLayout';
-import { getMechanicProfile, isDemoMechanic, saveMechanicProfile } from './mechanicService';
+import { api } from '../services/api';
+import { getMechanicProfile, saveMechanicProfile } from './mechanicService';
 
 const emptyProfile = { firstName: '', lastName: '', email: '', phoneNumber: '', specialization: 'general', yearsOfExperience: 0, certifications: [], bio: '', availabilityStatus: 'available' };
 
 export default function MechanicProfile() {
   const [profile, setProfile] = useState(emptyProfile);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -13,7 +15,15 @@ export default function MechanicProfile() {
 
   useEffect(() => {
     let active = true;
-    getMechanicProfile().then((result) => { if (active) setProfile({ ...emptyProfile, ...(result.mechanic || {}) }); })
+    getMechanicProfile().then(async (result) => {
+      if (!active) return;
+      const mechanic = result.mechanic || {};
+      setProfile({ ...emptyProfile, ...mechanic });
+      if (mechanic.id) {
+        const statsResult = await api.getMechanicStats(mechanic.id);
+        if (active) setStats(statsResult);
+      }
+    })
       .catch((loadError) => { if (active) setError(loadError.message || 'Profile could not be loaded.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -33,7 +43,16 @@ export default function MechanicProfile() {
 
   return <MechanicLayout title="Mechanic Profile">
     {error && <p className="mechanic-alert" role="alert">{error}</p>}{message && <p className="mechanic-success" role="status">{message}</p>}
-    {loading ? <p className="mechanic-loading">Loading profile…</p> : <form className="mechanic-panel mechanic-profile-form" onSubmit={save}>
+    {loading ? <p className="mechanic-loading">Loading profile…</p> : <>
+      <section className="mechanic-panel workload-panel">
+        <div className="mechanic-panel-heading"><h2>Performance</h2></div>
+        <div className="mechanic-workload-stats">
+          <div><strong>{stats?.completedJobs ?? 0}</strong><span>Completed repairs</span></div>
+          <div><strong>{Number(profile.averageRating || 0).toFixed(1)}</strong><span>Average rating</span></div>
+          <div><strong>{Number(profile.successRate || 0)}%</strong><span>Success rate</span></div>
+        </div>
+      </section>
+      <form className="mechanic-panel mechanic-profile-form" onSubmit={save}>
       <div className="mechanic-profile-grid">
         <label className="mechanic-field"><span>First name</span><input required value={profile.firstName} onChange={(event) => setField('firstName', event.target.value)} /></label>
         <label className="mechanic-field"><span>Last name</span><input required value={profile.lastName} onChange={(event) => setField('lastName', event.target.value)} /></label>
@@ -46,7 +65,7 @@ export default function MechanicProfile() {
         <label className="mechanic-field full-width"><span>Biography</span><textarea rows="5" value={profile.bio || ''} onChange={(event) => setField('bio', event.target.value)} /></label>
       </div>
       <button className="button-primary profile-save" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save profile'}</button>
-    </form>}
-    {isDemoMechanic() && <p className="mechanic-sample-note">Prototype view · sample data only</p>}
+      </form>
+    </>}
   </MechanicLayout>;
 }

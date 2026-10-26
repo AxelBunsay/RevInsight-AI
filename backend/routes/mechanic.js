@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mechanicController = require('../controllers/mechanic');
+const createLoginRateLimit = require('../middleware/loginRateLimit');
 const { authenticate, adminOnly } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/authorize');
 const {
@@ -10,7 +11,7 @@ const {
 } = require('../middleware/validate');
 
 // Mechanic login (public)
-router.post('/login', validateLogin, mechanicController.login);
+router.post('/login', createLoginRateLimit(), validateLogin, mechanicController.login);
 
 // Admin creates mechanic account
 router.post('/create', adminOnly, validateCreateMechanic, mechanicController.createMechanic);

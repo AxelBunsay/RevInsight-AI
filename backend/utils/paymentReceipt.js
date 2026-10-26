@@ -57,12 +57,12 @@ function uploadPublicImage(file, folder) {
   });
 }
 
-function getAuthorizedReceiptUrl(publicId) {
+function getTemporaryReceiptUrl(publicId, format = 'jpg') {
   if (!publicId) return '';
-  return cloudinary.url(publicId, {
-    secure: true,
+  return cloudinary.utils.private_download_url(publicId, format, {
+    resource_type: 'image',
     type: 'authenticated',
-    sign_url: true
+    expires_at: Math.floor(Date.now() / 1000) + 5 * 60
   });
 }
 
@@ -113,7 +113,7 @@ module.exports = {
   claimPaymentReference,
   uploadReceipt,
   uploadPublicImage,
-  getAuthorizedReceiptUrl,
+  getTemporaryReceiptUrl,
   removeReceipt,
   removePublicImage
 };

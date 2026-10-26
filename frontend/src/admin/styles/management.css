@@ -265,6 +265,65 @@
 .admin-root .admin-management-page .inventory-table tbody tr {
   height: 68px;
 }
+.admin-root .admin-management-page .inventory-item-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.admin-root .admin-management-page .inventory-item-thumbnail {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  place-items: center;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.admin-root .admin-management-page .inventory-item-thumbnail.is-placeholder {
+  background: #e5e5e5;
+  color: #666;
+  font-size: 14px;
+  font-weight: 700;
+}
+.admin-root .admin-management-page .inventory-image-field > span {
+  font-weight: 700;
+}
+.admin-root .admin-management-page .inventory-image-field > span small,
+.admin-root .admin-management-page .inventory-image-actions small,
+.admin-root .admin-management-page .inventory-image-field > small {
+  color: var(--muted);
+  font-weight: 400;
+}
+.admin-root .admin-management-page .inventory-image-controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.admin-root .admin-management-page .inventory-image-preview {
+  display: grid;
+  width: 160px;
+  height: 160px;
+  flex: 0 0 160px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  object-fit: cover;
+}
+.admin-root .admin-management-page .inventory-image-preview.is-empty {
+  background: #f1f1f1;
+  color: #777;
+  font-size: 13px;
+}
+.admin-root .admin-management-page .inventory-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.admin-root .admin-management-page .inventory-image-filename {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
 .admin-root .admin-management-page .price-text {
   font-weight: 700;
 }
@@ -457,6 +516,20 @@
 .admin-root .admin-management-page .admin-dialog-actions {
   justify-content: flex-end;
   margin-top: 8px;
+}
+.admin-root .admin-management-page .reservation-admin-line-items li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 8px 0;
+}
+.admin-root .admin-management-page .reservation-admin-line-items img,
+.admin-root .admin-management-page .transaction-reservation-item img {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border-radius: 6px;
+  object-fit: cover;
 }
 .admin-root .admin-management-page .analytics-grid {
   display: grid;
@@ -952,6 +1025,9 @@
 }
 
 .admin-root .admin-management-page .transaction-reservation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--ink);
 }
 

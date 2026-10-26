@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
+import ProductImage from "../../Customer/react/ProductImage";
 
 const validateItemForm = (form) => {
   const errors = {};
@@ -22,10 +23,13 @@ const validateItemForm = (form) => {
 const validateServiceForm = (form) => {
   const errors = {};
   const name = form.name.trim();
+  const category = form.category.trim();
   const price = Number(form.price);
   const mechanicFee = Number(form.mechanicFee);
+  const durationMinutes = Number(form.durationMinutes);
 
   if (name.length < 2 || name.length > 80) errors.name = "Name must be 2 to 80 characters.";
+  if (category.length < 1 || category.length > 80) errors.category = "Category must be 1 to 80 characters.";
   if (form.description.length > 300) errors.description = "Description must be 300 characters or fewer.";
   if (form.price === "" || !Number.isFinite(price) || price < 0.01 || price > 999999.99) {
     errors.price = "Price must be from 0.01 to 999,999.99.";
@@ -34,6 +38,9 @@ const validateServiceForm = (form) => {
     errors.mechanicFee = "Mechanic fee must be from 0 to 999,999.99.";
   } else if (Number.isFinite(price) && mechanicFee > price) {
     errors.mechanicFee = "Mechanic fee cannot be greater than the service price.";
+  }
+  if (form.durationMinutes === "" || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
+    errors.durationMinutes = "Duration must be a whole number from 1 to 1,440 minutes.";
   }
   return errors;
 };
@@ -54,6 +61,12 @@ function Inventory() {
   const [itemFormErrors, setItemFormErrors] = useState({});
   const [itemFormError, setItemFormError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
+  const [imageFileName, setImageFileName] = useState("");
+  const [imageError, setImageError] = useState("");
+  const [removeImage, setRemoveImage] = useState(false);
+  const imageInputRef = useRef(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -68,6 +81,8 @@ function Inventory() {
     description: "",
     price: "",
     mechanicFee: "",
+    category: "General",
+    durationMinutes: "60",
   });
   const [serviceFormErrors, setServiceFormErrors] = useState({});
   const [serviceFormError, setServiceFormError] = useState("");
@@ -156,6 +171,11 @@ function Inventory() {
     setIsAdding(!item);
     setItemFormErrors({});
     setItemFormError("");
+    setImageFile(null);
+    setImagePreview(item?.imageUrl || item?.image || "");
+    setImageFileName("");
+    setImageError("");
+    setRemoveImage(false);
     setForm(
       item
         ? {
@@ -178,11 +198,13 @@ function Inventory() {
     setError("");
 
     try {
-      const payload = {
-        ...form,
-        price: Number(form.price),
-        quantity: Number(form.quantity),
-      };
+      const payload = new FormData();
+      payload.append("name", form.name);
+      payload.append("price", String(Number(form.price)));
+      payload.append("quantity", String(Number(form.quantity)));
+      payload.append("category", form.category);
+      if (imageFile) payload.append("image", imageFile);
+      if (removeImage) payload.append("removeImage", "true");
 
       if (editingItem) {
         await api.updateInventory(editingItem.id, payload);
@@ -192,6 +214,9 @@ function Inventory() {
 
       setEditingItem(null);
       setIsAdding(false);
+      if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+      setImageFile(null);
+      setImagePreview("");
       setPage(1);
       setRefreshKey((key) => key + 1);
       setToast(editingItem ? "Item updated successfully." : "Item added successfully.");
@@ -214,8 +239,10 @@ function Inventory() {
           description: service.description || "",
           price: String(service.price),
           mechanicFee: String(service.mechanicFee ?? 0),
+          category: service.category || "General",
+          durationMinutes: String(service.durationMinutes || 60),
         }
-      : { name: "", description: "", price: "", mechanicFee: "" });
+      : { name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60" });
   };
 
   const saveService = async (event) => {
@@ -232,12 +259,14 @@ function Inventory() {
         description: serviceForm.description,
         price: Number(serviceForm.price),
         mechanicFee: Number(serviceForm.mechanicFee),
+        category: serviceForm.category.trim(),
+        durationMinutes: Number(serviceForm.durationMinutes),
       };
       if (editingService) await api.updateService(editingService._id, payload);
       else await api.createService(payload);
       setIsAddingService(false);
       setEditingService(null);
-      setServiceForm({ name: "", description: "", price: "", mechanicFee: "" });
+      setServiceForm({ name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60" });
       setServiceRefreshKey((key) => key + 1);
       setToast(editingService ? "Service updated successfully." : "Service added successfully.");
     } catch (saveError) {
@@ -281,8 +310,57 @@ function Inventory() {
   const visibleServiceRows = serviceRows.slice((page - 1) * 15, page * 15);
 
   const closeItemDialog = () => {
+    if (isSaving) return;
+    if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
     setEditingItem(null);
     setIsAdding(false);
+    setImageFile(null);
+    setImagePreview("");
+    setImageFileName("");
+    setImageError("");
+    setRemoveImage(false);
+  };
+  const selectItemImage = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setImageError("");
+    setImageFileName(file.name);
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    const acceptedTypes = new Map([
+      ["image/png", "png"],
+      ["image/jpeg", "jpg"],
+      ["image/webp", "webp"]
+    ]);
+    const expectedExtension = acceptedTypes.get(file.type);
+    if (!expectedExtension || (extension !== expectedExtension && !(expectedExtension === "jpg" && extension === "jpeg"))) {
+      if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+      setImageFile(null);
+      setImagePreview(removeImage ? "" : editingItem?.imageUrl || editingItem?.image || "");
+      setImageError("Choose a PNG, JPG, or WEBP image.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+      setImageFile(null);
+      setImagePreview(removeImage ? "" : editingItem?.imageUrl || editingItem?.image || "");
+      setImageError("Image must be 2 MB or smaller.");
+      return;
+    }
+
+    if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setRemoveImage(false);
+  };
+  const removeItemImage = () => {
+    if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
+    setImageFile(null);
+    setImagePreview("");
+    setImageFileName("");
+    setImageError("");
+    setRemoveImage(true);
   };
   const closeServiceDialog = () => {
     if (isSavingService) return;
@@ -391,7 +469,7 @@ function Inventory() {
                   <tbody>
                     {filteredItems.map((item) => (
                       <tr key={item.id}>
-                        <td>{item.name}</td>
+                        <td><span className="inventory-item-name"><ProductImage src={item.imageUrl || item.image} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">{String(item.category || "?").charAt(0).toUpperCase()}</span>} /><span>{item.name}</span></span></td>
                         <td>{item.category}</td>
                         <td className="price-text">{item.price}</td>
                         <td
@@ -480,7 +558,9 @@ function Inventory() {
                   <thead>
                     <tr>
                       <th>SERVICE</th>
+                      <th>CATEGORY</th>
                       <th>PRICE</th>
+                      <th>DURATION</th>
                       <th>MECHANIC FEE</th>
                       <th>ACTIONS</th>
                     </tr>
@@ -496,9 +576,11 @@ function Inventory() {
                             </small>
                           )}
                         </td>
+                        <td>{service.category || "General"}</td>
                         <td className="price-text">
                           {`₱${Number(service.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}
                         </td>
+                        <td>{Number(service.durationMinutes) || 60} min</td>
                         <td className="price-text">
                           {`₱${Number(service.mechanicFee || 0).toLocaleString("en-PH", {
                               minimumFractionDigits: 2,
@@ -612,6 +694,22 @@ function Inventory() {
               />
               {itemFormErrors.category && <small className="inventory-field-error">{itemFormErrors.category}</small>}
             </label>
+            <div className="inventory-image-field">
+              <span>Image <small>(optional)</small></span>
+              <div className="inventory-image-controls">
+                {imagePreview && !removeImage
+                  ? <img className="inventory-image-preview" src={imagePreview} alt="Product image preview" />
+                  : <div className="inventory-image-preview is-empty" aria-label="No product image selected">No image</div>}
+                <div className="inventory-image-actions">
+                  <input ref={imageInputRef} type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" onChange={selectItemImage} hidden />
+                  <button className="btn-small" type="button" onClick={() => imageInputRef.current?.click()}>{imagePreview && !removeImage ? "Replace" : "Choose image"}</button>
+                  {imagePreview && !removeImage && <button className="btn-small btn-delete" type="button" onClick={removeItemImage}>Remove</button>}
+                  <small className="inventory-image-filename">{imageFileName || (imagePreview ? "Current image" : "No image selected")}</small>
+                </div>
+              </div>
+              {imageError && <small className="inventory-field-error" role="alert">{imageError}</small>}
+              <small>PNG, JPG, or WEBP · up to 2 MB</small>
+            </div>
             <div className="admin-dialog-actions">
               <button
                 className="btn-small"
@@ -621,7 +719,7 @@ function Inventory() {
                 Cancel
               </button>
               <button className="btn-primary" type="submit" disabled={isSaving}>
-                {isSaving ? "Saving..." : "Save Item"}
+                {isSaving ? imageFile ? "Uploading image..." : "Saving..." : "Save Item"}
               </button>
             </div>
           </form>
@@ -661,6 +759,35 @@ function Inventory() {
               />
               <small className="inventory-description-count">{serviceForm.description.length}/300</small>
               {serviceFormErrors.description && <small className="inventory-field-error">{serviceFormErrors.description}</small>}
+            </label>
+            <label>
+              Category
+              <input
+                maxLength="80"
+                aria-invalid={Boolean(serviceFormErrors.category)}
+                value={serviceForm.category}
+                onChange={(event) => {
+                  setServiceForm({ ...serviceForm, category: event.target.value });
+                  setServiceFormErrors((errors) => ({ ...errors, category: "" }));
+                }}
+              />
+              {serviceFormErrors.category && <small className="inventory-field-error">{serviceFormErrors.category}</small>}
+            </label>
+            <label>
+              Duration (minutes)
+              <input
+                min="1"
+                max="1440"
+                step="1"
+                type="number"
+                aria-invalid={Boolean(serviceFormErrors.durationMinutes)}
+                value={serviceForm.durationMinutes}
+                onChange={(event) => {
+                  setServiceForm({ ...serviceForm, durationMinutes: event.target.value });
+                  setServiceFormErrors((errors) => ({ ...errors, durationMinutes: "" }));
+                }}
+              />
+              {serviceFormErrors.durationMinutes && <small className="inventory-field-error">{serviceFormErrors.durationMinutes}</small>}
             </label>
             <label>
               Price

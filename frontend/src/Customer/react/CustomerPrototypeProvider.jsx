@@ -8,14 +8,12 @@ function readInitialState() {
     return {
       cart: Array.isArray(saved.cart) ? saved.cart : [],
       wishlist: Array.isArray(saved.wishlist) ? saved.wishlist : [],
-      orders: Array.isArray(saved.orders) ? saved.orders : [],
       reservations: Array.isArray(saved.reservations) ? saved.reservations : [],
       vehicles: Array.isArray(saved.vehicles) ? saved.vehicles : [],
-      addresses: Array.isArray(saved.addresses) ? saved.addresses : [],
       profile: saved.profile || JSON.parse(localStorage.getItem('customerUser') || '{}')
     };
   } catch {
-    return { cart: [], wishlist: [], orders: [], reservations: [], vehicles: [], addresses: [], profile: {} };
+    return { cart: [], wishlist: [], reservations: [], vehicles: [], profile: {} };
   }
 }
 
@@ -23,12 +21,15 @@ export function CustomerPrototypeProvider({ children }) {
   const [state, setState] = useState(readInitialState);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const isEmpty = !state.cart.length && !state.wishlist.length && !state.reservations.length
+      && !state.vehicles.length && !Object.keys(state.profile).length;
+    if (isEmpty) localStorage.removeItem(STORAGE_KEY);
+    else localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
   const addCartItem = (item) => {
     const key = item.kind === 'service'
-      ? `${item.id}:${item.bookingDate}:${item.timeSlot}`
+      ? `${item.id}:${item.bookingDate}:${item.startTime}`
       : item.id;
     setState((current) => {
       const existing = current.cart.find((entry) => entry.key === key);
@@ -72,39 +73,19 @@ export function CustomerPrototypeProvider({ children }) {
       : [...current.wishlist, productId]
   }));
 
-  const placeOrder = (checkout, { createServiceReservations = true } = {}) => {
-    const orderId = `ORD-${Date.now().toString().slice(-7)}`;
-    const createdAt = new Date().toISOString();
-    const items = state.cart.map((item) => ({ ...item }));
-    const order = { id: orderId, createdAt, items, total: checkout.total, status: 'Confirmed', ...checkout };
-    const reservations = (createServiceReservations ? items.filter((item) => item.kind === 'service') : []).map((item, index) => ({
-      ...item,
-      id: `RSV-${orderId.slice(-5)}${index + 1}`,
-      orderId,
-      createdAt,
-      status: 'Confirmed',
-      timeline: [
-        { label: 'Reservation received', date: createdAt, complete: true },
-        { label: 'Mechanic assigned', date: null, complete: false },
-        { label: 'Work in progress', date: null, complete: false },
-        { label: 'Ready for pickup', date: null, complete: false }
-      ]
-    }));
-    setState((current) => ({
-      ...current,
-      cart: [],
-      orders: [order, ...current.orders],
-      reservations: [...reservations, ...current.reservations]
-    }));
-    return order;
-  };
-
   const updateProfile = (profile) => setState((current) => ({ ...current, profile: { ...current.profile, ...profile } }));
   const addVehicle = (vehicle) => setState((current) => ({ ...current, vehicles: [...current.vehicles, { ...vehicle, id: `VEH-${Date.now()}` }] }));
-  const addAddress = (address) => setState((current) => ({ ...current, addresses: [...current.addresses, { ...address, id: `ADDR-${Date.now()}` }] }));
+  const clearCustomerData = () => {
+    setState({ cart: [], wishlist: [], reservations: [], vehicles: [], profile: {} });
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('customerCart');
+    localStorage.removeItem('customerVehicles');
+    localStorage.removeItem('customerProfile');
+    localStorage.removeItem('customerUser');
+  };
 
   return (
-    <CustomerPrototypeContext.Provider value={{ ...state, addCartItem, updateCartItem, setCartItemStock, removeCartItem, replaceCartItem, toggleWishlist, placeOrder, updateProfile, addVehicle, addAddress }}>
+    <CustomerPrototypeContext.Provider value={{ ...state, addCartItem, updateCartItem, setCartItemStock, removeCartItem, replaceCartItem, toggleWishlist, updateProfile, addVehicle, clearCustomerData }}>
       {children}
     </CustomerPrototypeContext.Provider>
   );

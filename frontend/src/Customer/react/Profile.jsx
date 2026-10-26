@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
 const activeReservationStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved'];
@@ -95,7 +96,8 @@ function displayTime(value) {
 }
 
 export default function CustomerProfile() {
-  const { profile, vehicles, reservations: prototypeBookings, updateProfile, addVehicle } = useCustomerPrototype();
+  const navigate = useNavigate();
+  const { profile, vehicles, reservations: prototypeBookings, updateProfile, addVehicle, clearCustomerData } = useCustomerPrototype();
   const [activeTab, setActiveTab] = useState('profile');
   const [profileForm, setProfileForm] = useState(() => ({
     firstName: profile.firstName || '',
@@ -113,6 +115,16 @@ export default function CustomerProfile() {
   const [formError, setFormError] = useState('');
   const [toast, setToast] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [passwordError, setPasswordError] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [hasBlockedRecords, setHasBlockedRecords] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const customerName = `${profileForm.firstName} ${profileForm.lastName}`.trim() || profile.name || 'Demo Rider';
 
   useEffect(() => {
@@ -204,6 +216,60 @@ export default function CustomerProfile() {
     }
   };
 
+  const changePassword = async (event) => {
+    event.preventDefault();
+    setPasswordError('');
+    setToast('');
+
+    if (passwordForm.newPassword.length < 8 || !/[A-Za-z]/.test(passwordForm.newPassword) || !/\d/.test(passwordForm.newPassword)) {
+      setPasswordError('New password must be at least 8 characters and include a letter and a number.');
+      return;
+    }
+    if (passwordForm.newPassword === passwordForm.currentPassword) {
+      setPasswordError('New password must be different from your current password.');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const response = await api.changeCustomerPassword(passwordForm);
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setToast(response.message || 'Password changed successfully.');
+    } catch (error) {
+      setPasswordError(error.message || 'Password could not be changed.');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  const deleteAccount = async (event) => {
+    event.preventDefault();
+    setDeleteError('');
+    setHasBlockedRecords(false);
+    setIsDeletingAccount(true);
+    try {
+      const response = await api.deleteCustomerAccount({
+        password: deletePassword,
+        confirmation: deleteConfirmation
+      });
+      localStorage.removeItem('customerToken');
+      clearCustomerData();
+      navigate('/customer/shop', {
+        replace: true,
+        state: { message: response.message || 'Your account was deleted.' }
+      });
+    } catch (error) {
+      setDeleteError(error.message || 'Your account could not be deleted.');
+      setHasBlockedRecords(error.status === 409 && Boolean(error.details?.records));
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   const saveVehicle = (event) => {
     event.preventDefault();
     addVehicle({ ...vehicleForm, name: `${vehicleForm.year} ${vehicleForm.make} ${vehicleForm.model}`.trim() });
@@ -250,6 +316,26 @@ export default function CustomerProfile() {
           <button type="submit" className="customer-primary-button" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save profile'}</button>
           {formError && <small className="customer-field-error customer-form-error" role="alert">{formError}</small>}
         </form>
+
+        <section className="customer-account-subsection">
+          <div className="customer-flow-section-heading">
+            <div><p className="customer-eyebrow">ACCOUNT ACCESS</p><h2>Security</h2></div>
+            <button type="button" className="customer-password-toggle" onClick={() => setShowPasswords((visible) => !visible)}>{showPasswords ? 'Hide passwords' : 'Show passwords'}</button>
+          </div>
+          <form className="customer-account-form" onSubmit={changePassword} noValidate>
+            <label>Current password<input type={showPasswords ? 'text' : 'password'} autoComplete="current-password" value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} /></label>
+            <label>New password<input type={showPasswords ? 'text' : 'password'} autoComplete="new-password" value={passwordForm.newPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, newPassword: event.target.value }); setPasswordError(''); }} /><small className="customer-field-hint">At least 8 characters, including a letter and a number.</small></label>
+            <label>Confirm new password<input type={showPasswords ? 'text' : 'password'} autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, confirmPassword: event.target.value }); setPasswordError(''); }} /></label>
+            <button type="submit" className="customer-primary-button" disabled={isChangingPassword}>{isChangingPassword ? 'Updating...' : 'Change password'}</button>
+            {passwordError && <small className="customer-field-error customer-form-error" role="alert">{passwordError}</small>}
+          </form>
+        </section>
+
+        <section className="customer-account-delete">
+          <h2>Delete account</h2>
+          <p>Deleting your account removes your personal information. Your past purchase and booking records are kept without your name for the shop&apos;s sales records.</p>
+          <button type="button" className="customer-danger-button" onClick={() => { setDeletePassword(''); setDeleteConfirmation(''); setDeleteError(''); setHasBlockedRecords(false); setIsDeleteModalOpen(true); }}>Delete my account</button>
+        </section>
       </section>}
 
       {activeTab === 'vehicles' && <section className="customer-account-panel" id="account-panel-vehicles" role="tabpanel" aria-labelledby="account-tab-vehicles">
@@ -272,7 +358,7 @@ export default function CustomerProfile() {
           : itemReservations.length
             ? <div className="customer-reservation-list">{itemReservations.map((reservation) => <article className="customer-reservation-card" key={reservation._id}>
               <div className="customer-reservation-card-top">
-                <div><span className="customer-cart-item-kind">RESERVATION · {reservation.code}</span><h2>{reservation.items.map((item) => `${item.name} × ${item.qty}`).join(', ')}</h2><p>{itemReservationDeadline(reservation)}</p></div>
+                <div><span className="customer-cart-item-kind">RESERVATION · {reservation.code}</span><div className="customer-reservation-item-list">{reservation.items.map((item) => <span className="customer-reservation-item-row" key={item.productId}><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><strong>{item.name} × {item.qty}</strong></span>)}</div><p>{itemReservationDeadline(reservation)}</p></div>
                 <span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span>
               </div>
               <div className="customer-reservation-card-finances"><span>Total <strong>{money(reservation.total)}</strong></span><span>Paid <strong>{money(reservation.amountPaid)}</strong></span><span>Balance <strong>{money(reservation.balanceDue)}</strong></span></div>
@@ -290,6 +376,26 @@ export default function CustomerProfile() {
             ? <div className="customer-reservation-list">{allBookings.map((booking) => <ServiceBookingCard key={`${booking.source}-${booking.id || booking._id}`} booking={booking} prototype={booking.source === 'prototype'} />)}</div>
             : !bookingError && <section className="customer-empty-cart"><span aria-hidden="true">⌁</span><h2>No service bookings yet</h2><p>Your service bookings will appear here.</p><Link className="customer-primary-button" to="/customer/services">Browse services</Link></section>}
       </section>}
+
+      {isDeleteModalOpen && <div className="customer-confirmation-backdrop" role="presentation">
+        <section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
+          <h2 id="delete-account-title">Delete your account?</h2>
+          <p>This action cannot be undone. Enter your password and type DELETE to confirm.</p>
+          <form onSubmit={deleteAccount}>
+            <label className="customer-delete-field">Password<input type="password" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} /></label>
+            <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
+            {deleteError && <p className="customer-field-error" role="alert">{deleteError}</p>}
+            {hasBlockedRecords && <div className="customer-delete-record-links">
+              <a href="#account-tab-reservations" onClick={(event) => { event.preventDefault(); setActiveTab('reservations'); setIsDeleteModalOpen(false); }}>View reservations</a>
+              <a href="#account-tab-bookings" onClick={(event) => { event.preventDefault(); setActiveTab('bookings'); setIsDeleteModalOpen(false); }}>View bookings</a>
+            </div>}
+            <div>
+              <button type="button" className="customer-primary-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
+              <button type="submit" className="customer-danger-button" disabled={isDeletingAccount || !deletePassword || deleteConfirmation !== 'DELETE'}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
+            </div>
+          </form>
+        </section>
+      </div>}
     </div>
   </CustomerPage>;
 }

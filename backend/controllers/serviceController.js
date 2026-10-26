@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
 const Service = require('../models/service');
-const ServiceLaborRate = require('../models/serviceLaborRate');
 const { validateServiceInput } = require('../utils/inventoryValidation');
 const { archiveOrDeleteService } = require('../utils/safeDeleteInventoryRecord');
 
@@ -106,14 +105,10 @@ const createService = async (req, res) => {
       name: req.body.name.trim(),
       description: req.body.description.trim(),
       price: Number(req.body.price),
-      mechanicFee: Number(req.body.mechanicFee)
+      mechanicFee: Number(req.body.mechanicFee),
+      category: (req.body.category || 'General').trim(),
+      durationMinutes: Number(req.body.durationMinutes ?? 60)
     });
-    await ServiceLaborRate.updateOne(
-      { serviceType: service.name },
-      { $set: { laborFee: service.mechanicFee, isActive: true } },
-      { upsert: true }
-    );
-
     res.status(201).json({ message: 'Service created successfully', service });
   } catch (error) {
     handleServiceError(res, error);
@@ -140,18 +135,9 @@ const updateService = async (req, res) => {
     service.description = (req.body.description ?? service.description).trim();
     service.price = Number(req.body.price ?? service.price);
     service.mechanicFee = Number(req.body.mechanicFee ?? service.mechanicFee);
+    service.category = (req.body.category ?? service.category ?? 'General').trim();
+    service.durationMinutes = Number(req.body.durationMinutes ?? service.durationMinutes ?? 60);
     await service.save();
-    if (existingService.name !== service.name) {
-      await ServiceLaborRate.updateOne(
-        { serviceType: existingService.name },
-        { $set: { isActive: false } }
-      );
-    }
-    await ServiceLaborRate.updateOne(
-      { serviceType: service.name },
-      { $set: { laborFee: service.mechanicFee, isActive: true } },
-      { upsert: true }
-    );
     res.status(200).json({ message: 'Service updated successfully', service });
   } catch (error) {
     handleServiceError(res, error);

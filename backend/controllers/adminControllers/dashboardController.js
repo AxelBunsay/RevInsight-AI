@@ -8,88 +8,42 @@ const Reservation = require('../../models/orderingModels/reservation');
 const { validateProductInput } = require('../../utils/inventoryValidation');
 const { archiveOrDeleteProduct, hasActiveProductReservation } = require('../../utils/safeDeleteInventoryRecord');
 const { expireReservations } = require('../reservationController');
+const {
+  uploadProductImage,
+  getProductImagePublicId,
+  removeProductImageSafely
+} = require('../../utils/productImage');
+const {
+  getRevenueEntries,
+  groupRevenueByPeriod,
+  summarizeRevenue,
+  groupRevenueByCategory,
+  groupRevenueContributors,
+  projectNextQuarter,
+  parseManilaDateBound,
+  getManilaDateParts
+} = require('../../utils/revenue');
+const { getAvailableStock, isLowStock } = require('../../utils/inventory');
 
-const revenueStatuses = ['completed', 'Paid'];
-const revenueAmount = { $ifNull: ['$totalPrice', '$totalAmount'] };
+const isRemoveImageRequested = (value) => value === true || value === 'true';
 
-const mergeGroupedRevenue = (orderGroups, reservationGroups) => {
-  const groups = new Map();
-  [...orderGroups, ...reservationGroups].forEach((item) => {
-    const key = JSON.stringify(item._id);
-    const current = groups.get(key) || { ...item, revenue: 0, count: 0 };
-    current.revenue += Number(item.revenue || 0);
-    current.count += Number(item.count || 0);
-    groups.set(key, current);
-  });
-  return [...groups.values()].sort((left, right) => {
-    const a = left._id;
-    const b = right._id;
-    if (a.year !== undefined && b.year !== undefined) {
-      return a.year - b.year || (a.quarter || a.month || 0) - (b.quarter || b.month || 0);
-    }
-    return String(a).localeCompare(String(b));
-  });
+const loadRevenueEntries = (options = {}) => getRevenueEntries({
+  Order,
+  Reservation,
+  ServiceRequest,
+  Product,
+  ...options
+});
+
+const getRevenueByPeriod = async (unit, fromDate) => {
+  const entries = await loadRevenueEntries({ startDate: fromDate });
+  return groupRevenueByPeriod(entries, unit);
 };
 
-const getRevenueByPeriod = async (unit, dateField = 'createdAt', fromDate) => {
-  const match = { status: { $in: revenueStatuses }, code: { $exists: false } };
-  if (fromDate) match[dateField] = { $gte: fromDate };
-  const reservationMatch = { status: 'Completed' };
-  if (fromDate) reservationMatch.completedAt = { $gte: fromDate };
-  const periodValue = unit === 'date'
-    ? { $dateToString: { format: '%Y-%m-%d', date: `$${dateField}` } }
-    : unit === 'quarter'
-      ? { year: { $year: `$${dateField}` }, quarter: { $ceil: { $divide: [{ $month: `$${dateField}` }, 3] } } }
-      : { year: { $year: `$${dateField}` }, month: { $month: `$${dateField}` } };
-  const reservationPeriodValue = unit === 'date'
-    ? { $dateToString: { format: '%Y-%m-%d', date: '$completedAt' } }
-    : unit === 'quarter'
-      ? { year: { $year: '$completedAt' }, quarter: { $ceil: { $divide: [{ $month: '$completedAt' }, 3] } } }
-      : { year: { $year: '$completedAt' }, month: { $month: '$completedAt' } };
-  const [orders, reservations] = await Promise.all([
-    Order.aggregate([
-      { $match: match },
-      { $group: { _id: periodValue, revenue: { $sum: revenueAmount }, count: { $sum: 1 } } }
-    ]),
-    Reservation.aggregate([
-      { $match: reservationMatch },
-      { $group: { _id: reservationPeriodValue, revenue: { $sum: '$total' }, count: { $sum: 1 } } }
-    ])
-  ]);
-  return mergeGroupedRevenue(orders, reservations);
-};
-
-// Product line items and completed labor are normalized into one concentration report.
 const getRevenueConcentration = async (req, res) => {
   try {
-    const [productContributors, serviceContributors] = await Promise.all([
-      Order.aggregate([
-        { $match: { status: { $in: revenueStatuses }, code: { $exists: false } } },
-        { $unwind: '$items' },
-        { $group: { _id: '$items.productName', revenue: { $sum: { $multiply: ['$items.price', '$items.quantity'] } }, contributorType: { $first: '$items.category' } } },
-        { $project: { _id: 0, name: '$_id', revenue: 1, contributorType: { $ifNull: ['$contributorType', 'Product'] } } }
-      ]),
-      ServiceRequest.aggregate([
-        { $match: { status: 'completed' } },
-        { $group: { _id: '$serviceType', revenue: { $sum: '$estimatedPrice' } } },
-        { $project: { _id: 0, name: '$_id', revenue: 1, contributorType: { $literal: 'Labor service' } } }
-      ])
-    ]);
-    const reservationContributors = await Reservation.aggregate([
-      { $match: { status: 'Completed', code: { $exists: true } } },
-      { $unwind: '$items' },
-      { $group: { _id: '$items.name', revenue: { $sum: '$items.lineTotal' }, contributorType: { $literal: 'Product reservation' } } },
-      { $project: { _id: 0, name: '$_id', revenue: 1, contributorType: 1 } }
-    ]);
-
-    const consolidatedContributors = new Map();
-    [...productContributors, ...reservationContributors, ...serviceContributors].forEach((item) => {
-      const key = `${item.contributorType}:${item.name}`;
-      const current = consolidatedContributors.get(key) || { ...item, revenue: 0 };
-      current.revenue += Number(item.revenue || 0);
-      consolidatedContributors.set(key, current);
-    });
-    const contributors = [...consolidatedContributors.values()]
+    const entries = await loadRevenueEntries();
+    const contributors = groupRevenueContributors(entries)
       .filter((item) => Number(item.revenue) > 0)
       .sort((left, right) => right.revenue - left.revenue);
     const totalRevenue = contributors.reduce((sum, item) => sum + item.revenue, 0);
@@ -123,19 +77,8 @@ const getRevenueConcentration = async (req, res) => {
 const getDashboardStats = async (req, res) => {
   try {
     await expireReservations();
-    const [orderRevenue, reservationRevenue, orderCount, reservationCount] = await Promise.all([
-      Order.aggregate([
-        { $match: { status: { $in: revenueStatuses }, code: { $exists: false } } },
-        { $group: { _id: null, total: { $sum: revenueAmount } } }
-      ]),
-      Reservation.aggregate([
-        { $match: { status: 'Completed', code: { $exists: true } } },
-        { $group: { _id: null, total: { $sum: '$total' } } }
-      ]),
-      Order.countDocuments({ status: { $in: revenueStatuses }, code: { $exists: false } }),
-      Reservation.countDocuments({ status: 'Completed', code: { $exists: true } })
-    ]);
-    const [collectionSummary, outstandingSummary] = await Promise.all([
+    const [revenueEntries, collectionSummary, outstandingSummary] = await Promise.all([
+      loadRevenueEntries(),
       Reservation.aggregate([
         {
           $match: {
@@ -151,6 +94,7 @@ const getDashboardStats = async (req, res) => {
         { $group: { _id: null, total: { $sum: '$balanceDue' } } }
       ])
     ]);
+    const revenueSummary = summarizeRevenue(revenueEntries);
     const totalInventoryItems = await Product.countDocuments({ isActive: { $ne: false } });
     const totalMechanics = await Mechanic.countDocuments();
     const totalUsers = await User.countDocuments();
@@ -158,8 +102,8 @@ const getDashboardStats = async (req, res) => {
     res.json({
       success: true,
       data: {
-        totalRevenue: (orderRevenue[0]?.total || 0) + (reservationRevenue[0]?.total || 0),
-        totalTransactions: orderCount + reservationCount,
+        totalRevenue: revenueSummary.totalSales,
+        totalTransactions: revenueSummary.totalOrders,
         totalInventoryItems,
         totalMechanics,
         totalUsers,
@@ -210,7 +154,7 @@ const getDailyData = async (req, res) => {
     const lastSevenDays = new Date();
     lastSevenDays.setDate(lastSevenDays.getDate() - 7);
 
-    const dailyData = await getRevenueByPeriod('date', 'createdAt', lastSevenDays);
+    const dailyData = await getRevenueByPeriod('date', lastSevenDays);
 
     res.json({
       success: true,
@@ -225,31 +169,18 @@ const getDailyData = async (req, res) => {
 // Get Revenue Risk
 const getRevenueRisk = async (req, res) => {
   try {
-    const [orderCategories, reservationCategories] = await Promise.all([
-      Order.aggregate([
-        { $match: { status: { $in: revenueStatuses }, code: { $exists: false } } },
-        { $group: { _id: '$category', revenue: { $sum: revenueAmount }, percentage: { $sum: 1 } } }
-      ]),
-      Reservation.aggregate([
-        { $match: { status: 'Completed', code: { $exists: true } } },
-        { $unwind: '$items' },
-        { $group: { _id: '$items.name', revenue: { $sum: '$items.lineTotal' }, percentage: { $sum: '$items.qty' } } }
-      ])
-    ]);
-    const categoriesByName = new Map();
-    [...orderCategories, ...reservationCategories].forEach((item) => {
-      const key = item._id || 'Uncategorized';
-      const current = categoriesByName.get(key) || { _id: key, revenue: 0, percentage: 0 };
-      current.revenue += Number(item.revenue || 0);
-      current.percentage += Number(item.percentage || 0);
-      categoriesByName.set(key, current);
-    });
-    const revenueByCategory = [...categoriesByName.values()].sort((left, right) => right.revenue - left.revenue);
-
+    const entries = await loadRevenueEntries();
+    const revenueByCategory = groupRevenueByCategory(entries);
     const totalRevenue = revenueByCategory.reduce((sum, item) => sum + item.revenue, 0);
-
     const topCategory = revenueByCategory[0];
-    const riskLevel = topCategory && (topCategory.revenue / totalRevenue) > 0.8 ? 'High' : 'Low';
+    const concentration = totalRevenue > 0 && topCategory
+      ? topCategory.revenue / totalRevenue * 100
+      : 0;
+    const riskLevel = concentration > 80 ? 'High' : 'Low';
+    const categoriesWithShare = revenueByCategory.map((item) => ({
+      ...item,
+      percentage: totalRevenue ? item.revenue / totalRevenue * 100 : 0
+    }));
 
     res.json({
       success: true,
@@ -257,8 +188,8 @@ const getRevenueRisk = async (req, res) => {
         totalRevenue,
         riskLevel,
         topCategory: topCategory?._id,
-        concentration: topCategory ? (topCategory.revenue / totalRevenue * 100).toFixed(2) : 0,
-        byCategory: revenueByCategory
+        concentration: concentration.toFixed(2),
+        byCategory: categoriesWithShare
       }
     });
   } catch (error) {
@@ -270,11 +201,21 @@ const getRevenueRisk = async (req, res) => {
 // Get Projected Revenue
 const getProjectedRevenue = async (req, res) => {
   try {
-    const projectedData = (await getRevenueByPeriod('quarter')).slice(-3).map(({ _id, revenue }) => ({ _id, revenue }));
+    const quarterlyData = await getRevenueByPeriod('quarter');
+    const currentQuarter = getManilaDateParts(new Date());
+    const completedQuarters = quarterlyData.filter((row) =>
+      row._id.year < currentQuarter.year
+      || (row._id.year === currentQuarter.year && row._id.quarter < currentQuarter.quarter)
+    );
+    const insufficientData = completedQuarters.length < 5;
 
     res.json({
       success: true,
-      data: projectedData
+      data: {
+        insufficientData,
+        availableQuarters: completedQuarters.length,
+        projection: insufficientData ? [] : projectNextQuarter(completedQuarters)
+      }
     });
   } catch (error) {
     console.error('[getProjectedRevenue] error', error);
@@ -444,8 +385,32 @@ const getBusinessRecords = async (req, res) => {
         (reservation.items || []).reduce((total, item) => total + Number(item.qty || 0), 0)
       ])
     ]);
+    const serviceRequests = records.some((record) => record.recordType === 'service')
+      ? await ServiceRequest.find({
+        _id: {
+          $in: records
+            .filter((record) => record.recordType === 'service')
+            .map((record) => record.sourceId)
+        }
+      }).select('user customerId').lean()
+      : [];
+    const linkedCustomerIds = [
+      ...reservationRows.map((reservation) => reservation.customerId).filter(Boolean),
+      ...serviceRequests.flatMap((request) => [request.user, request.customerId].filter(Boolean))
+    ];
+    const deletedCustomerIds = new Set(
+      (linkedCustomerIds.length
+        ? await User.find({ _id: { $in: linkedCustomerIds }, isDeleted: true }).select('_id').lean()
+        : []).map((customer) => String(customer._id))
+    );
+    const deletedServiceRequestIds = new Set(
+      serviceRequests
+        .filter((request) => deletedCustomerIds.has(String(request.user || request.customerId)))
+        .map((request) => String(request._id))
+    );
     const recordsWithQuantity = records.map((record) => ({
       ...record.toObject(),
+      ...(deletedServiceRequestIds.has(String(record.sourceId)) ? { customer: 'Deleted customer' } : {}),
       quantity: quantitiesByOrderId.get(record.sourceId.toString()),
       paid: record.recordType === 'product' ? Number(record.amount || 0) : null,
       balance: record.recordType === 'product' ? 0 : null
@@ -458,7 +423,9 @@ const getBusinessRecords = async (req, res) => {
         recordType: 'product',
         isReservation: true,
         sourceId: reservation._id,
-        customer: reservation.customerName || 'Unknown',
+        customer: deletedCustomerIds.has(String(reservation.customerId))
+          ? 'Deleted customer'
+          : reservation.customerName || 'Unknown',
         itemName: (reservation.items || []).map((item) => item.name).join(', '),
         amount: Number(reservation.total || 0),
         paid: Number(reservation.amountPaid || 0),
@@ -506,8 +473,6 @@ const getAllTransactions = async (req, res) => {
     const includeCompletedReservations = !status || String(status).toLowerCase() === 'completed';
     const [orders, orderCount, reservationRows, reservationCount] = await Promise.all([
       Order.find(query)
-        .populate('userId', 'name email')
-        .populate('mechanicId', 'name specialty')
         .sort({ createdAt: -1 })
         .limit(page * limit),
       Order.countDocuments(query),
@@ -553,8 +518,6 @@ const getAllTransactions = async (req, res) => {
 const getTransactionById = async (req, res) => {
   try {
     let transaction = await Order.findOne({ _id: req.params.id, code: { $exists: false } })
-      .populate('userId')
-      .populate('mechanicId')
       .populate('items.productId');
 
     if (!transaction) {
@@ -586,29 +549,17 @@ const getTransactionById = async (req, res) => {
   }
 };
 
-// Create Transaction
-const createTransaction = async (req, res) => {
-  try {
-    const transaction = new Order(req.body);
-    await transaction.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Transaction created successfully',
-      data: transaction
-    });
-  } catch (error) {
-    console.error('[createTransaction] error', error);
-    res.status(500).json({ success: false, message: 'Failed to create transaction. Please try again.' });
-  }
-};
-
 // Update Transaction
 const updateTransaction = async (req, res) => {
   try {
+    const allowedStatuses = ['pending', 'completed', 'cancelled', 'Paid'];
+    const status = req.body?.status;
+    if (typeof status !== 'string' || !allowedStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'A valid transaction status is required.' });
+    }
     const transaction = await Order.findOneAndUpdate(
       { _id: req.params.id, code: { $exists: false } },
-      req.body,
+      { $set: { status } },
       { new: true, runValidators: true }
     );
 
@@ -707,6 +658,7 @@ const getInventoryItem = async (req, res) => {
 
 // Add Inventory Item
 const addInventoryItem = async (req, res) => {
+  let uploadedImage;
   try {
     const fieldErrors = validateProductInput(req.body);
     if (Object.keys(fieldErrors).length) {
@@ -716,7 +668,14 @@ const addInventoryItem = async (req, res) => {
         fieldErrors
       });
     }
-    const item = new Product(req.body);
+    if (req.file) uploadedImage = await uploadProductImage(req.file);
+    const item = new Product({
+      name: req.body.name,
+      price: req.body.price,
+      quantity: req.body.quantity,
+      category: req.body.category,
+      ...(uploadedImage || {})
+    });
     await item.save();
 
     res.status(201).json({
@@ -725,13 +684,17 @@ const addInventoryItem = async (req, res) => {
       data: item
     });
   } catch (error) {
+    if (uploadedImage?.imagePublicId) {
+      await removeProductImageSafely(uploadedImage.imagePublicId, 'addInventoryItem.rollback');
+    }
     console.error('[addInventoryItem] error', error);
-    res.status(500).json({ success: false, message: 'Failed to add inventory item. Please try again.' });
+    res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to add inventory item. Please try again.' });
   }
 };
 
 // Update Inventory Item
 const updateInventoryItem = async (req, res) => {
+  let uploadedImage;
   try {
     const fieldErrors = validateProductInput(req.body);
     if (Object.keys(fieldErrors).length) {
@@ -751,6 +714,14 @@ const updateInventoryItem = async (req, res) => {
         message: `Stock cannot be lower than the ${currentItem.reservedQty} units currently reserved.`
       });
     }
+    if (req.file) uploadedImage = await uploadProductImage(req.file);
+    const oldImagePublicId = currentItem.imagePublicId
+      || getProductImagePublicId(currentItem.imageUrl || currentItem.image);
+    const imageUpdate = uploadedImage
+      ? { ...uploadedImage, image: uploadedImage.imageUrl }
+      : isRemoveImageRequested(req.body.removeImage)
+        ? { image: null, imageUrl: null, imagePublicId: null }
+        : {};
     const item = await Product.findOneAndUpdate(
       {
         _id: req.params.id,
@@ -763,16 +734,24 @@ const updateInventoryItem = async (req, res) => {
         name: req.body.name.trim(),
         price: Number(req.body.price),
         quantity: Number(req.body.quantity),
-        category: req.body.category.trim()
+        category: req.body.category.trim(),
+        ...imageUpdate
       },
       { new: true, runValidators: true }
     );
 
     if (!item) {
+      if (uploadedImage?.imagePublicId) {
+        await removeProductImageSafely(uploadedImage.imagePublicId, 'updateInventoryItem.rollback');
+      }
       return res.status(409).json({
         success: false,
         message: 'Stock changed while saving. It cannot be set below the quantity currently reserved.'
       });
+    }
+
+    if ((uploadedImage || isRemoveImageRequested(req.body.removeImage)) && oldImagePublicId) {
+      await removeProductImageSafely(oldImagePublicId, 'updateInventoryItem');
     }
 
     res.json({
@@ -781,8 +760,11 @@ const updateInventoryItem = async (req, res) => {
       data: item
     });
   } catch (error) {
+    if (uploadedImage?.imagePublicId) {
+      await removeProductImageSafely(uploadedImage.imagePublicId, 'updateInventoryItem.rollback');
+    }
     console.error('[updateInventoryItem] error', error);
-    res.status(500).json({ success: false, message: 'Failed to update inventory item. Please try again.' });
+    res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to update inventory item. Please try again.' });
   }
 };
 
@@ -804,6 +786,12 @@ const deleteInventoryItem = async (req, res) => {
     }
 
     const { archived } = await archiveOrDeleteProduct(item);
+    if (!archived) {
+      await removeProductImageSafely(
+        item.imagePublicId || getProductImagePublicId(item.imageUrl || item.image),
+        'deleteInventoryItem'
+      );
+    }
     res.json({
       success: true,
       archived,
@@ -821,43 +809,21 @@ const deleteInventoryItem = async (req, res) => {
 const getSalesReport = async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = { status: { $in: revenueStatuses } };
-    const reportEndDate = endDate ? new Date(endDate) : null;
-    if (reportEndDate) reportEndDate.setHours(23, 59, 59, 999);
-
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (reportEndDate) query.createdAt.$lte = reportEndDate;
-    }
+    const reportStartDate = parseManilaDateBound(startDate);
+    const reportEndDate = parseManilaDateBound(endDate, true);
+    const revenueEntries = await loadRevenueEntries({
+      startDate: reportStartDate,
+      endDate: reportEndDate
+    });
+    const summary = summarizeRevenue(revenueEntries);
 
     const forfeitureDateQuery = startDate || endDate ? {
       refundDecisionAt: {
-        ...(startDate ? { $gte: new Date(startDate) } : {}),
+        ...(reportStartDate ? { $gte: reportStartDate } : {}),
         ...(reportEndDate ? { $lte: reportEndDate } : {})
       }
     } : {};
-    const [orderReport, reservationReport, forfeitureReport] = await Promise.all([Order.aggregate([
-      { $match: { ...query, code: { $exists: false } } },
-      {
-        $group: {
-          _id: null,
-          totalSales: { $sum: revenueAmount },
-          totalOrders: { $sum: 1 },
-          avgOrderValue: { $avg: revenueAmount }
-        }
-      }
-    ]), Reservation.aggregate([
-      { $match: { status: 'Completed', code: { $exists: true }, ...(query.createdAt ? { completedAt: query.createdAt } : {}) } },
-      {
-        $group: {
-          _id: null,
-          totalSales: { $sum: '$total' },
-          totalOrders: { $sum: 1 },
-          avgOrderValue: { $avg: '$total' }
-        }
-      }
-    ]), Reservation.aggregate([
+    const forfeitureReport = await Reservation.aggregate([
       {
         $match: {
           code: { $exists: true },
@@ -867,14 +833,11 @@ const getSalesReport = async (req, res) => {
         }
       },
       { $group: { _id: null, forfeitedDownPayments: { $sum: '$amountPaid' } } }
-    ])]);
-    const orderSummary = orderReport[0] || { totalSales: 0, totalOrders: 0, avgOrderValue: 0 };
-    const reservationSummary = reservationReport[0] || { totalSales: 0, totalOrders: 0, avgOrderValue: 0 };
-    const totalOrders = orderSummary.totalOrders + reservationSummary.totalOrders;
+    ]);
     const report = [{
-      totalSales: orderSummary.totalSales + reservationSummary.totalSales,
-      totalOrders,
-      avgOrderValue: totalOrders ? (orderSummary.totalSales + reservationSummary.totalSales) / totalOrders : 0,
+      totalSales: summary.totalSales,
+      totalOrders: summary.totalOrders,
+      avgOrderValue: summary.avgOrderValue,
       forfeitedDownPayments: forfeitureReport[0]?.forfeitedDownPayments || 0
     }];
 
@@ -891,8 +854,12 @@ const getSalesReport = async (req, res) => {
 // Get Inventory Report
 const getInventoryReport = async (req, res) => {
   try {
-    const lowStockItems = await Product.find({ quantity: { $lt: 5 }, isActive: { $ne: false } });
+    const activeProducts = await Product.find({ isActive: { $ne: false } }).lean();
+    const lowStockItems = activeProducts
+      .map((item) => ({ ...item, available: getAvailableStock(item) }))
+      .filter((item) => isLowStock(item.available));
     const totalInventoryValue = await Product.aggregate([
+      { $match: { isActive: { $ne: false } } },
       { $group: { _id: null, totalValue: { $sum: { $multiply: ['$price', '$quantity'] } } } }
     ]);
 
@@ -900,7 +867,7 @@ const getInventoryReport = async (req, res) => {
       success: true,
       data: {
         lowStockItems,
-        totalItems: await Product.countDocuments({ isActive: { $ne: false } }),
+        totalItems: activeProducts.length,
         totalInventoryValue: totalInventoryValue[0]?.totalValue || 0
       }
     });
@@ -914,25 +881,52 @@ const getInventoryReport = async (req, res) => {
 const getMechanicsReport = async (req, res) => {
   try {
     const mechanicsReport = await Mechanic.aggregate([
+      { $match: { isActive: { $ne: false } } },
       {
         $lookup: {
-          from: 'ServiceRequest',
-          localField: '_id',
-          foreignField: 'mechanicId',
-          as: 'jobs'
+          from: 'servicerequests',
+          let: { mechanicId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $or: [
+                    { $eq: ['$mechanic', '$$mechanicId'] },
+                    { $eq: ['$mechanicId', '$$mechanicId'] }
+                  ]
+                }
+              }
+            },
+            {
+              $group: {
+                _id: null,
+                totalJobs: { $sum: 1 },
+                completedJobs: {
+                  $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+                },
+                totalLabor: {
+                  $sum: {
+                    $cond: [
+                      { $eq: ['$status', 'completed'] },
+                      { $ifNull: ['$laborFee', 0] },
+                      0
+                    ]
+                  }
+                }
+              }
+            }
+          ],
+          as: 'jobStats'
         }
       },
       {
-        $group: {
+        $project: {
           _id: '$_id',
-          name: { $first: '$name' },
-          specialty: { $first: '$specialty' },
-          totalJobs: { $sum: { $size: '$jobs' } },
-          completedJobs: {
-            $sum: {
-              $cond: [{ $eq: ['$jobs.status', 'Completed'] }, 1, 0]
-            }
-          }
+          name: { $trim: { input: { $concat: ['$firstName', ' ', '$lastName'] } } },
+          specialty: '$specialization',
+          totalJobs: { $ifNull: [{ $arrayElemAt: ['$jobStats.totalJobs', 0] }, 0] },
+          completedJobs: { $ifNull: [{ $arrayElemAt: ['$jobStats.completedJobs', 0] }, 0] },
+          totalLabor: { $ifNull: [{ $arrayElemAt: ['$jobStats.totalLabor', 0] }, 0] }
         }
       }
     ]);
@@ -960,7 +954,6 @@ module.exports = {
   getBusinessRecords,
   getAllTransactions,
   getTransactionById,
-  createTransaction,
   updateTransaction,
   deleteTransaction,
   getAllInventory,

@@ -69,7 +69,7 @@ function Mechanics() {
             lastName: mechanic.lastName || "",
             email: mechanic.email || "",
             password: "",
-            phoneNumber: "",
+            phoneNumber: mechanic.phoneNumber || "",
             specialization: mechanic.specialization || "general",
             yearsOfExperience: mechanic.yearsOfExperience || 0,
           }
@@ -99,6 +99,7 @@ function Mechanics() {
       if (editingMechanic) {
         if (!payload.password) delete payload.password;
         delete payload.email;
+        if (!payload.phoneNumber.trim()) delete payload.phoneNumber;
         await api.updateMechanic(editingMechanic.id, payload);
       } else {
         await api.createMechanic(payload);

@@ -11,6 +11,7 @@ const {
 const TIME_ZONE = 'Asia/Manila';
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SLOT_INTERVAL_MINUTES = 30;
+const ACTIVE_UNPAID_BOOKING_STATUSES = ['pending', 'assigned', 'confirmed', 'accepted', 'in-progress'];
 
 const timeToMinutes = (time) => {
   if (typeof time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
@@ -66,8 +67,20 @@ const buildScheduleInfo = async () => {
     openTime: settings.openTime,
     closeTime: settings.closeTime,
     slotCapacity: settings.slotCapacity,
-    maxDaysAhead: settings.maxDaysAhead
+    maxDaysAhead: settings.maxDaysAhead,
+    pendingPaymentHours: settings.pendingPaymentHours
   };
+};
+
+const ensureCustomerUnpaidBookingLimit = async (customerId, session) => {
+  const count = await ServiceRequest.countDocuments({
+    $or: [{ user: customerId }, { customerId }],
+    status: { $in: ACTIVE_UNPAID_BOOKING_STATUSES },
+    paymentStatus: 'Payment Pending'
+  }).session(session);
+  if (count >= 3) {
+    throw Object.assign(new Error('You can have up to 3 active unpaid service bookings at a time. Submit payment or wait for an existing booking to close.'), { status: 409 });
+  }
 };
 
 const validateDateForSchedule = (dateKey, schedule) => {
@@ -228,6 +241,8 @@ const createServiceBookings = async (req, res) => {
               throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
             }
 
+            await ensureCustomerUnpaidBookingLimit(req.user.userId, session);
+
             const configuredService = await Service.findOne({
               _id: booking.serviceId,
               isActive: { $ne: false }
@@ -235,6 +250,7 @@ const createServiceBookings = async (req, res) => {
             if (!configuredService) {
               throw Object.assign(new Error('This service is no longer available.'), { status: 400 });
             }
+            const createdAt = new Date();
             serviceRequest = (await ServiceRequest.create([{
               user: req.user.userId,
               customerId: req.user.userId,
@@ -249,6 +265,8 @@ const createServiceBookings = async (req, res) => {
               mechanicId: null,
               estimatedPrice: configuredService.price,
               laborFee: configuredService.mechanicFee ?? 0,
+              createdAt,
+              paymentDueAt: new Date(createdAt.getTime() + schedule.pendingPaymentHours * 60 * 60 * 1000),
               scheduledDate: dayRange.start,
               startTime: booking.startTime,
               endTime: selectedSlot.endTime,
@@ -285,4 +303,4 @@ const createServiceBookings = async (req, res) => {
   }
 };
 
-module.exports = { getServiceSlots, createServiceBookings };
+module.exports = { getServiceSlots, createServiceBookings, ensureCustomerUnpaidBookingLimit };
