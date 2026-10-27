@@ -6,7 +6,11 @@ const {
   getProductImagePublicId,
   removeProductImageSafely
 } = require('../../utils/productImage');
-const { prepareProductMutation, serializePublicVariants } = require('../../utils/productVariants');
+const {
+  prepareProductMutation,
+  uploadProductMutationImages,
+  serializePublicVariants
+} = require('../../utils/productVariants');
 
 const serializeProduct = (product) => ({
   ...product.toObject(),
@@ -26,6 +30,11 @@ const validateProductId = (id, res) => {
 
   return true;
 };
+
+const isTransientWriteConflict = (error) =>
+  error.code === 112
+  || error.codeName === 'WriteConflict'
+  || error.hasErrorLabel?.('TransientTransactionError');
 
 const createProduct = async (req, res) => {
   let prepared;
@@ -117,28 +126,31 @@ const getProduct = async (req, res) => {
 };
 
 const updateProduct = async (req, res) => {
+  let session;
+  let stagedImages;
   let prepared;
   try {
     if (!validateProductId(req.params.id, res)) return;
-
-    const currentProduct = await Product.findById(req.params.id);
-
-    if (!currentProduct) {
-      return res.status(404).json({
-        success: false,
-        message: 'Product not found'
-      });
-    }
-
-    prepared = await prepareProductMutation({
+    stagedImages = await uploadProductMutationImages({
       input: req.body,
-      currentProduct,
       productFile: req.file,
-      variantFiles: req.variantFiles,
-      Reservation
+      variantFiles: req.variantFiles
     });
-    currentProduct.set(prepared.data);
-    const product = await currentProduct.save();
+    session = await mongoose.startSession();
+    let product;
+    await session.withTransaction(async () => {
+      const currentProduct = await Product.findById(req.params.id).session(session);
+      if (!currentProduct) throw Object.assign(new Error('Product not found'), { status: 404 });
+      prepared = await prepareProductMutation({
+        input: req.body,
+        currentProduct,
+        Reservation,
+        session,
+        preparedImages: stagedImages
+      });
+      currentProduct.set(prepared.data);
+      product = await currentProduct.save({ session });
+    });
     for (const publicId of prepared.obsoleteImagePublicIds) {
       await removeProductImageSafely(publicId, 'updateProduct');
     }
@@ -149,14 +161,19 @@ const updateProduct = async (req, res) => {
       product: serializeProduct(product)
     });
   } catch (error) {
-    for (const image of prepared?.uploadedImages || error.uploadedImages || []) {
+    for (const image of prepared?.uploadedImages || stagedImages?.uploadedImages || error.uploadedImages || []) {
       await removeProductImageSafely(image.imagePublicId, 'updateProduct.rollback');
     }
-    res.status(error.status || 400).json({
+    const status = isTransientWriteConflict(error) ? 409 : error.status || 400;
+    res.status(status).json({
       success: false,
-      message: error.message,
+      message: isTransientWriteConflict(error)
+        ? 'This item changed while saving. Reload and try again.'
+        : error.message,
       ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
     });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 

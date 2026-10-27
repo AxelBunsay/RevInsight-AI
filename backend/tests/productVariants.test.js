@@ -15,7 +15,7 @@ const makeProduct = (variants) => new Product({
 describe('product variants', () => {
   it('generates labels from fitment, size, and color attributes', async () => {
     const product = makeProduct([
-      { brand: 'Yamaha', model: 'YTX 125', color: 'Red', price: 0, stock: 2 },
+      { brand: 'Yamaha', model: 'YTX 125', color: 'Red', price: 1, stock: 2 },
       { color: 'Black', size: '70/90-17', price: 50, stock: 1 },
       { size: '1 L', price: 90, stock: 0 }
     ]);
@@ -53,6 +53,18 @@ describe('product variants', () => {
       errors: expect.objectContaining({
         'variants.0.brand': expect.any(Object),
         'variants.0.stock': expect.any(Object)
+      })
+    });
+  });
+
+  it('rejects a variant price below 0.01', async () => {
+    const product = makeProduct([
+      { color: 'Black', price: 0, stock: 1 }
+    ]);
+
+    await expect(product.validate()).rejects.toMatchObject({
+      errors: expect.objectContaining({
+        'variants.0.price': expect.any(Object)
       })
     });
   });

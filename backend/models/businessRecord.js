@@ -26,6 +26,10 @@ const businessRecordSchema = new mongoose.Schema({
     type: String,
     default: 'General'
   },
+  categoryKey: {
+    type: String,
+    trim: true
+  },
   mechanicId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Mechanic',
@@ -63,5 +67,13 @@ const businessRecordSchema = new mongoose.Schema({
     default: ''
   }
 });
+
+businessRecordSchema.index(
+  { recordType: 1, sourceId: 1, categoryKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { categoryKey: { $type: 'string' } }
+  }
+);
 
 module.exports = mongoose.model('BusinessRecord', businessRecordSchema);

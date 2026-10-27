@@ -27,7 +27,31 @@ function parseVariants(value) {
   }
 }
 
-async function prepareVariants(value, currentProduct, files = []) {
+async function uploadProductMutationImages({ input, productFile, variantFiles = [] }) {
+  const uploadedImages = [];
+  const variantImages = new Map();
+  let productImage;
+  try {
+    const variants = parseVariants(input.variants) || [];
+    if (productFile) {
+      productImage = await uploadProductImage(productFile);
+      uploadedImages.push(productImage);
+    }
+    for (const [index] of variants.entries()) {
+      const file = variantFiles.find((variantFile) => variantFile.fieldname === `variantImage_${index}`);
+      if (!file) continue;
+      const image = await uploadProductImage(file);
+      uploadedImages.push(image);
+      variantImages.set(index, image);
+    }
+    return { productImage, variantImages, uploadedImages };
+  } catch (error) {
+    error.uploadedImages = uploadedImages;
+    throw error;
+  }
+}
+
+async function prepareVariants(value, currentProduct, files = [], preparedImages) {
   const inputVariants = parseVariants(value);
   if (inputVariants === undefined) return undefined;
   if (inputVariants.length > 50) throw inputError('A product can have at most 50 variants.');
@@ -63,8 +87,8 @@ async function prepareVariants(value, currentProduct, files = []) {
       }
       combinations.add(combination);
 
-      if (!hasValidNumber(input.price) || Number(input.price) < 0) {
-        throw inputError(`Variant ${index + 1} price must be a number greater than or equal to 0.`);
+      if (!hasValidNumber(input.price) || Number(input.price) < 0.01) {
+        throw inputError(`Variant ${index + 1} price must be a number greater than or equal to 0.01.`);
       }
       if (!hasValidNumber(input.stock) || !Number.isInteger(Number(input.stock)) || Number(input.stock) < 0) {
         throw inputError(`Variant ${index + 1} stock must be a whole number greater than or equal to 0.`);
@@ -94,7 +118,11 @@ async function prepareVariants(value, currentProduct, files = []) {
       }
 
       const imageFile = files.find((file) => file.fieldname === `variantImage_${index}`);
-      if (imageFile) {
+      const preparedImage = preparedImages?.variantImages.get(index);
+      if (preparedImage) {
+        variant.imageUrl = preparedImage.imageUrl;
+        variant.imagePublicId = preparedImage.imagePublicId;
+      } else if (imageFile) {
         const uploaded = await uploadProductImage(imageFile);
         uploadedImages.push(uploaded);
         variant.imageUrl = uploaded.imageUrl;
@@ -144,13 +172,13 @@ function serializePublicVariants(variants = []) {
   });
 }
 
-async function validateVariantReservationReferences(productId, currentVariants, nextVariants, Reservation) {
+async function validateVariantReservationReferences(productId, currentVariants, nextVariants, Reservation, session) {
   if (!productId || !currentVariants.length && !nextVariants.length) return;
   const activeReservations = await Reservation.find({
     code: { $exists: true },
     status: { $in: ['Pending Down Payment', 'Payment Submitted', 'Reserved'] },
     'items.productId': productId
-  }).select('items').lean();
+  }).select('items').session(session || null).lean();
   if (!activeReservations.length) return;
 
   const nextIds = new Set(nextVariants.map((variant) => String(variant._id)));
@@ -167,22 +195,31 @@ async function validateVariantReservationReferences(productId, currentVariants, 
   }
 }
 
-async function prepareProductMutation({ input, currentProduct, productFile, variantFiles = [], Reservation }) {
-  const uploadedImages = [];
+async function prepareProductMutation({
+  input,
+  currentProduct,
+  productFile,
+  variantFiles = [],
+  Reservation,
+  session,
+  preparedImages
+}) {
+  const uploadedImages = preparedImages?.uploadedImages || [];
   try {
     const parsedVariants = parseVariants(input.variants);
     let variants;
     if (parsedVariants === undefined) {
       variants = currentProduct?.variants?.length ? currentProduct.variants : undefined;
     } else {
-      const prepared = await prepareVariants(parsedVariants, currentProduct, variantFiles);
+      const prepared = await prepareVariants(parsedVariants, currentProduct, variantFiles, preparedImages);
       variants = prepared.variants;
-      uploadedImages.push(...prepared.uploadedImages);
+      if (!preparedImages) uploadedImages.push(...prepared.uploadedImages);
       await validateVariantReservationReferences(
         currentProduct?._id,
         currentProduct?.variants || [],
         variants,
-        Reservation
+        Reservation,
+        session
       );
     }
 
@@ -205,8 +242,8 @@ async function prepareProductMutation({ input, currentProduct, productFile, vari
       throw Object.assign(inputError('Please correct the highlighted fields.'), { fieldErrors });
     }
 
-    let productImage;
-    if (productFile) {
+    let productImage = preparedImages?.productImage;
+    if (!preparedImages && productFile) {
       productImage = await uploadProductImage(productFile);
       uploadedImages.push(productImage);
     }
@@ -237,17 +274,14 @@ async function prepareProductMutation({ input, currentProduct, productFile, vari
 
     return { data, uploadedImages, obsoleteImagePublicIds };
   } catch (error) {
-    const failedUploads = [...uploadedImages, ...(error.uploadedImages || [])];
-    for (const image of failedUploads) {
-      await removeProductImageSafely(image.imagePublicId, 'prepareProductMutation.rollback');
-    }
-    delete error.uploadedImages;
+    error.uploadedImages = [...uploadedImages, ...(error.uploadedImages || [])];
     throw error;
   }
 }
 
 module.exports = {
   parseVariants,
+  uploadProductMutationImages,
   prepareVariants,
   getVariantStockTotals,
   serializePublicVariants,

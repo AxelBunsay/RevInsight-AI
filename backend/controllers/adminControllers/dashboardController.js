@@ -1,4 +1,5 @@
 const Order = require('../../models/orderingModels/order');
+const mongoose = require('mongoose');
 const Product = require('../../models/product');
 const User = require('../../models/user');
 const Mechanic = require('../../models/mechanic');
@@ -11,7 +12,10 @@ const {
   getProductImagePublicId,
   removeProductImageSafely
 } = require('../../utils/productImage');
-const { prepareProductMutation } = require('../../utils/productVariants');
+const {
+  prepareProductMutation,
+  uploadProductMutationImages
+} = require('../../utils/productVariants');
 const {
   getRevenueEntries,
   groupRevenueByPeriod,
@@ -31,6 +35,11 @@ const loadRevenueEntries = (options = {}) => getRevenueEntries({
   Product,
   ...options
 });
+
+const isTransientInventoryWriteConflict = (error) =>
+  error.code === 112
+  || error.codeName === 'WriteConflict'
+  || error.hasErrorLabel?.('TransientTransactionError');
 
 const getRevenueByPeriod = async (unit, fromDate) => {
   const entries = await loadRevenueEntries({ startDate: fromDate });
@@ -595,6 +604,16 @@ const deleteTransaction = async (req, res) => {
 };
 
 // Get All Inventory
+const serializeInventoryVariants = (variants = []) => variants.map((variant) => ({
+  ...variant.toObject(),
+  brand: variant.brand || '',
+  model: variant.model || '',
+  size: variant.size || '',
+  color: variant.color || '',
+  label: variant.label || '',
+  imageUrl: variant.imageUrl || ''
+}));
+
 const getAllInventory = async (req, res) => {
   try {
     const { page = 1, limit = 15 } = req.query;
@@ -613,6 +632,7 @@ const getAllInventory = async (req, res) => {
     );
     const inventoryWithAvailability = inventory.map((item) => ({
       ...item.toObject(),
+      variants: serializeInventoryVariants(item.variants || []),
       available: Number(item.quantity || 0) - Number(item.reservedQty || 0),
       hasActiveReservation: activeProductIds.has(item._id.toString())
     }));
@@ -645,7 +665,10 @@ const getInventoryItem = async (req, res) => {
 
     res.json({
       success: true,
-      data: item
+      data: {
+        ...item.toObject(),
+        variants: serializeInventoryVariants(item.variants || [])
+      }
     });
   } catch (error) {
     console.error('[getInventoryItem] error', error);
@@ -685,21 +708,30 @@ const addInventoryItem = async (req, res) => {
 
 // Update Inventory Item
 const updateInventoryItem = async (req, res) => {
+  let session;
+  let stagedImages;
   let prepared;
   try {
-    const currentItem = await Product.findById(req.params.id);
-    if (!currentItem) {
-      return res.status(404).json({ success: false, message: 'Item not found' });
-    }
-    prepared = await prepareProductMutation({
+    stagedImages = await uploadProductMutationImages({
       input: req.body,
-      currentProduct: currentItem,
       productFile: req.file,
-      variantFiles: req.variantFiles,
-      Reservation
+      variantFiles: req.variantFiles
     });
-    currentItem.set(prepared.data);
-    const item = await currentItem.save();
+    session = await mongoose.startSession();
+    let item;
+    await session.withTransaction(async () => {
+      const currentItem = await Product.findById(req.params.id).session(session);
+      if (!currentItem) throw Object.assign(new Error('Item not found'), { status: 404 });
+      prepared = await prepareProductMutation({
+        input: req.body,
+        currentProduct: currentItem,
+        Reservation,
+        session,
+        preparedImages: stagedImages
+      });
+      currentItem.set(prepared.data);
+      item = await currentItem.save({ session });
+    });
     for (const publicId of prepared.obsoleteImagePublicIds) {
       await removeProductImageSafely(publicId, 'updateInventoryItem');
     }
@@ -710,15 +742,20 @@ const updateInventoryItem = async (req, res) => {
       data: item
     });
   } catch (error) {
-    for (const image of prepared?.uploadedImages || error.uploadedImages || []) {
+    for (const image of prepared?.uploadedImages || stagedImages?.uploadedImages || error.uploadedImages || []) {
       await removeProductImageSafely(image.imagePublicId, 'updateInventoryItem.rollback');
     }
     console.error('[updateInventoryItem] error', error);
-    res.status(error.status || 500).json({
+    const isConflict = isTransientInventoryWriteConflict(error);
+    res.status(isConflict ? 409 : error.status || 500).json({
       success: false,
-      message: error.message || 'Failed to update inventory item. Please try again.',
+      message: isConflict
+        ? 'This item changed while saving. Reload and try again.'
+        : error.message || 'Failed to update inventory item. Please try again.',
       ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
     });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 

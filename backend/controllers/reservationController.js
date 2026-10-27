@@ -658,22 +658,33 @@ const completeReservation = async (req, res) => {
       reservation.balanceDue = 0;
       reservation.completedAt = new Date();
       result = await reservation.save({ session });
-      await BusinessRecord.findOneAndUpdate(
-        { recordType: 'product', sourceId: reservation._id },
-        {
-          recordType: 'product',
-          sourceId: reservation._id,
-          customer: reservation.customerName,
-          customerPhone: reservation.customerPhone,
-          itemName: reservation.items.map((item) => item.name).join(', '),
-          category: [...new Set(reservation.items.map((item) => item.category).filter(Boolean))].join(', ') || 'Product Sales',
-          amount: reservation.total,
-          status: 'completed',
-          completedAt: reservation.completedAt,
-          notes: `${reservation.items.length} reserved product item${reservation.items.length === 1 ? '' : 's'} collected`
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true, session }
-      );
+      const categories = new Map();
+      for (const item of reservation.items) {
+        const category = String(item.category || '').trim() || 'Product Sales';
+        const current = categories.get(category) || { amount: 0, names: [] };
+        current.amount = money(current.amount + Number(item.lineTotal || 0));
+        current.names.push(item.name);
+        categories.set(category, current);
+      }
+      for (const [category, values] of categories) {
+        await BusinessRecord.findOneAndUpdate(
+          { recordType: 'product', sourceId: reservation._id, categoryKey: category },
+          {
+            recordType: 'product',
+            sourceId: reservation._id,
+            categoryKey: category,
+            customer: reservation.customerName,
+            customerPhone: reservation.customerPhone,
+            itemName: values.names.join(', '),
+            category,
+            amount: values.amount,
+            status: 'completed',
+            completedAt: reservation.completedAt,
+            notes: `${values.names.length} reserved product item${values.names.length === 1 ? '' : 's'} collected`
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true, session }
+        );
+      }
     });
     res.json({ success: true, reservation: result });
   } catch (error) {

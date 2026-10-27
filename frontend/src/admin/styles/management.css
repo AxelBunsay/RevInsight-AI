@@ -324,6 +324,120 @@
   flex-basis: 100%;
   overflow-wrap: anywhere;
 }
+.admin-root .admin-management-page .inventory-variants-section,
+.admin-root .admin-management-page .inventory-computed-stock {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.admin-root .admin-management-page .inventory-variants-section {
+  display: grid;
+  gap: 12px;
+}
+.admin-root .admin-management-page .inventory-variants-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-root .admin-management-page .inventory-variants-heading h3 {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-size: 15px;
+}
+.admin-root .admin-management-page .inventory-variants-heading small,
+.admin-root .admin-management-page .inventory-variants-empty {
+  color: var(--muted);
+}
+.admin-root .admin-management-page .inventory-variants-empty,
+.admin-root .admin-management-page .inventory-computed-stock {
+  margin: 0;
+}
+.admin-root .admin-management-page .inventory-variant-editor {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.admin-root .admin-management-page .inventory-variant-editor legend {
+  padding: 0 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.admin-root .admin-management-page .inventory-variant-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.admin-root .admin-management-page .inventory-variant-fields label {
+  min-width: 0;
+}
+.admin-root .admin-management-page .inventory-variant-image-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.admin-root .admin-management-page .inventory-variant-image-preview {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  object-fit: cover;
+}
+.admin-root .admin-management-page .inventory-variant-image-preview.is-empty {
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 11px;
+}
+.admin-root .admin-management-page .inventory-variant-toggle {
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.admin-root .admin-management-page .inventory-variant-details-row > td {
+  white-space: normal;
+  background: var(--surface);
+}
+.admin-root .admin-management-page .inventory-variant-details {
+  display: grid;
+  gap: 8px;
+}
+.admin-root .admin-management-page .inventory-variant-detail {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.admin-root .admin-management-page .inventory-variant-detail.is-low-stock {
+  border-color: color-mix(in srgb, var(--bad) 40%, var(--line));
+  background: color-mix(in srgb, var(--bad) 5%, var(--surface));
+}
+.admin-root .admin-management-page .inventory-variant-description {
+  display: grid;
+  min-width: 130px;
+  flex: 1;
+  gap: 3px;
+}
+.admin-root .admin-management-page .inventory-variant-description small {
+  color: var(--muted);
+}
 .admin-root .admin-management-page .price-text {
   font-weight: 700;
 }
@@ -754,6 +868,13 @@
   }
   .admin-root .admin-management-page .admin-dialog-fields {
     grid-template-columns: 1fr;
+  }
+  .admin-root .admin-management-page .inventory-variant-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-root .admin-management-page .inventory-variants-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .admin-root .admin-management-page .mechanic-actions {
     flex-wrap: wrap;

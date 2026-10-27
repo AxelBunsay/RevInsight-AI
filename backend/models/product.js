@@ -9,7 +9,7 @@ const productVariantSchema = new mongoose.Schema({
   price: {
     type: Number,
     required: true,
-    min: 0,
+    min: 0.01,
     validate: {
       validator: Number.isFinite,
       message: 'Variant price must be a finite number'
@@ -62,7 +62,8 @@ const productSchema = new mongoose.Schema({
   price: {
     type: Number,
     required: [true, 'Product price is required'],
-    min: 0
+    min: 0.01,
+    max: 999999.99
   },
   
   quantity: {

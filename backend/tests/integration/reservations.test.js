@@ -6,8 +6,10 @@ const require = createRequire(import.meta.url);
 const {
   app,
   BusinessRecord,
+  Order,
   Product,
   Reservation,
+  ServiceRequest,
   startReplicaSet,
   stopReplicaSet,
   clearCollections,
@@ -16,6 +18,7 @@ const {
   signCustomer,
   signAdmin
 } = require('./helpers');
+const { getRevenueEntries } = require('../../utils/revenue');
 
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII=',
@@ -35,8 +38,15 @@ async function makeReservation(token, productId, qty = 1, itemFields = {}) {
     .send({ items: [{ productId: String(productId), qty, ...itemFields }] });
 }
 
+async function makeMultiReservation(token, items) {
+  return api.post('/api/reservations')
+    .set('Authorization', 'Bearer ' + token)
+    .send({ items });
+}
+
 const adminPost = (path) => api.post(path).set('Authorization', 'Bearer ' + adminToken);
 const adminPut = (path) => api.put(path).set('Authorization', 'Bearer ' + adminToken);
+const adminGet = (path) => api.get(path).set('Authorization', 'Bearer ' + adminToken);
 const customerGet = (path) => api.get(path).set('Authorization', 'Bearer ' + customerToken);
 
 async function submitPayment(token, reservationId, reference) {
@@ -213,7 +223,7 @@ describe('reservation business flow integration', () => {
         {
           brand: 'Honda',
           model: 'TMX 125',
-          price: 0,
+          price: 1,
           stock: 4,
           reservedQty: 3,
           label: 'Client supplied label'
@@ -223,7 +233,7 @@ describe('reservation business flow integration', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.product).toMatchObject({
-      price: 0,
+      price: 1,
       quantity: 4,
       variants: [{
         brand: 'Honda',
@@ -289,6 +299,60 @@ describe('reservation business flow integration', () => {
     });
   });
 
+  it('returns variants from the admin inventory list and detail endpoints', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', size: '1 L', price: 250, stock: 3 }
+    ]);
+
+    const [list, detail] = await Promise.all([
+      adminGet('/api/dashboard/inventory'),
+      adminGet(`/api/dashboard/inventory/${product._id}`)
+    ]);
+
+    for (const response of [list, detail]) {
+      expect(response.status).toBe(200);
+      const item = response === list
+        ? response.body.data.find((entry) => entry._id === String(product._id))
+        : response.body.data;
+      expect(item.variants[0]).toMatchObject({
+        brand: 'Honda',
+        model: '',
+        size: '1 L',
+        color: '',
+        label: 'Honda - 1 L',
+        price: 250,
+        stock: 3,
+        reservedQty: 0,
+        imageUrl: ''
+      });
+    }
+  });
+
+  it('rejects reducing a variant stock below its reserved quantity', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', model: 'TMX 125', price: 250, stock: 3 }
+    ]);
+    const variant = product.variants[0];
+    await createConfirmedVariantReservation(product, variant);
+
+    const response = await adminPut(`/api/dashboard/inventory/${product._id}`).send({
+      name: product.name,
+      category: product.category,
+      price: 250,
+      quantity: 0,
+      variants: [{
+        _id: String(variant._id),
+        brand: 'Honda',
+        model: 'TMX 125',
+        price: 250,
+        stock: 0
+      }]
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body.message).toContain('reserved units');
+  });
+
   it('decrements only the selected variant stock when pickup is completed', async () => {
     const product = await createVariantProduct([
       { brand: 'Honda', model: 'TMX 125', price: 250, stock: 3 },
@@ -307,6 +371,45 @@ describe('reservation business flow integration', () => {
       category: 'Electrical',
       itemName: 'Integration Variant Part - Honda TMX 125'
     });
+  });
+
+  it('records completed reservation sales by category and remains idempotent', async () => {
+    const electrical = await Product.create({
+      name: 'Integration Electrical Part',
+      price: 500,
+      quantity: 2,
+      category: 'Electrical'
+    });
+    const created = await makeMultiReservation(customerToken, [
+      { productId: String(fixtures.product._id), qty: 1 },
+      { productId: String(electrical._id), qty: 1 }
+    ]);
+    expect(created.status).toBe(201);
+    const submitted = await submitPayment(customerToken, created.body.reservation._id, '1234567890');
+    expect(submitted.status).toBe(200);
+    expect((await confirmReservation(created.body.reservation._id)).status).toBe(200);
+
+    const completed = await adminPost(`/api/admin/reservations/${created.body.reservation._id}/complete`);
+    expect(completed.status).toBe(200);
+    const records = await BusinessRecord.find({ sourceId: created.body.reservation._id }).sort({ category: 1 }).lean();
+    expect(records.map(({ category, amount }) => ({ category, amount }))).toEqual([
+      { category: 'Brakes', amount: 1000 },
+      { category: 'Electrical', amount: 500 }
+    ]);
+    expect(records.reduce((sum, record) => sum + record.amount, 0)).toBe(completed.body.reservation.total);
+
+    const repeated = await adminPost(`/api/admin/reservations/${created.body.reservation._id}/complete`);
+    expect(repeated.status).toBe(409);
+    expect(await BusinessRecord.countDocuments({ sourceId: created.body.reservation._id })).toBe(2);
+
+    const entries = await getRevenueEntries({
+      Order,
+      Reservation,
+      ServiceRequest,
+      Product
+    });
+    const reservationEntries = entries.filter((entry) => entry.recordId === String(created.body.reservation._id));
+    expect(reservationEntries.reduce((sum, entry) => sum + entry.revenue, 0)).toBe(completed.body.reservation.total);
   });
 
   it('releases the selected variant hold when a confirmed reservation is cancelled', async () => {
