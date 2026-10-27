@@ -9,6 +9,37 @@ import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction
 import '../styles/shop.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
+const MOTORCYCLE_FILTER_KEY = 'revinsightShopMotorcycle';
+const variantAvailable = (variant) => Math.max(
+  0,
+  Number(variant.available ?? (Number(variant.stock || 0) - Number(variant.reservedQty || 0)))
+);
+const hasFitment = (variant) => Boolean(variant.brand || variant.model);
+const variantSelectorLabel = (variants) => {
+  const attributes = new Set(variants.flatMap((variant) => [
+    ...(variant.brand || variant.model ? ['fitment'] : []),
+    ...(variant.size ? ['size'] : []),
+    ...(variant.color ? ['color'] : [])
+  ]));
+  if ([...attributes].every((attribute) => attribute === 'fitment')) return 'Fits:';
+  if (attributes.size === 1 && attributes.has('size')) return 'Size:';
+  if (attributes.size === 1 && attributes.has('color')) return 'Color:';
+  return 'Option:';
+};
+const matchesMotorcycle = (variant, brand, model) =>
+  (!brand || variant.brand?.toLowerCase() === brand.toLowerCase())
+  && (!model || variant.model?.toLowerCase() === model.toLowerCase());
+const readMotorcycleFilter = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(MOTORCYCLE_FILTER_KEY) || '{}');
+    return {
+      brand: typeof saved.brand === 'string' ? saved.brand : '',
+      model: typeof saved.model === 'string' ? saved.model : ''
+    };
+  } catch {
+    return { brand: '', model: '' };
+  }
+};
 
 const categoryIcon = (category = '') => {
   const normalized = category.toLowerCase();
@@ -39,6 +70,8 @@ export default function Shop() {
   const [category, setCategory] = useState('All');
   const [sort, setSort] = useState('featured');
   const [products, setProducts] = useState([]);
+  const [selectedVariants, setSelectedVariants] = useState({});
+  const [motorcycle, setMotorcycle] = useState(readMotorcycleFilter);
   const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
@@ -87,6 +120,14 @@ export default function Shop() {
     void Promise.resolve().then(loadShopData);
   }, [loadShopData]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(MOTORCYCLE_FILTER_KEY, JSON.stringify(motorcycle));
+    } catch {
+      // Storage is optional; the in-memory filter remains usable.
+    }
+  }, [motorcycle]);
+
   const retryShopData = () => {
     setIsLoading(true);
     setIsSettingsLoading(true);
@@ -109,14 +150,23 @@ export default function Shop() {
       navigate(location.pathname, { replace: true, state: null });
       return undefined;
     }
-    const actionKey = `${action.createdAt}:${action.itemId}`;
+    const actionKey = `${action.createdAt}:${action.itemId}:${action.variantId || ''}`;
     if (resumedActionRef.current === actionKey) return undefined;
     resumedActionRef.current = actionKey;
     let active = true;
     api.getProduct(action.itemId).then((response) => {
       if (!active) return;
       const product = response.product;
-      const available = Math.max(0, Number(product.quantity || 0) - Number(product.reservedQty || 0));
+      const variant = action.variantId
+        ? (product.variants || []).find((item) => String(item._id) === String(action.variantId))
+        : null;
+      if (product.variants?.length && !variant) {
+        setResumeError('The selected variant is no longer available. Please choose another option.');
+        return;
+      }
+      const available = variant
+        ? variantAvailable(variant)
+        : Math.max(0, Number(product.quantity || 0) - Number(product.reservedQty || 0));
       if (available < action.quantity) {
         setResumeError('This item is no longer available in the requested quantity. Please choose another item or quantity.');
         return;
@@ -124,12 +174,13 @@ export default function Shop() {
       addCartItem({
         kind: 'product',
         id: product._id,
-        name: product.name,
-        price: product.price,
+        ...(variant ? { variantId: variant._id, variantLabel: variant.label } : {}),
+        name: variant?.label ? `${product.name} - ${variant.label}` : product.name,
+        price: Number(variant?.price ?? product.price),
         stock: available,
         category: product.category,
         icon: categoryIcon(product.category),
-        imageUrl: product.imageUrl || product.image || '',
+        imageUrl: variant?.imageUrl || product.imageUrl || product.image || '',
         quantity: action.quantity
       });
       setShowAddedToast(true);
@@ -148,43 +199,83 @@ export default function Shop() {
     () => ['All', ...new Set(products.map((product) => product.category).filter(Boolean))],
     [products]
   );
+  const motorcycleBrands = useMemo(() => [...new Set(products.flatMap((product) =>
+    (product.variants || []).map((variant) => variant.brand?.trim()).filter(Boolean)
+  ))].sort((left, right) => left.localeCompare(right)), [products]);
+  const motorcycleModels = useMemo(() => [...new Set(products.flatMap((product) =>
+    (product.variants || [])
+      .filter((variant) => !motorcycle.brand || variant.brand?.toLowerCase() === motorcycle.brand.toLowerCase())
+      .map((variant) => variant.model?.trim())
+      .filter(Boolean)
+  ))].sort((left, right) => left.localeCompare(right)), [motorcycle.brand, products]);
+  const getMatchingFitmentVariants = (product) => (product.variants || []).filter((variant) =>
+    hasFitment(variant) && matchesMotorcycle(variant, motorcycle.brand, motorcycle.model)
+  );
+  const motorcycleFilterKey = `${motorcycle.brand.toLowerCase()}|${motorcycle.model.toLowerCase()}`;
+  const getSelectedVariant = (product) => {
+    const variants = product.variants || [];
+    if (!variants.length) return null;
+    const savedSelection = selectedVariants[product._id];
+    const selected = variants.find((variant) => String(variant._id) === savedSelection?.variantId);
+    if (selected && savedSelection.filterKey === motorcycleFilterKey) return selected;
+    const matching = motorcycle.brand || motorcycle.model
+      ? getMatchingFitmentVariants(product)
+      : [];
+    if (matching.length) {
+      return matching.find((variant) => variantAvailable(variant) > 0) || matching[0];
+    }
+    return variants.find((variant) => variantAvailable(variant) > 0) || variants[0];
+  };
   const visibleProducts = useMemo(() => products.filter((product) => {
     const query = search.trim().toLowerCase();
+    const variants = product.variants || [];
+    const fitmentVariants = variants.filter(hasFitment);
+    const matchesBike = !motorcycle.brand && !motorcycle.model
+      || !fitmentVariants.length
+      || fitmentVariants.some((variant) => matchesMotorcycle(variant, motorcycle.brand, motorcycle.model));
     return (category === 'All' || product.category === category)
+      && matchesBike
       && (!query || `${product.name} ${product.description} ${product.category}`.toLowerCase().includes(query));
   }).sort((left, right) => sort === 'price-low'
-    ? left.price - right.price
+    ? Math.min(...(left.variants || []).map((variant) => Number(variant.price)), Number(left.price))
+      - Math.min(...(right.variants || []).map((variant) => Number(variant.price)), Number(right.price))
     : sort === 'price-high'
-      ? right.price - left.price
-      : left.name.localeCompare(right.name)), [category, products, search, sort]);
+      ? Math.min(...(right.variants || []).map((variant) => Number(variant.price)), Number(right.price))
+        - Math.min(...(left.variants || []).map((variant) => Number(variant.price)), Number(left.price))
+      : left.name.localeCompare(right.name)), [category, motorcycle, products, search, sort]);
 
   const clearFilters = () => {
     setSearch('');
     setCategory('All');
     setSort('featured');
+    setMotorcycle({ brand: '', model: '' });
   };
 
-  const addToCart = (product) => {
+  const addToCart = (product, variant) => {
     const customerToken = localStorage.getItem('customerToken');
     if (!customerToken || customerToken === 'prototype-guest') {
       saveCustomerAuthAction({
         type: 'item',
         returnPath: location.pathname,
         itemId: product._id,
+        ...(variant ? { variantId: variant._id } : {}),
         quantity: 1
       });
       navigate('/customer/login');
       return;
     }
+    const stock = variant ? variantAvailable(variant) : product.quantity;
+    if (stock < 1) return;
     addCartItem({
       kind: 'product',
       id: product._id,
-      name: product.name,
-      price: product.price,
-      stock: product.quantity,
+      ...(variant ? { variantId: variant._id, variantLabel: variant.label } : {}),
+      name: variant?.label ? `${product.name} - ${variant.label}` : product.name,
+      price: Number(variant?.price ?? product.price),
+      stock,
       category: product.category,
       icon: categoryIcon(product.category),
-      imageUrl: product.imageUrl || product.image || ''
+      imageUrl: variant?.imageUrl || product.imageUrl || product.image || ''
     });
     setShowAddedToast(true);
   };
@@ -225,6 +316,28 @@ export default function Shop() {
         </select>
       </div>
 
+      <div className="shop-motorcycle-filter" aria-label="Filter by motorcycle">
+        <strong>My motorcycle</strong>
+        <select
+          value={motorcycle.brand}
+          aria-label="Motorcycle brand"
+          onChange={(event) => setMotorcycle({ brand: event.target.value, model: '' })}
+        >
+          <option value="">All brands</option>
+          {motorcycleBrands.map((brand) => <option value={brand} key={brand}>{brand}</option>)}
+        </select>
+        <select
+          value={motorcycle.model}
+          aria-label="Motorcycle model"
+          disabled={!motorcycle.brand}
+          onChange={(event) => setMotorcycle((current) => ({ ...current, model: event.target.value }))}
+        >
+          <option value="">All models</option>
+          {motorcycleModels.map((model) => <option value={model} key={model}>{model}</option>)}
+        </select>
+        <button type="button" onClick={() => setMotorcycle({ brand: '', model: '' })}>Clear</button>
+      </div>
+
       {settingsError && <div className="shop-settings-error" role="status">
         <span>Reservation details are unavailable. Down payment amounts may not be shown yet.</span>
         <button type="button" onClick={retryShopData}>Try again</button>
@@ -251,14 +364,24 @@ export default function Shop() {
           : visibleProducts.length
             ? <div className="product-grid">
               {visibleProducts.map((product) => {
-                const imageUrl = product.imageUrl || product.image;
+                const variants = product.variants || [];
+                const selectedVariant = getSelectedVariant(product);
+                const selectedStock = selectedVariant ? variantAvailable(selectedVariant) : product.quantity;
+                const selectedPrice = Number(selectedVariant?.price ?? product.price);
+                const selectedImageUrl = selectedVariant?.imageUrl || product.imageUrl || product.image;
+                const hasExplicitSelection = selectedVariants[product._id]?.filterKey === motorcycleFilterKey
+                  || Boolean((motorcycle.brand || motorcycle.model) && getMatchingFitmentVariants(product).length);
+                const distinctPrices = new Set(variants.map((variant) => Number(variant.price))).size > 1;
+                const lowestPrice = variants.length
+                  ? Math.min(...variants.map((variant) => Number(variant.price)))
+                  : Number(product.price);
                 const downPayment = Number.isFinite(downPaymentPercent)
-                  ? Math.round((Number(product.price) * downPaymentPercent / 100 + Number.EPSILON) * 100) / 100
+                  ? Math.round((selectedPrice * downPaymentPercent / 100 + Number.EPSILON) * 100) / 100
                   : null;
-                const isOutOfStock = product.quantity === 0;
+                const isOutOfStock = selectedStock === 0;
                 return <article className={`product-card${isOutOfStock ? ' is-out-of-stock' : ''}`} key={product._id}>
                   <div className="product-image">
-                    <ProductImage src={imageUrl} alt={product.name} className="product-image-photo" fallback={<div className="product-image-placeholder" aria-label={`${product.category || 'Product'} image placeholder`}>
+                    <ProductImage src={selectedImageUrl} alt={product.name} className="product-image-photo" fallback={<div className="product-image-placeholder" aria-label={`${product.category || 'Product'} image placeholder`}>
                       <span aria-hidden="true">{categoryIcon(product.category)}</span>
                     </div>} />
                     <span className="product-badge">{product.category}</span>
@@ -266,7 +389,38 @@ export default function Shop() {
                   <div className="product-card-body">
                     <Link className="product-title-link" to={`/customer/products/${product._id}`}><h2>{product.name}</h2></Link>
                     <p className="product-description">{product.description || ''}</p>
-                    <p className="product-price">{money(product.price)}</p>
+                    {variants.length > 0 && (
+                      <label className="product-variant-select">
+                        <span>{variantSelectorLabel(variants)}</span>
+                        <select
+                          aria-label={`${variantSelectorLabel(variants).replace(':', '')} for ${product.name}`}
+                          value={selectedVariant ? String(selectedVariant._id) : ''}
+                          onChange={(event) => setSelectedVariants((current) => ({
+                            ...current,
+                            [product._id]: {
+                              variantId: event.target.value,
+                              filterKey: motorcycleFilterKey
+                            }
+                          }))}
+                        >
+                          {variants.map((variant) => (
+                            <option
+                              key={variant._id}
+                              value={String(variant._id)}
+                              disabled={variantAvailable(variant) === 0}
+                            >
+                              {variant.label || [variant.brand, variant.model, variant.size, variant.color].filter(Boolean).join(' · ')}
+                              {variantAvailable(variant) === 0 ? ' — Out of stock' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <p className="product-price">
+                      {variants.length && distinctPrices && !hasExplicitSelection
+                        ? `From ${money(lowestPrice)}`
+                        : money(selectedPrice)}
+                    </p>
                     <p className="product-down-payment">
                       {downPayment === null || isSettingsLoading
                         ? 'Reserve now: unavailable'
@@ -276,11 +430,11 @@ export default function Shop() {
                       {isOutOfStock
                         ? <span className="product-stock-out">Out of stock</span>
                         : <>
-                          <span>Available: {product.quantity}</span>
-                          {product.quantity <= 5 && <span className="product-stock-low">Only {product.quantity} left</span>}
+                          <span>Available: {selectedStock}</span>
+                          {selectedStock <= 5 && <span className="product-stock-low">Only {selectedStock} left</span>}
                         </>}
                     </div>
-                    <button type="button" disabled={isOutOfStock} onClick={() => addToCart(product)}>Reserve</button>
+                    <button type="button" disabled={isOutOfStock} onClick={() => addToCart(product, selectedVariant)}>Reserve</button>
                   </div>
                 </article>;
               })}

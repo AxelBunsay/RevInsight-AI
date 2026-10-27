@@ -69,7 +69,11 @@ export default function Checkout() {
     setError('');
     setIsSubmitting(true);
     try {
-      const response = await api.createReservation(productItems.map((item) => ({ productId: item.id, qty: item.quantity })));
+      const response = await api.createReservation(productItems.map((item) => ({
+        productId: item.id,
+        ...(item.variantId ? { variantId: item.variantId } : {}),
+        qty: item.quantity
+      })));
       const reservation = response.reservation;
       setCheckoutReservation(reservation);
       productItems.forEach((item) => removeCartItem(item.key));

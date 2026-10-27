@@ -164,9 +164,7 @@ function normalizeRevenueSources({ orders = [], reservations = [], services = []
 
     return items.map((item, index) => {
       const productCategory = productCategories[String(item.productId)];
-      const fallbackCategory = (row.source === 'reservation'
-        ? productCategory || item.category
-        : item.category || productCategory) || 'Uncategorized';
+      const fallbackCategory = (item.category || productCategory) || 'Uncategorized';
       const amount = Number.isFinite(lineValues[index]) && lineValues[index] > 0
         ? revenue * lineValues[index] / lineTotal
         : 0;

@@ -235,6 +235,26 @@
   font-size: 26px;
 }
 
+.customer-detail-variant-select {
+  display: grid;
+  max-width: 420px;
+  gap: 6px;
+  margin-top: 18px;
+  color: #62564e;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.customer-detail-variant-select select {
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #e5cfc0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #49372f;
+  font: 14px 'Segoe UI', sans-serif;
+}
+
 .customer-quantity-control,
 .customer-detail-actions,
 .customer-booking-footer {

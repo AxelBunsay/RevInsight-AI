@@ -17,9 +17,13 @@ export default function Cart() {
   const products = cart.filter((item) => item.kind === 'product');
   const productSubtotal = products.reduce((total, item) => total + item.price * item.quantity, 0);
   const serviceItems = cart.filter((item) => item.kind === 'service');
+  const [refreshingProducts, setRefreshingProducts] = useState(products.length > 0);
+  const isRefreshingProducts = products.length > 0 && refreshingProducts;
   const serviceTotal = serviceItems.reduce((total, item) => total + item.price, 0);
   const downPayment = Math.round((productSubtotal * (settings?.downPaymentPercent ?? 30) / 100 + Number.EPSILON) * 100) / 100;
-  const productEntries = JSON.stringify(products.map(({ key, id, name }) => ({ key, id, name })));
+  const productEntries = JSON.stringify(products.map(({ key, id, variantId }) => ({
+    key, id, variantId
+  })));
 
   useEffect(() => {
     let isMounted = true;
@@ -34,18 +38,46 @@ export default function Cart() {
   useEffect(() => {
     let isMounted = true;
     const refreshStock = async () => {
-      await Promise.all(JSON.parse(productEntries).map(async (item) => {
-        try {
-          const response = await api.getProduct(item.id);
-          const product = response.product;
-          const available = Math.max(0, Number(product.quantity || 0) - Number(product.reservedQty || 0));
-          if (isMounted) setCartItemStock(item.key, available, Number(product.price), product.name);
-        } catch {
-          if (isMounted) {
-            setError('Could not check stock');
+      const entries = JSON.parse(productEntries);
+      setRefreshingProducts(entries.length > 0);
+      try {
+        await Promise.all(entries.map(async (item) => {
+          try {
+            const response = await api.getProduct(item.id);
+            const product = response.product;
+            const variant = item.variantId
+              ? (product.variants || []).find((entry) => String(entry._id) === String(item.variantId))
+              : null;
+            if (product.variants?.length && !variant) {
+              if (isMounted) setCartItemStock(item.key, 0, null, undefined, '', true);
+              return;
+            }
+            const available = variant
+              ? Math.max(0, Number(variant.available ?? (Number(variant.stock || 0) - Number(variant.reservedQty || 0))))
+              : Math.max(0, Number(product.quantity || 0) - Number(product.reservedQty || 0));
+            const name = variant?.label
+              ? `${product.name} - ${variant.label}`
+              : product.name;
+            if (isMounted) {
+              setCartItemStock(
+                item.key,
+                available,
+                Number(variant?.price ?? product.price),
+                name,
+                variant?.imageUrl || product.imageUrl || product.image || '',
+                false
+              );
+            }
+          } catch (requestError) {
+            if (isMounted) {
+              setCartItemStock(item.key, 0, null, undefined, '', true);
+              setError(requestError.message || 'Could not refresh item price and stock.');
+            }
           }
-        }
-      }));
+        }));
+      } finally {
+        if (isMounted) setRefreshingProducts(false);
+      }
     };
     if (productEntries !== '[]') refreshStock();
     return () => { isMounted = false; };
@@ -61,22 +93,24 @@ export default function Cart() {
             <div className={`customer-cart-item-art${item.kind === 'service' ? ' is-service' : ''}${item.kind === 'product' && item.imageUrl ? ' has-image' : ''}`} aria-hidden="true">{item.kind === 'product'
               ? <ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" loading="lazy" fallback={<span>{item.icon || '▣'}</span>} />
               : item.icon || '🔧'}</div>
-            <div className="customer-cart-item-copy"><span className="customer-cart-item-kind">{item.kind === 'service' ? 'SERVICE BOOKING' : 'ITEM RESERVATION'}</span><h2>{item.name}</h2><p>{item.kind === 'service' ? `${item.bookingDate} · ${item.timeSlot} · ${item.vehicle}` : `${money(item.price)} each · Only ${item.stock} left`}</p>{item.notes && <small>Note: {item.notes}</small>}</div>
-            <div className="customer-cart-item-actions">{item.kind === 'product' && <div className="customer-quantity-control"><div><button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1} onClick={() => updateCartItem(item.key, item.quantity - 1)}>−</button><output>{item.quantity}</output><button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock} onClick={() => updateCartItem(item.key, item.quantity + 1)}>+</button></div></div>}<strong>{money(item.price * item.quantity)}</strong><button type="button" className="customer-remove-item" onClick={() => removeCartItem(item.key)}>Remove</button></div>
+            <div className="customer-cart-item-copy"><span className="customer-cart-item-kind">{item.kind === 'service' ? 'SERVICE BOOKING' : 'ITEM RESERVATION'}</span><h2>{item.name}</h2><p>{item.kind === 'service' ? `${item.bookingDate} · ${item.timeSlot} · ${item.vehicle}` : isRefreshingProducts ? 'Checking current price and stock...' : item.unavailable ? 'This option is no longer available. Remove it and choose another.' : `${money(item.price)} each · Only ${item.stock} left`}</p>{item.notes && <small>Note: {item.notes}</small>}</div>
+            <div className="customer-cart-item-actions">{item.kind === 'product' && <div className="customer-quantity-control"><div><button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1 || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity - 1)}>−</button><output>{item.quantity}</output><button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity + 1)}>+</button></div></div>}<strong>{item.kind === 'product' && (isRefreshingProducts || item.unavailable) ? '—' : money(item.price * item.quantity)}</strong><button type="button" className="customer-remove-item" onClick={() => removeCartItem(item.key)}>Remove</button></div>
           </article>)}
           <Link className="customer-continue-link" to="/customer/shop">← Continue shopping</Link>
         </section>
         <aside className="customer-cart-summary">
           <h2>{products.length ? 'Reservation summary' : 'Booking summary'}</h2>
           {!!products.length && <>
-            <div className="customer-summary-line"><span>Items total</span><strong>{money(productSubtotal)}</strong></div>
-            <div className="customer-summary-line"><span>Down payment ({settings?.downPaymentPercent ?? 30}%): due now</span><strong>{money(downPayment)}</strong></div>
-            <div className="customer-summary-line"><span>Balance due at pickup</span><strong>{money(productSubtotal - downPayment)}</strong></div>
+            {isRefreshingProducts ? <p>Refreshing current prices and availability...</p> : <>
+              <div className="customer-summary-line"><span>Items total</span><strong>{money(productSubtotal)}</strong></div>
+              <div className="customer-summary-line"><span>Down payment ({settings?.downPaymentPercent ?? 30}%): due now</span><strong>{money(downPayment)}</strong></div>
+              <div className="customer-summary-line"><span>Balance due at pickup</span><strong>{money(productSubtotal - downPayment)}</strong></div>
+            </>}
             <p className="customer-reservation-note">Your item is reserved only after the shop confirms your down payment.</p>
             {settings?.pickupAddress && <p className="customer-pickup-location">Pickup at {settings.pickupAddress}{settings.pickupHours ? ` · ${settings.pickupHours}` : ''}</p>}
           </>}
           {!!serviceItems.length && !products.length && <div className="customer-summary-total"><span>Service total</span><strong>{money(serviceTotal)}</strong></div>}
-          <button type="button" className="customer-primary-button customer-checkout-button" disabled={products.some((item) => item.stock < 1 || item.quantity > item.stock)} onClick={() => navigate('/customer/checkout')}>{products.length ? 'Continue to checkout' : 'Continue to service checkout'}</button>
+          <button type="button" className="customer-primary-button customer-checkout-button" disabled={isRefreshingProducts || products.some((item) => item.unavailable || item.stock < 1 || item.quantity > item.stock)} onClick={() => navigate('/customer/checkout')}>{products.length ? 'Continue to checkout' : 'Continue to service checkout'}</button>
         </aside>
       </div>}
     </div>

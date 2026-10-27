@@ -8,6 +8,9 @@ import '../styles/customer-flow.css';
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
 const statusClass = (status) => `status-${String(status || '').toLowerCase().replaceAll(' ', '-')}`;
 const formatDate = (value) => value ? new Date(value).toLocaleString('en-PH') : '';
+const reservationItemName = (item) => item.variantLabel && !String(item.name || '').includes(item.variantLabel)
+  ? `${item.name || item.productName || 'Product'} - ${item.variantLabel}`
+  : item.name || item.productName || 'Product';
 
 function ItemReservationCard({ reservation }) {
   const keyDate = reservation.status === 'Pending Down Payment'
@@ -26,7 +29,7 @@ function ItemReservationCard({ reservation }) {
     <div className="customer-reservation-card-top">
       <div>
         <span className="customer-cart-item-kind">RESERVATION · {reservation.code}</span>
-        <div className="customer-reservation-item-list">{reservation.items.map((item) => <span className="customer-reservation-item-row" key={item.productId}><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><strong>{item.name} × {item.qty}</strong></span>)}</div>
+        <div className="customer-reservation-item-list">{reservation.items.map((item) => <span className="customer-reservation-item-row" key={item.variantId || item.productId}><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><strong>{reservationItemName(item)} × {item.qty}</strong></span>)}</div>
         <p>{keyDate}</p>
       </div>
       <span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span>

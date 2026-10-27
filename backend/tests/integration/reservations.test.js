@@ -398,6 +398,13 @@ describe('reservation business flow integration', () => {
     ]);
     expect(records.reduce((sum, record) => sum + record.amount, 0)).toBe(completed.body.reservation.total);
 
+    const transactions = await adminGet('/api/dashboard/business-records?type=item&limit=10');
+    expect(transactions.status).toBe(200);
+    expect(transactions.body.data.filter((record) => record.isReservation)).toHaveLength(1);
+    expect(transactions.body.pagination.totalRecords).toBe(1);
+    expect(transactions.body.counts).toMatchObject({ all: 1, items: 1 });
+    expect(transactions.body.totalAmount).toBe(completed.body.reservation.total);
+
     const repeated = await adminPost(`/api/admin/reservations/${created.body.reservation._id}/complete`);
     expect(repeated.status).toBe(409);
     expect(await BusinessRecord.countDocuments({ sourceId: created.body.reservation._id })).toBe(2);

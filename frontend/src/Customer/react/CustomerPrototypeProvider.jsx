@@ -30,7 +30,7 @@ export function CustomerPrototypeProvider({ children }) {
   const addCartItem = (item) => {
     const key = item.kind === 'service'
       ? `${item.id}:${item.bookingDate}:${item.startTime}`
-      : item.id;
+      : item.variantId ? `${item.id}:${item.variantId}` : item.id;
     setState((current) => {
       const existing = current.cart.find((entry) => entry.key === key);
       const cart = existing
@@ -47,10 +47,18 @@ export function CustomerPrototypeProvider({ children }) {
       : item)
   }));
 
-  const setCartItemStock = useCallback((key, stock, price, name) => setState((current) => ({
+  const setCartItemStock = useCallback((key, stock, price, name, imageUrl, unavailable = false) => setState((current) => ({
     ...current,
     cart: current.cart.map((item) => item.key === key
-      ? { ...item, stock, ...(Number.isFinite(price) ? { price } : {}), ...(name ? { name } : {}), quantity: Math.min(item.quantity, stock) }
+      ? {
+          ...item,
+          stock,
+          price: Number.isFinite(price) ? price : 0,
+          ...(name ? { name } : {}),
+          ...(imageUrl !== undefined ? { imageUrl } : {}),
+          unavailable,
+          quantity: Math.min(item.quantity, stock)
+        }
       : item)
   })), []);
 
@@ -58,7 +66,7 @@ export function CustomerPrototypeProvider({ children }) {
   const replaceCartItem = (key, item) => {
     const nextKey = item.kind === 'service'
       ? `${item.id}:${item.bookingDate}:${item.startTime}`
-      : item.id;
+      : item.variantId ? `${item.id}:${item.variantId}` : item.id;
     setState((current) => ({
       ...current,
       cart: current.cart

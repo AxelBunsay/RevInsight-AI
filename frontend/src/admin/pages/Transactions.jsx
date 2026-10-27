@@ -3,6 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 
+const reservationItemName = (item) => item.variantLabel && !String(item.name || "").includes(item.variantLabel)
+  ? `${item.name || item.productName || "Product"} - ${item.variantLabel}`
+  : item.name || item.productName || "Product";
+
 function formatBusinessRecord(record) {
   return {
     ...record,
@@ -13,9 +17,11 @@ function formatBusinessRecord(record) {
       "en-PH",
     ),
     items: record.isReservation && Array.isArray(record.items)
-      ? record.items.map((item) => `${item.name} × ${item.qty}`).join(", ")
+      ? record.items.map((item) => `${reservationItemName(item)} × ${item.qty}`).join(", ")
       : record.itemName || "N/A",
-    reservationItems: record.isReservation && Array.isArray(record.items) ? record.items : [],
+    reservationItems: record.isReservation && Array.isArray(record.items)
+      ? record.items.map((item) => ({ ...item, displayName: reservationItemName(item) }))
+      : [],
     amount: Number(record.amount || 0),
     status: record.status || "completed",
     mechanic:
@@ -69,8 +75,8 @@ function formatReservationRecord(reservation) {
     customer: isDeletedCustomer ? "Deleted customer" : customerName || reservation.customerName || "Unknown",
     customerPhone: isDeletedCustomer ? "" : (customer && typeof customer === "object" ? customer.phoneNumber : "") || reservation.customerPhone || "",
     date: new Date(reservation.createdAt).toLocaleString("en-PH"),
-    items: (reservation.items || []).map((item) => `${item.name} × ${item.qty}`).join(", ") || "N/A",
-    reservationItems: reservation.items || [],
+    items: (reservation.items || []).map((item) => `${reservationItemName(item)} × ${item.qty}`).join(", ") || "N/A",
+    reservationItems: (reservation.items || []).map((item) => ({ ...item, displayName: reservationItemName(item) })),
     amount: Number(reservation.total || 0),
     paid: Number(reservation.amountPaid || 0),
     balance: Number(reservation.balanceDue || 0),
@@ -719,9 +725,9 @@ function Transactions() {
                     <td className={activeTab === "items" ? "transaction-reservation-cell" : undefined}>
                       {activeTab === "items" && transaction.reservationItems.length
                         ? transaction.reservationItems.map((item) => (
-                            <span className="transaction-reservation-item" key={item.productId || item.name}>
+                            <span className="transaction-reservation-item" key={item.variantId || item.productId || item.name}>
                               {item.imageUrl && <img src={item.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
-                              {item.name} × {item.qty} · {formatMoney(item.lineTotal)}
+                              {item.displayName || reservationItemName(item)} × {item.qty} · {formatMoney(item.lineTotal)}
                             </span>
                           ))
                         : transaction.items}
