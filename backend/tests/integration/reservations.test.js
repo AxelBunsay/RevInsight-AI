@@ -215,6 +215,76 @@ describe('reservation business flow integration', () => {
     expect(response.body.products[0].variants[0]).not.toHaveProperty('reservedQty');
   });
 
+  it('normalizes and rejects product categories through both inventory controllers', async () => {
+    const inventoryCreate = await adminPost('/api/dashboard/inventory').send({
+      name: 'Mixed Case Inventory',
+      price: 100,
+      quantity: 2,
+      category: 'bRAkEs'
+    });
+    const productCreate = await adminPost('/api/products').send({
+      name: 'Mixed Case Product',
+      price: 200,
+      quantity: 3,
+      category: 'oIl & fLuIdS'
+    });
+
+    expect(inventoryCreate.status).toBe(201);
+    expect(inventoryCreate.body.data.category).toBe('Brakes');
+    expect(productCreate.status).toBe(201);
+    expect(productCreate.body.product.category).toBe('Oil & Fluids');
+
+    const inventoryUpdate = await adminPut(`/api/dashboard/inventory/${inventoryCreate.body.data._id}`).send({
+      name: 'Mixed Case Inventory',
+      price: 100,
+      quantity: 2,
+      category: 'sEaT wOrKs'
+    });
+    const productUpdate = await adminPut(`/api/products/${productCreate.body.product._id}`).send({
+      name: 'Mixed Case Product',
+      price: 200,
+      quantity: 3,
+      category: 'tIrEs & wHeElS'
+    });
+
+    expect(inventoryUpdate.status).toBe(200);
+    expect(inventoryUpdate.body.data.category).toBe('Seat Works');
+    expect(productUpdate.status).toBe(200);
+    expect(productUpdate.body.product.category).toBe('Tires & Wheels');
+
+    const rejectedResponses = await Promise.all([
+      adminPost('/api/dashboard/inventory').send({
+        name: 'Unknown Inventory Category',
+        price: 100,
+        quantity: 1,
+        category: 'Parts'
+      }),
+      adminPost('/api/products').send({
+        name: 'Unknown Product Category',
+        price: 100,
+        quantity: 1,
+        category: 'Accessories'
+      }),
+      adminPut(`/api/dashboard/inventory/${inventoryCreate.body.data._id}`).send({
+        name: 'Mixed Case Inventory',
+        price: 100,
+        quantity: 2,
+        category: 'Parts'
+      }),
+      adminPut(`/api/products/${productCreate.body.product._id}`).send({
+        name: 'Mixed Case Product',
+        price: 200,
+        quantity: 3,
+        category: 'Accessories'
+      })
+    ]);
+
+    rejectedResponses.forEach((response) => {
+      expect(response.status).toBe(400);
+      expect(response.body.fieldErrors.category).toContain('Choose a category from:');
+    });
+  });
+
   it('creates inventory variants with computed labels and ignores client labels and reserved stock', async () => {
     const response = await adminPost('/api/products').send({
       name: 'New Variant Product',

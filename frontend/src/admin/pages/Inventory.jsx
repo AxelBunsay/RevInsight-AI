@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import ProductImage from "../../Customer/react/ProductImage";
+import { PRODUCT_CATEGORIES } from "../../../../shared/inventory.json";
 
 const createEmptyVariant = () => ({
   brand: "",
@@ -33,7 +34,9 @@ const validateItemForm = (form, variants) => {
       errors.quantity = "Stock must be a whole number from 0 to 99,999.";
     }
   }
-  if (!form.category.trim()) errors.category = "Category is required.";
+  if (!PRODUCT_CATEGORIES.includes(form.category)) {
+    errors.category = "Choose a listed category before saving.";
+  }
   return errors;
 };
 
@@ -891,14 +894,22 @@ function Inventory() {
             )}
             <label>
               Category
-              <input
+              <select
                 aria-invalid={Boolean(itemFormErrors.category)}
                 value={form.category}
                 onChange={(event) => {
                   setForm({ ...form, category: event.target.value });
                   setItemFormErrors((errors) => ({ ...errors, category: "" }));
                 }}
-              />
+              >
+                <option value="">Choose a category</option>
+                {form.category && !PRODUCT_CATEGORIES.includes(form.category) && (
+                  <option value={form.category}>{form.category} (old category — choose a listed category)</option>
+                )}
+                {PRODUCT_CATEGORIES.map((itemCategory) => (
+                  <option key={itemCategory} value={itemCategory}>{itemCategory}</option>
+                ))}
+              </select>
               {itemFormErrors.category && <small className="inventory-field-error">{itemFormErrors.category}</small>}
             </label>
             <section className="inventory-variants-section" aria-labelledby="inventory-variants-title">

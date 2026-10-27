@@ -1,3 +1,13 @@
 {
-  "LOW_STOCK_THRESHOLD": 10
+  "LOW_STOCK_THRESHOLD": 10,
+  "PRODUCT_CATEGORIES": [
+    "Accessory",
+    "Brakes",
+    "Cables",
+    "Electrical",
+    "Engine Parts",
+    "Oil & Fluids",
+    "Seat Works",
+    "Tires & Wheels"
+  ]
 }

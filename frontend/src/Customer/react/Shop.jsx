@@ -5,6 +5,7 @@ import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { api } from '../../services/api';
 import ProductImage from './ProductImage';
+import { variantSelectorLabel } from './shopVariantLabel';
 import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
 import '../styles/shop.css';
 
@@ -15,17 +16,6 @@ const variantAvailable = (variant) => Math.max(
   Number(variant.available ?? (Number(variant.stock || 0) - Number(variant.reservedQty || 0)))
 );
 const hasFitment = (variant) => Boolean(variant.brand || variant.model);
-const variantSelectorLabel = (variants) => {
-  const attributes = new Set(variants.flatMap((variant) => [
-    ...(variant.brand || variant.model ? ['fitment'] : []),
-    ...(variant.size ? ['size'] : []),
-    ...(variant.color ? ['color'] : [])
-  ]));
-  if ([...attributes].every((attribute) => attribute === 'fitment')) return 'Fits:';
-  if (attributes.size === 1 && attributes.has('size')) return 'Size:';
-  if (attributes.size === 1 && attributes.has('color')) return 'Color:';
-  return 'Option:';
-};
 const matchesMotorcycle = (variant, brand, model) =>
   (!brand || variant.brand?.toLowerCase() === brand.toLowerCase())
   && (!model || variant.model?.toLowerCase() === model.toLowerCase());

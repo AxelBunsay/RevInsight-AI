@@ -5,6 +5,7 @@ const {
   removeProductImageSafely
 } = require('./productImage');
 const { validateProductInput } = require('./inventoryValidation');
+const { normalizeProductCategory } = require('./productCategories');
 
 const inputError = (message, status = 400) => Object.assign(new Error(message), { status });
 const isRemoveRequested = (value) => value === true || value === 'true';
@@ -235,7 +236,8 @@ async function prepareProductMutation({
     const validationInput = {
       ...input,
       price: hasVariants ? firstVariantPrice : input.price,
-      quantity: hasVariants ? totals.quantity : input.quantity
+      quantity: hasVariants ? totals.quantity : input.quantity,
+      category: normalizeProductCategory(input.category) || input.category
     };
     const fieldErrors = validateProductInput(validationInput, { hasVariants });
     if (Object.keys(fieldErrors).length) {
@@ -265,7 +267,7 @@ async function prepareProductMutation({
       name: input.name.trim(),
       price: hasVariants ? firstVariantPrice : Number(input.price),
       quantity: hasVariants ? totals.quantity : Number(input.quantity),
-      category: input.category.trim()
+      category: normalizeProductCategory(input.category)
     };
     if (variants !== undefined && parsedVariants !== undefined) data.variants = variants;
     if (productImage) Object.assign(data, productImage, { image: productImage.imageUrl });

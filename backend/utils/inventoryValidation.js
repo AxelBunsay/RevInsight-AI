@@ -1,3 +1,8 @@
+const {
+  normalizeProductCategory,
+  productCategoryErrorMessage
+} = require('./productCategories');
+
 const validateProductInput = (input, { hasVariants = false } = {}) => {
   const fieldErrors = {};
   const name = typeof input.name === 'string' ? input.name.trim() : '';
@@ -22,8 +27,8 @@ const validateProductInput = (input, { hasVariants = false } = {}) => {
   )) {
     fieldErrors.quantity = 'Stock must be a whole number from 0 to 99,999.';
   }
-  if (typeof input.category !== 'string' || !input.category.trim()) {
-    fieldErrors.category = 'Category is required.';
+  if (!normalizeProductCategory(input.category)) {
+    fieldErrors.category = productCategoryErrorMessage();
   }
 
   return fieldErrors;
