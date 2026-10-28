@@ -51,7 +51,23 @@ const manilaDayRange = (dateKey) => {
   return { start, end: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
 };
 
-const durationInMinutes = (service) => Math.max(1, Number(service.durationMinutes) || 60);
+const durationInMinutes = (service, units = 1) => {
+  const duration = Math.max(1, Number(service.durationMinutes) || 60);
+  return service.pricePerUnit && service.scaleDuration !== false ? duration * units : duration;
+};
+
+const validateServiceUnits = (service, value) => {
+  if (typeof value === 'boolean') {
+    throw Object.assign(new Error('Units must be a whole number.'), { status: 400 });
+  }
+  const units = value === undefined ? 1 : Number(value);
+  if (!Number.isInteger(units) || units < 1 || units > (service.pricePerUnit ? Number(service.maxUnits) || 2 : 1)) {
+    throw Object.assign(new Error(service.pricePerUnit
+      ? `Units must be a whole number from 1 to ${Number(service.maxUnits) || 2}.`
+      : 'This service does not allow multiple units.'), { status: 400 });
+  }
+  return units;
+};
 
 const slotLabel = (time) => {
   const [hours, minutes] = time.split(':').map(Number);
@@ -105,10 +121,16 @@ const currentManilaMinutes = () => {
   return Number(values.hour) * 60 + Number(values.minute);
 };
 
-const getGeneratedSlots = async (serviceId, dateKey) => {
+const getGeneratedSlots = async (serviceId, dateKey, requestedUnits = 1) => {
   if (!mongoose.Types.ObjectId.isValid(serviceId)) return { error: 'Service not found.', status: 404 };
   const service = await Service.findOne({ _id: serviceId, isActive: { $ne: false } }).lean();
   if (!service) return { error: 'Service not found.', status: 404 };
+  let units;
+  try {
+    units = validateServiceUnits(service, requestedUnits);
+  } catch (error) {
+    return { error: error.message, status: error.status };
+  }
   const schedule = await buildScheduleInfo();
   const dateValidation = validateDateForSchedule(dateKey, schedule);
   if (dateValidation.error) return { error: dateValidation.error, status: 400, schedule };
@@ -120,7 +142,7 @@ const getGeneratedSlots = async (serviceId, dateKey) => {
       date: dateKey,
       open: false,
       closedMessage: `The shop is closed on ${dayLabel}.`,
-      serviceDurationMinutes: durationInMinutes(service),
+      serviceDurationMinutes: durationInMinutes(service, units),
       ...schedule,
       slots: []
     };
@@ -131,7 +153,7 @@ const getGeneratedSlots = async (serviceId, dateKey) => {
   if (openMinutes === null || closeMinutes === null || closeMinutes <= openMinutes) {
     throw new Error('The shop booking schedule has invalid opening hours.');
   }
-  const serviceDurationMinutes = durationInMinutes(service);
+  const serviceDurationMinutes = durationInMinutes(service, units);
   const lastStartMinute = closeMinutes - serviceDurationMinutes;
   const dayRange = manilaDayRange(dateKey);
   const currentMinutes = dateKey === todayInManila() ? currentManilaMinutes() : -1;
@@ -139,9 +161,11 @@ const getGeneratedSlots = async (serviceId, dateKey) => {
 
   for (let start = openMinutes; start <= lastStartMinute; start += SLOT_INTERVAL_MINUTES) {
     const startTime = minutesToTime(start);
+    const endTime = minutesToTime(start + serviceDurationMinutes);
     const occupied = await readSlotCount(
       dateKey,
       startTime,
+      endTime,
       dayRange.start,
       dayRange.end
     );
@@ -149,9 +173,9 @@ const getGeneratedSlots = async (serviceId, dateKey) => {
     const status = start <= currentMinutes ? 'passed' : remaining === 0 ? 'full' : 'available';
     slots.push({
       startTime,
-      endTime: minutesToTime(start + serviceDurationMinutes),
+      endTime,
       label: slotLabel(startTime),
-      endLabel: slotLabel(minutesToTime(start + serviceDurationMinutes)),
+      endLabel: slotLabel(endTime),
       status,
       remaining,
       remainingLabel: remaining > 0 && remaining <= 2 ? `${remaining} left` : ''
@@ -172,7 +196,7 @@ const getGeneratedSlots = async (serviceId, dateKey) => {
 const getServiceSlots = async (req, res) => {
   try {
     res.set('Cache-Control', 'no-store, max-age=0');
-    const result = await getGeneratedSlots(req.params.id, req.query.date);
+    const result = await getGeneratedSlots(req.params.id, req.query.date, req.query.units);
     if (result.error) return res.status(result.status).json({ message: result.error, ...result.schedule });
     res.json(result);
   } catch (error) {
@@ -205,6 +229,7 @@ const createServiceBookings = async (req, res) => {
           isActive: { $ne: false }
         }).lean();
         if (!service) throw Object.assign(new Error('A selected service could not be found.'), { status: 400 });
+        const requestedUnits = validateServiceUnits(service, booking.units);
         const dateValidation = validateDateForSchedule(booking.date, schedule);
         if (dateValidation.error) {
           throw Object.assign(new Error(dateValidation.error), { status: 400 });
@@ -216,7 +241,7 @@ const createServiceBookings = async (req, res) => {
         if (typeof booking.vehicle !== 'string' || !booking.vehicle.trim()) {
           throw Object.assign(new Error('Choose a motorcycle for each service booking.'), { status: 400 });
         }
-        const slots = await getGeneratedSlots(booking.serviceId, booking.date);
+        const slots = await getGeneratedSlots(booking.serviceId, booking.date, requestedUnits);
         const selectedSlot = slots.slots?.find((slot) => slot.startTime === booking.startTime);
         if (!selectedSlot) {
           throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
@@ -232,11 +257,6 @@ const createServiceBookings = async (req, res) => {
         let serviceRequest;
         try {
           await session.withTransaction(async () => {
-            await serializeSlotBooking({ dateKey: booking.date, startTime: booking.startTime, session });
-            const activeCount = await countActiveBookings(booking.startTime, dayRange.start, dayRange.end, session);
-            if (activeCount >= schedule.slotCapacity) {
-              throw Object.assign(new Error('That time was just booked. Please choose another.'), { status: 409 });
-            }
             if (booking.date === todayInManila() && selectedSlot.startTime <= minutesToTime(currentManilaMinutes())) {
               throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
             }
@@ -249,6 +269,28 @@ const createServiceBookings = async (req, res) => {
             }).session(session).lean();
             if (!configuredService) {
               throw Object.assign(new Error('This service is no longer available.'), { status: 400 });
+            }
+            const units = validateServiceUnits(configuredService, booking.units);
+            const unitPrice = Number(configuredService.price) || 0;
+            const unitMechanicFee = Number(configuredService.mechanicFee) || 0;
+            const servicePriceTotal = unitPrice * units;
+            const mechanicFeeTotal = unitMechanicFee * units;
+            const serviceDurationMinutes = durationInMinutes(configuredService, units);
+            const startMinutes = timeToMinutes(booking.startTime);
+            const endTime = minutesToTime(startMinutes + serviceDurationMinutes);
+            if (startMinutes === null || startMinutes + serviceDurationMinutes > timeToMinutes(schedule.closeTime)) {
+              throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
+            }
+            await serializeSlotBooking({ dateKey: booking.date, startTime: booking.startTime, endTime, session });
+            const activeCount = await countActiveBookings(
+              booking.startTime,
+              endTime,
+              dayRange.start,
+              dayRange.end,
+              session
+            );
+            if (activeCount >= schedule.slotCapacity) {
+              throw Object.assign(new Error('That time was just booked. Please choose another.'), { status: 409 });
             }
             const createdAt = new Date();
             serviceRequest = (await ServiceRequest.create([{
@@ -263,13 +305,21 @@ const createServiceBookings = async (req, res) => {
               vehicle: booking.vehicle.trim(),
               mechanic: null,
               mechanicId: null,
-              estimatedPrice: configuredService.price,
-              laborFee: configuredService.mechanicFee ?? 0,
+              units,
+              pricePerUnit: configuredService.pricePerUnit === true,
+              unitLabel: configuredService.pricePerUnit ? configuredService.unitLabel : '',
+              unitPrice,
+              unitMechanicFee,
+              servicePriceTotal,
+              mechanicFeeTotal,
+              estimatedPrice: servicePriceTotal + mechanicFeeTotal,
+              laborFee: mechanicFeeTotal,
+              durationMinutes: serviceDurationMinutes,
               createdAt,
               paymentDueAt: new Date(createdAt.getTime() + schedule.pendingPaymentHours * 60 * 60 * 1000),
               scheduledDate: dayRange.start,
               startTime: booking.startTime,
-              endTime: selectedSlot.endTime,
+              endTime,
               status: 'pending'
             }], { session }))[0];
           });

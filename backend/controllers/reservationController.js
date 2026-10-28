@@ -769,7 +769,8 @@ const getPublicSettings = async (req, res) => {
           qrImageUrl: settings.paymentInstructions.qrImageUrl
         },
         pickupAddress: settings.pickupAddress,
-        pickupHours: settings.pickupHours
+        pickupHours: settings.pickupHours,
+        contactNumber: settings.contactNumber
       }
     });
   } catch (error) {
@@ -889,20 +890,39 @@ const updateBookingSchedule = async (req, res) => {
 const updateSettings = async (req, res) => {
   try {
     const { downPaymentPercent, pendingPaymentHours, holdDays, paymentInstructions, pickupAddress, pickupHours, contactNumber } = req.body || {};
-    const errors = [];
-    if (!Number.isInteger(downPaymentPercent) || downPaymentPercent < 10 || downPaymentPercent > 100) errors.push('Down payment percent must be a whole number from 10 to 100.');
-    if (!Number.isInteger(pendingPaymentHours) || pendingPaymentHours < 1 || pendingPaymentHours > 720) errors.push('Pending payment hours must be a whole number from 1 to 720.');
-    if (!Number.isInteger(holdDays) || holdDays < 1 || holdDays > 30) errors.push('Hold days must be a whole number from 1 to 30.');
-    if (!paymentInstructions || typeof paymentInstructions !== 'object') errors.push('Payment instructions are required.');
+    const fieldErrors = {};
+    if (!Number.isInteger(downPaymentPercent) || downPaymentPercent < 10 || downPaymentPercent > 100) fieldErrors.downPaymentPercent = 'Down payment percent must be a whole number from 10 to 100.';
+    if (!Number.isInteger(pendingPaymentHours) || pendingPaymentHours < 1 || pendingPaymentHours > 720) fieldErrors.pendingPaymentHours = 'Payment deadline must be a whole number from 1 to 720 hours.';
+    if (!Number.isInteger(holdDays) || holdDays < 1 || holdDays > 30) fieldErrors.holdDays = 'Pickup hold days must be a whole number from 1 to 30.';
+    if (!paymentInstructions || typeof paymentInstructions !== 'object') fieldErrors.paymentInstructions = 'GCash payment details are required.';
     else {
-      for (const field of ['methodName', 'accountName', 'accountNumber']) {
-        if (typeof paymentInstructions[field] !== 'string' || paymentInstructions[field].length > 120) errors.push(`Payment ${field} must be 120 characters or fewer.`);
+      for (const [field, label] of [['methodName', 'Payment method name'], ['accountName', 'GCash account name'], ['accountNumber', 'GCash account number']]) {
+        if (typeof paymentInstructions[field] !== 'string' || paymentInstructions[field].length > 120) {
+          fieldErrors[`paymentInstructions.${field}`] = `${label} must be 120 characters or fewer.`;
+        }
       }
     }
-    if (typeof pickupAddress !== 'string' || pickupAddress.length > 500) errors.push('Pickup address must be 500 characters or fewer.');
-    if (typeof pickupHours !== 'string' || pickupHours.length > 200) errors.push('Pickup hours must be 200 characters or fewer.');
-    if (typeof contactNumber !== 'string' || contactNumber.length > 40) errors.push('Contact number must be 40 characters or fewer.');
-    if (errors.length) return res.status(400).json({ success: false, message: errors.join(' ') });
+    const savedPickupAddress = typeof pickupAddress === 'string' ? pickupAddress.trim() : '';
+    const savedPickupHours = typeof pickupHours === 'string' ? pickupHours.trim() : '';
+    const savedContactNumber = typeof contactNumber === 'string' ? contactNumber.trim() : '';
+    if (typeof pickupAddress !== 'string' || savedPickupAddress.length > 150) {
+      fieldErrors.pickupAddress = 'Pickup address must be 150 characters or fewer.';
+    }
+    if (typeof pickupHours !== 'string' || savedPickupHours.length > 80) {
+      fieldErrors.pickupHours = 'Pickup hours must be 80 characters or fewer.';
+    }
+    if (typeof contactNumber !== 'string' || savedContactNumber.length > 40 || !/^[\d+() -]*$/.test(savedContactNumber)) {
+      fieldErrors.contactNumber = savedContactNumber.length > 40
+        ? 'Shop contact number must be 40 characters or fewer.'
+        : 'Shop contact number may contain only digits, spaces, +, -, and parentheses.';
+    }
+    if (Object.keys(fieldErrors).length) {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(fieldErrors).join(' '),
+        fieldErrors
+      });
+    }
 
     const currentSettings = await getSettings();
     const savedPaymentInstructions = {
@@ -912,7 +932,15 @@ const updateSettings = async (req, res) => {
     };
     const settings = await ReservationSettings.findOneAndUpdate(
       { key: 'reservation' },
-      { $set: { downPaymentPercent, pendingPaymentHours, holdDays, paymentInstructions: savedPaymentInstructions, pickupAddress, pickupHours, contactNumber } },
+      { $set: {
+        downPaymentPercent,
+        pendingPaymentHours,
+        holdDays,
+        paymentInstructions: savedPaymentInstructions,
+        pickupAddress: savedPickupAddress,
+        pickupHours: savedPickupHours,
+        contactNumber: savedContactNumber
+      } },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
     );
     res.json({ success: true, settings });

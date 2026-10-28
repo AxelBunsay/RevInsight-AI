@@ -73,6 +73,7 @@ const validateServiceForm = (form) => {
   const price = Number(form.price);
   const mechanicFee = Number(form.mechanicFee);
   const durationMinutes = Number(form.durationMinutes);
+  const maxUnits = Number(form.maxUnits);
 
   if (name.length < 2 || name.length > 80) errors.name = "Name must be 2 to 80 characters.";
   if (category.length < 1 || category.length > 80) errors.category = "Category must be 1 to 80 characters.";
@@ -88,6 +89,9 @@ const validateServiceForm = (form) => {
   if (form.durationMinutes === "" || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
     errors.durationMinutes = "Duration must be a whole number from 1 to 1,440 minutes.";
   }
+  if (form.pricePerUnit && !form.unitLabel.trim()) errors.unitLabel = "Unit name is required when charging per unit.";
+  if (form.unitLabel.length > 40) errors.unitLabel = "Unit name must be 40 characters or fewer.";
+  if (!Number.isInteger(maxUnits) || maxUnits < 1 || maxUnits > 10) errors.maxUnits = "Maximum units must be a whole number from 1 to 10.";
   return errors;
 };
 
@@ -133,6 +137,10 @@ function Inventory() {
     mechanicFee: "",
     category: "General",
     durationMinutes: "60",
+    pricePerUnit: false,
+    unitLabel: "",
+    maxUnits: "2",
+    scaleDuration: true,
   });
   const [serviceFormErrors, setServiceFormErrors] = useState({});
   const [serviceFormError, setServiceFormError] = useState("");
@@ -386,8 +394,12 @@ function Inventory() {
           mechanicFee: String(service.mechanicFee ?? 0),
           category: service.category || "General",
           durationMinutes: String(service.durationMinutes || 60),
+          pricePerUnit: service.pricePerUnit === true,
+          unitLabel: service.unitLabel || "",
+          maxUnits: String(service.maxUnits || 2),
+          scaleDuration: service.scaleDuration !== false,
         }
-      : { name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60" });
+      : { name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
   };
 
   const saveService = async (event) => {
@@ -406,12 +418,16 @@ function Inventory() {
         mechanicFee: Number(serviceForm.mechanicFee),
         category: serviceForm.category.trim(),
         durationMinutes: Number(serviceForm.durationMinutes),
+        pricePerUnit: serviceForm.pricePerUnit,
+        unitLabel: serviceForm.unitLabel.trim(),
+        maxUnits: Number(serviceForm.maxUnits),
+        scaleDuration: serviceForm.scaleDuration,
       };
       if (editingService) await api.updateService(editingService._id, payload);
       else await api.createService(payload);
       setIsAddingService(false);
       setEditingService(null);
-      setServiceForm({ name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60" });
+      setServiceForm({ name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
       setServiceRefreshKey((key) => key + 1);
       setToast(editingService ? "Service updated successfully." : "Service added successfully.");
     } catch (saveError) {
@@ -780,8 +796,9 @@ function Inventory() {
                         <td>{service.category || "General"}</td>
                         <td className="price-text">
                           {`₱${Number(service.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}
+                          {service.pricePerUnit && ` / ${service.unitLabel || "unit"}`}
                         </td>
-                        <td>{Number(service.durationMinutes) || 60} min</td>
+                        <td>{Number(service.durationMinutes) || 60} min{service.pricePerUnit && service.scaleDuration !== false ? ` / ${service.unitLabel || "unit"}` : ""}</td>
                         <td className="price-text">
                           {`₱${Number(service.mechanicFee || 0).toLocaleString("en-PH", {
                               minimumFractionDigits: 2,
@@ -854,7 +871,7 @@ function Inventory() {
             {variantRows.length === 0 ? (
               <>
                 <label>
-                  Price
+                  Service price
                   <input
                     min="0.01"
                     max="999999.99"
@@ -1133,7 +1150,7 @@ function Inventory() {
               {serviceFormErrors.price && <small className="inventory-field-error">{serviceFormErrors.price}</small>}
             </label>
             <label>
-              Mechanic Fee
+              Mechanic fee (added to the price)
               <input
                 min="0"
                 max="999999.99"
@@ -1148,6 +1165,56 @@ function Inventory() {
               />
               {serviceFormErrors.mechanicFee && <small className="inventory-field-error">{serviceFormErrors.mechanicFee}</small>}
             </label>
+            <label>
+              <span><input
+                type="checkbox"
+                checked={serviceForm.pricePerUnit}
+                onChange={(event) => {
+                  setServiceForm({ ...serviceForm, pricePerUnit: event.target.checked });
+                  setServiceFormErrors((errors) => ({ ...errors, unitLabel: "" }));
+                }}
+              /> Charge per unit</span>
+            </label>
+            {serviceForm.pricePerUnit && <>
+              <label>
+                Unit name
+                <input
+                  maxLength="40"
+                  placeholder="wheel hub"
+                  aria-invalid={Boolean(serviceFormErrors.unitLabel)}
+                  value={serviceForm.unitLabel}
+                  onChange={(event) => {
+                    setServiceForm({ ...serviceForm, unitLabel: event.target.value });
+                    setServiceFormErrors((errors) => ({ ...errors, unitLabel: "" }));
+                  }}
+                />
+                {serviceFormErrors.unitLabel && <small className="inventory-field-error">{serviceFormErrors.unitLabel}</small>}
+              </label>
+              <label>
+                Maximum units
+                <input
+                  min="1"
+                  max="10"
+                  step="1"
+                  type="number"
+                  aria-invalid={Boolean(serviceFormErrors.maxUnits)}
+                  value={serviceForm.maxUnits}
+                  onChange={(event) => {
+                    setServiceForm({ ...serviceForm, maxUnits: event.target.value });
+                    setServiceFormErrors((errors) => ({ ...errors, maxUnits: "" }));
+                  }}
+                />
+                {serviceFormErrors.maxUnits && <small className="inventory-field-error">{serviceFormErrors.maxUnits}</small>}
+              </label>
+              <label>
+                <span><input
+                  type="checkbox"
+                  checked={serviceForm.scaleDuration}
+                  onChange={(event) => setServiceForm({ ...serviceForm, scaleDuration: event.target.checked })}
+                /> Longer duration for each unit</span>
+              </label>
+              <small>{`Customer pays ${formatPrice(Number(serviceForm.price || 0) + Number(serviceForm.mechanicFee || 0))} per ${serviceForm.unitLabel || "unit"}.`}</small>
+            </>}
             <div className="admin-dialog-actions">
               <button
                 className="btn-small"

@@ -103,6 +103,7 @@ export const api = {
   checkout: () => request('/api/orders/checkout', { method: 'POST', tokenKey: 'customerToken' }),
   getCustomerOrders: () => request('/api/orders', { tokenKey: 'customerToken' }),
   getReservationSettings: () => request('/api/reservations/settings', { tokenKey: 'customerToken' }),
+  getPaymentSettings: () => request('/api/payment-settings', { tokenKey: null, cache: 'no-store' }),
   getShopSettings: () => request('/api/reservations/shop-settings', { tokenKey: 'customerToken' }),
   createReservation: (items) => request('/api/reservations', { method: 'POST', body: JSON.stringify({ items }), tokenKey: 'customerToken' }),
   getCustomerReservations: () => request('/api/reservations', { tokenKey: 'customerToken' }),
@@ -124,7 +125,7 @@ export const api = {
     body.append('proof', payment.proof);
     return request(`/api/service-requests/${requestId}/payment`, { method: 'POST', body, tokenKey: 'customerToken' });
   },
-  getServiceSlots: (serviceId, date) => request(`/api/services/${encodeURIComponent(serviceId)}/slots?date=${encodeURIComponent(date)}`, { tokenKey: 'customerToken', cache: 'no-store' }),
+  getServiceSlots: (serviceId, date, units = 1) => request(`/api/services/${encodeURIComponent(serviceId)}/slots?date=${encodeURIComponent(date)}&units=${encodeURIComponent(units)}`, { tokenKey: 'customerToken', cache: 'no-store' }),
   createServiceBookings: (bookings) => request('/api/services/bookings', { method: 'POST', body: JSON.stringify({ bookings }), tokenKey: 'customerToken' }),
   getAvailableMechanics: () => request('/api/mechanics/available', { tokenKey: 'customerToken' }),
   getMechanicProfile: () => request('/api/mechanics/profile', { tokenKey: 'mechanicToken' }),

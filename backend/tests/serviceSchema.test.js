@@ -13,6 +13,9 @@ describe('service schema fields', () => {
     expect(Service.schema.path('mechanicFee').options.validate.validator).toBeTypeOf('function');
     expect(service.category).toBe('General');
     expect(service.durationMinutes).toBe(60);
+    expect(service.pricePerUnit).toBe(false);
+    expect(service.maxUnits).toBe(2);
+    expect(service.scaleDuration).toBe(true);
   });
 
   it('retains the mechanic fee cannot exceed service price validator', async () => {
@@ -40,6 +43,37 @@ describe('service schema fields', () => {
     })).toMatchObject({
       category: expect.any(String),
       durationMinutes: expect.any(String)
+    });
+  });
+
+  it('validates optional unit pricing configuration', () => {
+    expect(validateServiceInput({
+      name: 'Bearing replacement',
+      description: '',
+      price: 150,
+      mechanicFee: 50,
+      category: 'Maintenance',
+      durationMinutes: 60,
+      pricePerUnit: true,
+      unitLabel: 'wheel hub',
+      maxUnits: 2,
+      scaleDuration: true
+    })).toEqual({});
+
+    expect(validateServiceInput({
+      name: 'Bearing replacement',
+      description: '',
+      price: 150,
+      mechanicFee: 50,
+      category: 'Maintenance',
+      durationMinutes: 60,
+      pricePerUnit: true,
+      unitLabel: '',
+      maxUnits: 11,
+      scaleDuration: true
+    })).toMatchObject({
+      unitLabel: expect.any(String),
+      maxUnits: expect.any(String)
     });
   });
 });

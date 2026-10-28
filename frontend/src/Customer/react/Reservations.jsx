@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
+import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import { CustomerPage } from './CustomerLayout';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
@@ -51,12 +53,16 @@ function ServiceReservationCard({ reservation }) {
       <div>
         <span className="customer-cart-item-kind">SERVICE · {reservation.id}</span>
         <h2>{reservation.name}</h2>
-        <p>{reservation.bookingDate} at {reservation.timeSlot} · {reservation.vehicle}</p>
+        <p>{reservation.pricePerUnit ? `${serviceUnitSummary(reservation.units, reservation.unitLabel)} · ` : ''}{reservation.bookingDate} at {reservation.timeSlot} · {reservation.vehicle}</p>
       </div>
       <span className="customer-status-pill">{reservation.status}</span>
     </div>
     <div className="customer-reservation-card-bottom">
-      <strong>{money(reservation.price)}</strong>
+      <ServicePriceBreakdown
+        servicePriceTotal={reservation.servicePriceTotal}
+        mechanicFeeTotal={reservation.mechanicFeeTotal}
+        estimatedPrice={reservation.price}
+      />
       <Link to={`/customer/reservations/${reservation.id}`}>View booking <span aria-hidden="true">→</span></Link>
     </div>
   </article>;
@@ -82,11 +88,16 @@ export default function Reservations() {
         if (bookingResult.status === 'fulfilled') {
           setServiceBookings((bookingResult.value.requests || []).map((booking) => ({
             id: booking._id,
-            name: booking.serviceType || 'Service booking',
+            name: formatServiceName(booking.serviceType || 'Service booking', booking.units, booking.unitLabel),
             bookingDate: booking.scheduledDate ? new Date(booking.scheduledDate).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' }) : 'Date to be confirmed',
             timeSlot: [booking.startTime, booking.endTime].filter(Boolean).join(' - '),
             vehicle: booking.vehicle || '',
             price: booking.estimatedPrice,
+            servicePriceTotal: booking.servicePriceTotal,
+            mechanicFeeTotal: booking.mechanicFeeTotal,
+            units: booking.units || 1,
+            unitLabel: booking.unitLabel || 'unit',
+            pricePerUnit: booking.pricePerUnit === true,
             status: booking.paymentStatus === 'Payment Submitted'
               ? booking.paymentStatus
               : booking.paymentStatus === 'Payment Pending' && booking.paymentRejectionReason

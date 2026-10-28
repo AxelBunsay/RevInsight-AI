@@ -140,7 +140,7 @@ export default function Services() {
                 <h2>{service.name}</h2>
                 <p>{service.description || "Service details available at the shop."}</p>
                 <div className="service-card-footer">
-                  <strong>₱{Number(service.price || 0).toLocaleString("en-PH")}</strong>
+                  <strong>₱{(Number(service.price || 0) + Number(service.mechanicFee || 0)).toLocaleString("en-PH")} total{service.pricePerUnit ? ` / ${service.unitLabel || "unit"}` : ""}</strong>
                   <Link to={`/customer/services/${service._id}`} className="service-book-link">Book service</Link>
                 </div>
               </div>

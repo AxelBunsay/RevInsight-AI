@@ -4,6 +4,8 @@ import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
+import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
+import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
@@ -143,8 +145,8 @@ export default function ReservationDetail() {
         {error && <p className="customer-error" role="alert">{error}</p>}
         {message && <p className="customer-success" role="status">{message}</p>}
         <section className="customer-reservation-detail-card">
-          <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{serviceBooking.serviceType}</h1><p>{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
-          <div className="customer-reservation-detail-meta"><div><span>Amount due</span><strong>{money(serviceBooking.estimatedPrice)}</strong></div><div><span>Payment</span><strong>{serviceBooking.paymentStatus || 'Payment Pending'}</strong></div><div><span>Reference</span><strong>{serviceBooking.code || serviceBooking._id}</strong></div></div>
+          <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{formatServiceName(serviceBooking.serviceType, serviceBooking.units, serviceBooking.unitLabel)}</h1><p>{serviceBooking.pricePerUnit ? `${serviceUnitSummary(serviceBooking.units || 1, serviceBooking.unitLabel)} · ` : ''}{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
+          <div className="customer-reservation-detail-meta"><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><div><span>Payment</span><strong>{serviceBooking.paymentStatus || 'Payment Pending'}</strong></div><div><span>Reference</span><strong>{serviceBooking.code || serviceBooking._id}</strong></div></div>
           {serviceBooking.paymentRejectionReason && <p className="customer-error" role="alert">Payment needs attention: {serviceBooking.paymentRejectionReason}</p>}
           {paymentPending && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
           {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={serviceBooking.estimatedPrice} settings={settings} onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}

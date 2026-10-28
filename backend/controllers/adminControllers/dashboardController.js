@@ -232,7 +232,7 @@ const getProjectedRevenue = async (req, res) => {
 // Get All Transactions
 const getBusinessRecords = async (req, res) => {
   try {
-    const { recordType, status, startDate, endDate, mechanicId, type, search } = req.query;
+    const { recordType, status, startDate, endDate, mechanicId, type, itemView = 'all', search } = req.query;
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
     await expireReservations();
@@ -251,11 +251,17 @@ const getBusinessRecords = async (req, res) => {
     const reservationStatus = reservationStatuses.find(
       (value) => value.toLowerCase() === statusLower
     );
+    const cancelledOrExpiredFilter = statusLower === 'cancelled/expired';
+    const reservationStatusFilter = cancelledOrExpiredFilter
+      ? { $in: ['Cancelled', 'Expired'] }
+      : reservationStatus || (status ? '__no_matching_reservation_status__' : undefined);
     if (status) {
       query.status = reservationStatus
         ? statusLower === 'completed'
           ? { $in: ['Paid', 'completed'] }
           : '__no_matching_business_record_status__'
+        : cancelledOrExpiredFilter
+          ? '__no_matching_business_record_status__'
         : statusLower === 'paid'
           ? { $in: ['Paid', 'completed'] }
           : statusLower;
@@ -275,6 +281,9 @@ const getBusinessRecords = async (req, res) => {
     if (type && !typeMap[type]) {
       return res.status(400).json({ success: false, message: 'Type must be item or service' });
     }
+    if (type === 'item' && !['all', 'sales', 'reservations'].includes(itemView)) {
+      return res.status(400).json({ success: false, message: 'Item view must be all, sales, or reservations' });
+    }
     const searchPattern = search
       ? new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
       : null;
@@ -285,12 +294,12 @@ const getBusinessRecords = async (req, res) => {
     const itemQuery = { ...withSearch(['customer', 'itemName']), recordType: 'product' };
     const serviceQuery = { ...withSearch(['customer', 'itemName', 'mechanicName']), recordType: 'service' };
     const reservationQuery = { code: { $exists: true } };
-    if (reservationStatus) reservationQuery.status = reservationStatus;
-    else if (status) reservationQuery.status = '__no_matching_reservation_status__';
+    if (reservationStatusFilter) reservationQuery.status = reservationStatusFilter;
     if (searchPattern) {
       reservationQuery.$or = [
         { code: searchPattern },
         { customerName: searchPattern },
+        { customerPhone: searchPattern },
         { paymentReference: searchPattern },
         { 'items.name': searchPattern }
       ];
@@ -304,7 +313,7 @@ const getBusinessRecords = async (req, res) => {
         reservationQuery.createdAt.$lte = end;
       }
     }
-    const includeReservations = !type || type === 'item';
+    const includeReservations = !type || (type === 'item' && itemView !== 'sales');
     const reservationIds = await Reservation.distinct('_id', {
       code: { $exists: true },
       status: 'Completed'
@@ -316,8 +325,11 @@ const getBusinessRecords = async (req, res) => {
       ]
     };
     const itemBusinessRecordsQuery = { ...itemQuery, sourceId: { $nin: reservationIds } };
+    const emptyBusinessRecordQuery = { _id: { $exists: false } };
     const filteredQuery = type === 'item'
-      ? itemBusinessRecordsQuery
+      ? itemView === 'reservations'
+        ? emptyBusinessRecordQuery
+        : itemBusinessRecordsQuery
       : type === 'service'
         ? serviceQuery
         : allBusinessRecordsQuery;
@@ -352,10 +364,11 @@ const getBusinessRecords = async (req, res) => {
       ...(searchPattern ? { $or: [
         { code: searchPattern },
         { customerName: searchPattern },
+        { customerPhone: searchPattern },
         { paymentReference: searchPattern },
         { 'items.name': searchPattern }
       ] } : {}),
-      ...(status ? (reservationStatus ? { status: reservationStatus } : { status: '__no_matching_reservation_status__' }) : {}),
+      ...(reservationStatusFilter ? { status: reservationStatusFilter } : {}),
       ...(startDate || endDate ? { createdAt: {
         ...(startDate ? { $gte: new Date(startDate) } : {}),
         ...(endDate ? { $lte: (() => { const end = new Date(endDate); end.setHours(23, 59, 59, 999); return end; })() } : {})
@@ -365,9 +378,13 @@ const getBusinessRecords = async (req, res) => {
       ...reservationQuery,
       status: 'Payment Submitted'
     });
+    const matchingReservationCount = includeReservations ? reservationCount : 0;
+    const matchingCount = businessCount + matchingReservationCount;
     const counts = {
       all: allCountBase + allReservationCount,
-      items: itemCountBase + allReservationCount,
+      items: type === 'item'
+        ? matchingCount
+        : itemCountBase + allReservationCount,
       services: serviceCount,
       paymentSubmitted: paymentSubmittedCount
     };
@@ -432,6 +449,7 @@ const getBusinessRecords = async (req, res) => {
         customer: deletedCustomerIds.has(String(reservation.customerId))
           ? 'Deleted customer'
           : reservation.customerName || 'Unknown',
+        customerPhone: reservation.customerPhone || '',
         itemName: (reservation.items || []).map((item) => item.name).join(', '),
         amount: Number(reservation.total || 0),
         paid: Number(reservation.amountPaid || 0),
@@ -445,7 +463,6 @@ const getBusinessRecords = async (req, res) => {
       (left, right) => new Date(right.completedAt || right.createdAt) - new Date(left.completedAt || left.createdAt)
     );
     const pageRows = combinedRows.slice((page - 1) * limit, page * limit);
-    const matchingCount = businessCount + reservationCount;
     const totalAmount = (businessAmount[0]?.total || 0) + (reservationAmount[0]?.total || 0);
 
     res.json({
@@ -905,7 +922,7 @@ const getMechanicsReport = async (req, res) => {
                   $sum: {
                     $cond: [
                       { $eq: ['$status', 'completed'] },
-                      { $ifNull: ['$laborFee', 0] },
+                      { $ifNull: ['$mechanicFeeTotal', { $ifNull: ['$laborFee', 0] }] },
                       0
                     ]
                   }

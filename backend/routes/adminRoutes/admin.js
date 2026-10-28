@@ -7,6 +7,8 @@ const reservations = require('../../controllers/reservationController');
 const notifications = require('../../controllers/notificationController');
 const serviceRequests = require('../../controllers/serviceRequestController');
 const paymentUpload = require('../../middleware/paymentUpload');
+const paymentSettings = require('../../controllers/paymentSettingsController');
+const paymentSettingsUpload = require('../../middleware/paymentSettingsUpload');
 const createLoginRateLimit = require('../../middleware/loginRateLimit');
 
 
@@ -21,6 +23,8 @@ router.post('/notifications/:id/read', protect, notifications.markAdminNotificat
 router.get('/mechanics/summary', protect, mechanicController.getMechanicsSummary);
 router.get('/reservations/settings', protect, reservations.getPublicSettings);
 router.put('/reservations/settings', protect, reservations.updateSettings);
+router.get('/payment-settings', protect, paymentSettings.getAdminPaymentSettings);
+router.put('/payment-settings', protect, paymentSettingsUpload, paymentSettings.updateAdminPaymentSettings);
 router.get('/reservations/booking-schedule', protect, reservations.getBookingSchedule);
 router.put('/reservations/booking-schedule', protect, reservations.updateBookingSchedule);
 router.post('/reservations/settings/gcash-qr', protect, (req, res, next) => {

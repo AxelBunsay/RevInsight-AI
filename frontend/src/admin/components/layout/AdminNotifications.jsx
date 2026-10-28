@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../../services/adminApi';
+import NotificationContent from '../../../components/NotificationContent';
 
 function AdminNotifications() {
   const navigate = useNavigate();
@@ -63,7 +64,7 @@ function AdminNotifications() {
       {error && <p role="alert">{error}</p>}
       {notifications.length
         ? <ul>{notifications.map((notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
-          <button type="button" onClick={() => openNotification(notification)}>{notification.message}<small>{new Date(notification.createdAt).toLocaleString('en-PH')}</small></button>
+          <button type="button" onClick={() => openNotification(notification)}><NotificationContent message={notification.message} timestamp={notification.createdAt} /></button>
         </li>)}</ul>
         : !error && <p className="admin-notification-empty">No notifications yet.</p>}
     </section>}

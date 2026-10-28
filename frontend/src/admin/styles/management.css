@@ -1,8 +1,3 @@
-.admin-root .admin-management-page {
-  width: min(100%, 1200px);
-  min-width: 0;
-  margin: 0 auto;
-}
 .admin-root .admin-management-page h1,
 .admin-root .admin-management-page h2 {
   color: var(--ink);
@@ -229,6 +224,13 @@
   border-collapse: collapse;
   text-align: left;
 }
+.admin-root .admin-management-page .transactions-table {
+  table-layout: auto;
+}
+.admin-root .admin-management-page .transactions-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
 .admin-root .admin-management-page .inventory-table-scroll {
   max-height: min(52vh, 430px);
   overflow: auto;
@@ -244,9 +246,11 @@
   top: 0;
   background: var(--surface);
 }
-.admin-root .admin-management-page .inventory-container,
-.admin-root .admin-management-page .transactions-container {
+.admin-root .admin-management-page .inventory-container {
   overflow-x: auto;
+}
+.admin-root .admin-management-page .transactions-container {
+  overflow-x: visible;
 }
 .admin-root .admin-management-page .inventory-table th,
 .admin-root .admin-management-page .transactions-table th {
@@ -260,7 +264,53 @@
 .admin-root .admin-management-page .transactions-table td {
   padding: 12px 10px;
   border-bottom: 1px solid var(--line);
+}
+.admin-root .admin-management-page .inventory-table th,
+.admin-root .admin-management-page .inventory-table td {
   white-space: nowrap;
+}
+.admin-root .admin-management-page .transactions-table th,
+.admin-root .admin-management-page .transactions-table td {
+  padding: 10px 8px;
+}
+.admin-root .admin-management-page .transactions-table .transaction-col-id,
+.admin-root .admin-management-page .transactions-table .transaction-col-date,
+.admin-root .admin-management-page .transactions-table .transaction-col-total,
+.admin-root .admin-management-page .transactions-table .transaction-col-paid,
+.admin-root .admin-management-page .transactions-table .transaction-col-balance {
+  white-space: nowrap;
+}
+.admin-root .admin-management-page .transactions-table .transaction-col-id { min-width: 145px; }
+.admin-root .admin-management-page .transactions-table .transaction-col-date { min-width: 92px; }
+.admin-root .admin-management-page .transactions-table .transaction-col-total,
+.admin-root .admin-management-page .transactions-table .transaction-col-paid,
+.admin-root .admin-management-page .transactions-table .transaction-col-balance { min-width: 68px; }
+.admin-root .admin-management-page .transactions-table .transaction-col-customer,
+.admin-root .admin-management-page .transactions-table .transaction-col-items {
+  min-width: 100px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .transactions-table .transaction-col-payment,
+.admin-root .admin-management-page .transactions-table .transaction-col-status {
+  min-width: 78px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .transactions-table .transaction-reservation-cell {
+  min-width: 0;
+}
+.admin-root .admin-management-page .transactions-table .transaction-col-action {
+  min-width: 180px;
+  white-space: nowrap;
+}
+.admin-root .admin-management-page .transactions-table .transaction-col-type,
+.admin-root .admin-management-page .transactions-table .transaction-col-mechanic {
+  white-space: normal;
+}
+.admin-root .admin-management-page .transactions-table .transaction-col-action .btn-small {
+  display: block;
+  margin: 4px 0;
 }
 .admin-root .admin-management-page .inventory-table tbody tr {
   height: 68px;
@@ -852,6 +902,16 @@
   .admin-root .admin-management-page .mechanics-container {
     padding: 14px;
   }
+
+  @media (max-width: 1099px) {
+    .admin-root .admin-management-page .transactions-table-scroll {
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+    }
+    .admin-root .admin-management-page .transactions-table {
+      min-width: 1050px;
+    }
+  }
   .admin-root .admin-management-page .search-filter,
   .admin-root .admin-management-page .transactions-header,
   .admin-root .admin-management-page .inventory-header,
@@ -997,6 +1057,92 @@
 .reservation-settings-form button {
   align-self: end;
   min-height: 38px;
+}
+
+.gcash-admin-settings-card {
+  grid-column: 1 / -1;
+  padding: 16px;
+  border: 1px solid #ecdfd2;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.gcash-admin-settings-card .reservation-admin-section-heading {
+  margin-bottom: 12px;
+}
+
+.gcash-admin-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 18px;
+}
+
+.gcash-admin-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+}
+
+.gcash-admin-fields textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.gcash-admin-instructions,
+.gcash-admin-image-picker {
+  grid-column: 1 / -1;
+}
+
+.gcash-admin-image-picker {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  color: #6f5f4e;
+  font-size: 12px;
+}
+
+.gcash-admin-file-input {
+  display: none;
+}
+
+.gcash-admin-settings-card .gcash-admin-image-picker button,
+.gcash-admin-settings-card .gcash-admin-fields > button {
+  justify-self: start;
+}
+
+.gcash-admin-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #ecdfd2;
+  border-radius: 10px;
+  color: #4f4033;
+  text-align: center;
+}
+
+.gcash-admin-preview > strong {
+  font-size: 12px;
+}
+
+.gcash-admin-preview img {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+}
+
+.gcash-admin-preview > span {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.gcash-admin-preview > p,
+.gcash-admin-preview > small {
+  margin: 0;
+  color: #6f5f4e;
+  font-size: 11px;
 }
 
 .reservation-admin-filters {
@@ -1183,5 +1329,12 @@
   .reservation-admin-item-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 700px) {
+  .gcash-admin-settings-grid,
+  .gcash-admin-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

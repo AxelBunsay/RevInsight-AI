@@ -1,5 +1,14 @@
 const mongoose = require('mongoose');
 
+const gcashPaymentSettingsSchema = new mongoose.Schema({
+  gcashQrUrl: { type: String, default: '' },
+  gcashQrPublicId: { type: String, default: '' },
+  gcashAccountName: { type: String, default: '' },
+  gcashAccountNumber: { type: String, default: '' },
+  paymentInstructions: { type: String, default: '', maxlength: 300 },
+  updatedAt: { type: Date, default: null }
+}, { _id: false });
+
 const reservationSettingsSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, default: 'reservation' },
   downPaymentPercent: { type: Number, default: 30, min: 1, max: 100 },
@@ -12,8 +21,9 @@ const reservationSettingsSchema = new mongoose.Schema({
     qrImageUrl: { type: String, default: '' },
     qrImagePublicId: { type: String, default: '' }
   },
-  pickupAddress: { type: String, default: '' },
-  pickupHours: { type: String, default: '' },
+  gcashPaymentSettings: { type: gcashPaymentSettingsSchema, default: () => ({}) },
+  pickupAddress: { type: String, default: '', maxlength: 150 },
+  pickupHours: { type: String, default: '', maxlength: 80 },
   contactNumber: { type: String, default: '0900 000 0000', maxlength: 40 },
   openDays: { type: [String], default: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
   openTime: { type: String, default: '09:00' },

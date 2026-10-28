@@ -35,7 +35,12 @@ describe('admin mechanics report aggregation', () => {
     ]);
     expect(group.totalLabor.$sum.$cond).toEqual([
       { $eq: ['$status', 'completed'] },
-      { $ifNull: ['$laborFee', 0] },
+      {
+        $ifNull: [
+          '$mechanicFeeTotal',
+          { $ifNull: ['$laborFee', 0] }
+        ]
+      },
       0
     ]);
     expect(project.name).toEqual({

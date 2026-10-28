@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { api } from '../../services/api';
+import { hasCustomerFooterDetails } from './customerFooterSettings';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import NotificationContent from '../../components/NotificationContent';
 import '../styles/shared.css';
 import '../styles/customer-flow.css';
 
@@ -99,12 +101,12 @@ export function CustomerHeader() {
           {unreadNotificationCount > 0 && <span className="customer-notification-count">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}
         </button>
         {isNotificationsOpen && <section className="customer-notification-popover" aria-label="Notifications">
-          <strong>Notifications</strong>
+          <strong className="customer-notification-popover-header">Notifications</strong>
           {notificationError && <p role="alert">{notificationError}</p>}
           {notifications.length
             ? <ul>{notifications.map((notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
               <Link to={`/customer/reservations/${notification.recordId}`} state={{ showPayment: notification.type === 'payment_rejected' }} onClick={() => openCustomerNotification(notification)}>
-                {notification.message}<small>{new Date(notification.createdAt).toLocaleString('en-PH')}</small>
+                <NotificationContent message={notification.message} timestamp={notification.createdAt} />
               </Link>
             </li>)}</ul>
             : !notificationError && <p>No notifications yet.</p>}
@@ -133,9 +135,11 @@ function CustomerFooter() {
     return () => { isMounted = false; };
   }, []);
 
+  const noPickupDetails = settings && !hasCustomerFooterDetails(settings);
+
   return <footer className="customer-site-footer">
     <strong>Manoy&apos;s Motorcycle</strong>
-    {error
+    {error || noPickupDetails
       ? <p className="customer-site-footer-message">Pickup details are temporarily unavailable.</p>
       : <div className="customer-site-footer-details">
         {settings?.pickupAddress && <span>Pickup: {settings.pickupAddress}</span>}

@@ -42,9 +42,14 @@ const validateServiceInput = (input, current = {}) => {
   const mechanicFeeValue = input.mechanicFee ?? current.mechanicFee;
   const categoryValue = input.category ?? current.category ?? 'General';
   const durationMinutesValue = input.durationMinutes ?? current.durationMinutes ?? 60;
+  const pricePerUnitValue = input.pricePerUnit ?? current.pricePerUnit ?? false;
+  const unitLabelValue = input.unitLabel ?? current.unitLabel ?? '';
+  const maxUnitsValue = input.maxUnits ?? current.maxUnits ?? 2;
+  const scaleDurationValue = input.scaleDuration ?? current.scaleDuration ?? true;
   const price = Number(priceValue);
   const mechanicFee = Number(mechanicFeeValue);
   const durationMinutes = Number(durationMinutesValue);
+  const maxUnits = Number(maxUnitsValue);
   const hasNumber = (value) =>
     (typeof value === 'number' || typeof value === 'string') &&
     String(value).trim() !== '' &&
@@ -74,6 +79,20 @@ const validateServiceInput = (input, current = {}) => {
   }
   if (!hasNumber(durationMinutesValue) || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
     fieldErrors.durationMinutes = 'Duration must be a whole number from 1 to 1,440 minutes.';
+  }
+  if (typeof pricePerUnitValue !== 'boolean') {
+    fieldErrors.pricePerUnit = 'Charge per unit must be enabled or disabled.';
+  }
+  if (typeof unitLabelValue !== 'string' || unitLabelValue.trim().length > 40) {
+    fieldErrors.unitLabel = 'Unit name must be 40 characters or fewer.';
+  } else if (pricePerUnitValue && !unitLabelValue.trim()) {
+    fieldErrors.unitLabel = 'Unit name is required when charging per unit.';
+  }
+  if (!hasNumber(maxUnitsValue) || !Number.isInteger(maxUnits) || maxUnits < 1 || maxUnits > 10) {
+    fieldErrors.maxUnits = 'Maximum units must be a whole number from 1 to 10.';
+  }
+  if (typeof scaleDurationValue !== 'boolean') {
+    fieldErrors.scaleDuration = 'Longer duration must be enabled or disabled.';
   }
 
   return fieldErrors;

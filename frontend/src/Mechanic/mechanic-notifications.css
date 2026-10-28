@@ -1,0 +1,104 @@
+.mechanic-notification-wrap {
+  position: relative;
+}
+
+.mechanic-header .mechanic-notification-wrap .mechanic-notification-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  width: min(360px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 420px);
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 15px 40px #1e25412e;
+}
+
+.mechanic-notification-popover-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.mechanic-notification-popover-header strong {
+  font-size: 14px;
+}
+
+.mechanic-notification-list {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.mechanic-notification {
+  min-width: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  border-radius: 0;
+}
+
+.mechanic-notification.unread {
+  border-left-color: var(--violet);
+  background: #faf9ff;
+}
+
+.mechanic-notification .notification-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mechanic-notification .notification-message {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.mechanic-notification .notification-timestamp {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.mechanic-notification-empty {
+  margin: 0;
+  padding: 12px 14px;
+  color: var(--muted);
+}
+
+.mechanic-notification-popover-header > button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+@media (max-width: 620px) {
+  .mechanic-header .mechanic-notification-wrap .mechanic-notification-popover {
+    right: 0;
+    width: min(360px, calc(100vw - 24px));
+  }
+}

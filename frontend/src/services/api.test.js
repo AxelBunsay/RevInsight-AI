@@ -31,6 +31,25 @@ describe('customer payment submission', () => {
     expect(options.body.get('reference')).toBe('1234567890');
     expect(options.body.get('proof').type).toBe('image/png');
   });
+
+  it('loads public GCash settings without attaching a private token', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => 'customer-token'),
+      removeItem: vi.fn()
+    });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ success: true, settings: { gcashQrUrl: 'https://images.example/qr.png' } }),
+    }));
+
+    await api.getPaymentSettings();
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toContain('/api/payment-settings');
+    expect(options.headers.get('Authorization')).toBeNull();
+    expect(options.cache).toBe('no-store');
+  });
 });
 
 describe('request authentication expiry handling', () => {

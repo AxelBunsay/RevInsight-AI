@@ -192,7 +192,7 @@
   margin-left: 240px;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding: 24px 22px max(36px, env(safe-area-inset-bottom));
+  padding: 24px clamp(16px, 2.5vw, 40px) max(36px, env(safe-area-inset-bottom));
   transition: margin-left 200ms ease, width 200ms ease;
 }
 
@@ -254,9 +254,12 @@
   z-index: 100;
   top: calc(100% + 10px);
   right: 0;
-  width: min(360px, calc(100vw - 28px));
-  max-height: 420px;
-  overflow: auto;
+  width: min(360px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
   border: 1px solid #eadfd5;
   border-radius: 12px;
   background: #fff;
@@ -265,10 +268,15 @@
 }
 
 .admin-root .admin-notification-popover-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
+  border-bottom: 1px solid #f0e8e1;
+  background: #fff;
 }
 
 .admin-root .admin-notification-popover-header button {
@@ -285,29 +293,36 @@
   cursor: default;
 }
 
-.admin-root .admin-notification-popover ul { margin: 0; padding: 0; list-style: none; }
+.admin-root .admin-notification-popover ul { min-width: 0; margin: 0; padding: 0; list-style: none; }
 .admin-root .admin-notification-popover li { border-top: 1px solid #f0e8e1; }
 .admin-root .admin-notification-popover li.is-unread { background: #fff6eb; }
 .admin-root .admin-notification-popover li button {
-  display: grid;
+  display: block;
+  box-sizing: border-box;
   width: 100%;
-  gap: 6px;
+  min-width: 0;
   padding: 12px 14px;
   border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
-  font-size: 13px;
-  line-height: 1.45;
   cursor: pointer;
 }
-.admin-root .admin-notification-popover small { color: #817268; font-size: 11px; }
+.admin-root .notification-content { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.admin-root .notification-message { min-width: 0; margin: 0; color: inherit; white-space: normal; overflow-wrap: anywhere; line-height: 1.4; font-size: 14px; word-break: normal; }
+.admin-root .notification-timestamp { display: block; color: #817268; font-size: 11px; line-height: 1.3; white-space: normal; }
 .admin-root .admin-notification-empty,
 .admin-root .admin-notification-popover > p { margin: 0; padding: 12px 14px; color: #817268; font-size: 13px; }
 .admin-root .reservation-gcash-qr-preview { display: block; width: 120px; height: 120px; margin-top: 8px; object-fit: contain; }
 .admin-root .transaction-needs-review { display: block; margin-top: 4px; color: #bc4a08; font-weight: 700; }
 
-.admin-root .admin-page { width: min(100%, 1200px); min-width: 0; margin: 0 auto; }
+.admin-root .admin-page,
+.admin-root .admin-management-page {
+  width: 100%;
+  max-width: 1800px;
+  min-width: 0;
+  margin: 0 auto;
+}
 
 @media (min-width: 761px) {
   .admin-root .sidebar { width: 240px; }
@@ -377,11 +392,13 @@
   .admin-root .sidebar.collapsed + .admin-main {
     width: calc(100% - 72px);
     margin-left: 72px;
-    padding: 20px 18px max(32px, env(safe-area-inset-bottom));
+    padding: 20px clamp(16px, 2.5vw, 40px) max(32px, env(safe-area-inset-bottom));
   }
 }
 
 @media (max-width: 540px) {
   .admin-root .admin-main,
-  .admin-root .sidebar.collapsed + .admin-main { padding: 18px 12px max(28px, env(safe-area-inset-bottom)); }
+  .admin-root .sidebar.collapsed + .admin-main {
+    padding: 18px clamp(16px, 2.5vw, 40px) max(28px, env(safe-area-inset-bottom));
+  }
 }

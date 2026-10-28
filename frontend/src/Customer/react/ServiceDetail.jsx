@@ -3,6 +3,9 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import { formatServiceName } from '../../utils/servicePricing';
+import { calculateServiceAmounts } from '../../utils/servicePricing';
+import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
 import '../styles/customer-flow.css';
 
@@ -69,7 +72,9 @@ export default function ServiceDetail() {
   const { serviceId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  const { addCartItem, replaceCartItem, vehicles, addVehicle } = useCustomerPrototype();
+  const { addCartItem, replaceCartItem, vehicles, addVehicle, cart } = useCustomerPrototype();
+  const editCartKey = location.state?.editCartKey || location.state?.replaceBookingKey;
+  const editingCartItem = cart.find((item) => item.key === editCartKey);
   const [service, setService] = useState(null);
   const [serviceError, setServiceError] = useState('');
   const [loadedServiceId, setLoadedServiceId] = useState('');
@@ -79,11 +84,12 @@ export default function ServiceDetail() {
     const action = location.state?.resumeAction ? readCustomerAuthAction() : null;
     return action?.type === 'service' && action.serviceId === serviceId
       ? action.date
-      : location.state?.bookingDate || manilaDateKey();
+      : editingCartItem?.bookingDate || location.state?.bookingDate || manilaDateKey();
   });
-  const [timeSlot, setTimeSlot] = useState('');
-  const [vehicle, setVehicle] = useState('');
-  const [notes, setNotes] = useState('');
+  const [timeSlot, setTimeSlot] = useState(editingCartItem?.startTime || '');
+  const [vehicle, setVehicle] = useState(editingCartItem?.vehicle || '');
+  const [notes, setNotes] = useState(editingCartItem?.notes || '');
+  const [units, setUnits] = useState(editingCartItem?.units || 1);
   const [schedule, setSchedule] = useState(null);
   const [slots, setSlots] = useState([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(true);
@@ -103,6 +109,11 @@ export default function ServiceDetail() {
     let active = true;
     api.getService(serviceId).then((response) => {
       if (active) {
+        setUnits(editingCartItem?.units || 1);
+        setBookingDate(editingCartItem?.bookingDate || location.state?.bookingDate || manilaDateKey());
+        setTimeSlot(editingCartItem?.startTime || '');
+        setVehicle(editingCartItem?.vehicle || '');
+        setNotes(editingCartItem?.notes || '');
         setService(response.service);
         setServiceError('');
       }
@@ -114,9 +125,18 @@ export default function ServiceDetail() {
       if (active) setLoadedServiceId(serviceId);
     });
     return () => { active = false; };
-  }, [serviceId, serviceRetryKey]);
+  }, [
+    editingCartItem?.bookingDate,
+    editingCartItem?.notes,
+    editingCartItem?.startTime,
+    editingCartItem?.units,
+    editingCartItem?.vehicle,
+    location.state?.bookingDate,
+    serviceId,
+    serviceRetryKey
+  ]);
 
-  const loadSlots = useCallback(async (date) => {
+  const loadSlots = useCallback(async (date, requestedUnits = units) => {
     const requestId = ++slotRequestRef.current;
     if (!date) {
       setSchedule(null);
@@ -131,11 +151,19 @@ export default function ServiceDetail() {
     setAvailabilityError('');
     setTimeSlot('');
     try {
-      const response = await api.getServiceSlots(serviceId, date);
+      const response = await api.getServiceSlots(serviceId, date, requestedUnits);
       if (requestId !== slotRequestRef.current) return;
       setSchedule(response);
       setSlots(response.slots || []);
       setClosedMessage(response.open ? '' : response.closedMessage || '');
+      if (editingCartItem && editingCartItem.bookingDate === date) {
+        const existingTime = editingCartItem.startTime || '';
+        const existingSlot = response.slots?.find((slot) => slot.startTime === existingTime);
+        setTimeSlot(existingTime);
+        if (!existingSlot || existingSlot.status !== 'available') {
+          setBookingError('That time was just booked. Please choose another.');
+        }
+      }
       if (resumeRequestedRef.current) {
         const action = readCustomerAuthAction();
         if (action?.type === 'service' && action.serviceId === serviceId && action.date === date && action.returnPath === location.pathname) {
@@ -175,7 +203,7 @@ export default function ServiceDetail() {
     } finally {
       if (requestId === slotRequestRef.current) setIsLoadingSlots(false);
     }
-  }, [location.pathname, navigate, serviceId]);
+  }, [editingCartItem, location.pathname, navigate, serviceId, units]);
 
   useEffect(() => {
     if (service) void Promise.resolve().then(() => loadSlots(bookingDate));
@@ -200,7 +228,12 @@ export default function ServiceDetail() {
     setServiceRetryKey((key) => key + 1);
   }}>Try again</button></CustomerPage>;
 
-  const durationLabel = formatDuration(service.durationMinutes);
+  const durationMinutes = Number(service.durationMinutes || 60) * (service.pricePerUnit && service.scaleDuration !== false ? units : 1);
+  const durationLabel = formatDuration(durationMinutes);
+  const serviceAmounts = calculateServiceAmounts(service.price, service.mechanicFee, units);
+  const unitPromptLabel = (service.unitLabel || 'unit').endsWith('s')
+    ? service.unitLabel
+    : `${service.unitLabel || 'unit'}s`;
   const handleDateChange = (event) => {
     const nextDate = event.target.value;
     slotRequestRef.current += 1;
@@ -229,7 +262,7 @@ export default function ServiceDetail() {
       for (let offset = 1; offset <= nextDateLimit; offset += 1) {
         const date = addDays(bookingDate || today, offset);
         if (date > maximumDate) break;
-        const response = await api.getServiceSlots(serviceId, date);
+        const response = await api.getServiceSlots(serviceId, date, units);
         if (requestId !== nextAvailableRequestRef.current) return;
         const availableSlot = response.slots?.find((slot) => slot.status === 'available');
         if (availableSlot) {
@@ -274,7 +307,7 @@ export default function ServiceDetail() {
     }
     setBookingError('');
     try {
-      const latest = await api.getServiceSlots(service._id, bookingDate);
+      const latest = await api.getServiceSlots(service._id, bookingDate, units);
       const currentSlot = latest.slots?.find((slot) => slot.startTime === timeSlot);
       if (!currentSlot || currentSlot.status !== 'available') {
         setBookingError('That time was just booked. Please choose another.');
@@ -286,9 +319,13 @@ export default function ServiceDetail() {
         kind: 'service',
         id: service._id,
         serviceId: service._id,
-        name: service.name,
-        price: service.price,
-        mechanicFee: service.mechanicFee,
+        name: formatServiceName(service.name, service.pricePerUnit ? units : 1, service.unitLabel),
+        price: serviceAmounts.servicePriceTotal,
+        unitPrice: Number(service.price),
+        mechanicFee: serviceAmounts.mechanicFeeTotal,
+        unitMechanicFee: Number(service.mechanicFee),
+        ...serviceAmounts,
+        ...(service.pricePerUnit ? { units, unitLabel: service.unitLabel } : {}),
         category: service.category,
         duration: durationLabel,
         durationMinutes: service.durationMinutes,
@@ -300,10 +337,9 @@ export default function ServiceDetail() {
         vehicle: vehicle.trim(),
         notes
       };
-      const replaceBookingKey = location.state?.replaceBookingKey;
-      if (replaceBookingKey) replaceCartItem(replaceBookingKey, cartItem);
+      if (editCartKey) replaceCartItem(editCartKey, cartItem);
       else addCartItem(cartItem);
-      navigate('/customer/cart', { state: { message: `${service.name} booking added to your cart.` } });
+      navigate('/customer/cart', { state: { message: editCartKey ? 'Booking updated.' : `${service.name} booking added to your cart.` } });
     } catch (error) {
       setBookingError(error.message || 'That booking time could not be checked. Please try again.');
       await loadSlots(bookingDate);
@@ -326,12 +362,21 @@ export default function ServiceDetail() {
       <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/services">Services</Link><span>/</span><span>{service.category || 'General'}</span><span>/</span><span>{service.name}</span></nav>
       <section className="customer-detail-layout customer-service-detail">
         <div className="customer-detail-art tone-sun" aria-label={`${service.name} service illustration`}><span aria-hidden="true">🔧</span><small>{durationLabel}</small></div>
-        <div className="customer-detail-copy"><p className="customer-eyebrow">{service.category || 'General'} · {durationLabel}</p><h1>{service.name}</h1><p>{service.description}</p><strong className="customer-detail-price">₱{Number(service.price).toLocaleString('en-PH')}</strong>
+        <div className="customer-detail-copy"><p className="customer-eyebrow">{service.category || 'General'} · {durationLabel}</p><h1>{service.name}</h1><p>{service.description}</p><strong className="customer-detail-price">Total {`₱${Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}`}</strong>
           <h2>What&apos;s included</h2><ul className="customer-inclusion-list"><li>{service.description || 'Service details available at the shop.'}</li></ul>
         </div>
       </section>
       <section className="customer-booking-panel">
         <div className="customer-flow-section-heading"><div><p className="customer-eyebrow">BOOK A SERVICE</p><h2>Book a time</h2></div><span>{durationLabel} · all times Manila time</span></div>
+        {service.pricePerUnit && <p className="customer-service-unit-price">{`₱${Number(service.price).toLocaleString('en-PH')} + ₱${Number(service.mechanicFee || 0).toLocaleString('en-PH')} mechanic fee per ${service.unitLabel}`}</p>}
+        <ServicePriceBreakdown {...serviceAmounts} />
+        {service.pricePerUnit && <label className="customer-service-units">How many {unitPromptLabel}?
+          <span className="customer-quantity-control">
+            <button type="button" aria-label="Decrease service units" disabled={units <= 1} onClick={() => setUnits((value) => Math.max(1, value - 1))}>−</button>
+            <output>{units}</output>
+            <button type="button" aria-label="Increase service units" disabled={units >= Number(service.maxUnits || 2)} onClick={() => setUnits((value) => Math.min(Number(service.maxUnits || 2), value + 1))}>+</button>
+          </span>
+        </label>}
         <div className="customer-booking-fields">
           <label>Booking date<input type="date" min={today} max={maximumDate} value={bookingDate} onChange={handleDateChange} required />{closedMessage && <small className="customer-field-error" role="status">{closedMessage}</small>}</label>
           <div className="customer-motorcycle-field">
@@ -370,10 +415,10 @@ export default function ServiceDetail() {
           {!isLoadingSlots && !closedMessage && !availabilityError && slots.length === 0 && <p className="customer-empty">No booking times fit this service on the selected date.</p>}
           {allSlotsUnavailable && <div className="customer-no-slots"><p>No slots left on this date</p><button type="button" className="customer-secondary-button" onClick={handleNextAvailable} disabled={isFindingNext}>{isFindingNext ? 'Finding a date...' : 'Show next available'}</button></div>}
         </fieldset>
-        <label className="customer-notes-field">Notes for the mechanic<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" /></label>
+        <label className="customer-notes-field">Notes for the mechanic<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" /><small>{service.pricePerUnit ? 'Notes do not change the price. Choose the quantity above.' : 'Notes do not change the service price.'}</small></label>
         <div className="customer-booking-summary">
           <p>{summary}</p>
-          <div className="customer-booking-footer"><p>Estimated total <strong>₱{Number(service.price).toLocaleString('en-PH')}</strong></p>          <button type="button" className="customer-primary-button" disabled={!canAddBooking} onClick={addBooking}>Add booking to cart</button></div>
+          <div className="customer-booking-footer"><p>Estimated total <strong>₱{Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}</strong></p>          <button type="button" className="customer-primary-button" disabled={!canAddBooking} onClick={addBooking}>{editCartKey ? 'Update booking' : 'Add booking to cart'}</button></div>
           {!canAddBooking && <small className="customer-booking-hint">{missingBookingChoice || (closedMessage ? 'Choose an open date.' : 'Choose an available time to continue.')}</small>}
         </div>
       </section>

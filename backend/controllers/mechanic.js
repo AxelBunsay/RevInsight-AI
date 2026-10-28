@@ -33,7 +33,7 @@ const getMechanicsSummary = async (req, res) => {
                       { $lt: ['$completedAt', manilaEnd] }
                     ]
                   },
-                  { $ifNull: ['$laborFee', 0] },
+                  { $ifNull: ['$mechanicFeeTotal', { $ifNull: ['$laborFee', 0] }] },
                   0
                 ]
               }

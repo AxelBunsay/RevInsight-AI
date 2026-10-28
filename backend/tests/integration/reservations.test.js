@@ -693,4 +693,82 @@ describe('reservation business flow integration', () => {
     expect(response.status).toBe(404);
     expect(response.body.message).toBe('Reservation not found.');
   });
+
+  const reservationSettingsPayload = (overrides = {}) => ({
+    downPaymentPercent: 30,
+    pendingPaymentHours: 24,
+    holdDays: 3,
+    paymentInstructions: {
+      methodName: 'GCash',
+      accountName: 'Integration Shop',
+      accountNumber: '09170000000'
+    },
+    pickupAddress: '',
+    pickupHours: '',
+    contactNumber: '0900 000 0000',
+    ...overrides
+  });
+
+  it('rejects pickup addresses over 150 characters with a field-specific error', async () => {
+    const response = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ pickupAddress: 'A'.repeat(151) }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.fieldErrors.pickupAddress).toBe('Pickup address must be 150 characters or fewer.');
+    expect(response.body.message).toBe('Pickup address must be 150 characters or fewer.');
+  });
+
+  it('rejects pickup hours over 80 characters with a field-specific error', async () => {
+    const response = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ pickupHours: 'H'.repeat(81) }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.fieldErrors.pickupHours).toBe('Pickup hours must be 80 characters or fewer.');
+    expect(response.body.message).toBe('Pickup hours must be 80 characters or fewer.');
+  });
+
+  it('rejects shop contact numbers over 40 characters and disallowed characters', async () => {
+    const tooLong = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ contactNumber: '1'.repeat(41) }));
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.fieldErrors.contactNumber).toBe('Shop contact number must be 40 characters or fewer.');
+
+    const invalid = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ contactNumber: '0917-ABC-1234' }));
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.fieldErrors.contactNumber)
+      .toBe('Shop contact number may contain only digits, spaces, +, -, and parentheses.');
+  });
+
+  it('saves and returns the pickup address, hours and shop contact number', async () => {
+    const pickupAddress = 'Unit 4, 44 Long Road, Barangay San Isidro, Quezon City';
+    const response = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({
+        pickupAddress,
+        pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
+        contactNumber: '+63 (917) 123-4567'
+      }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.settings).toMatchObject({
+      pickupAddress,
+      pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
+      contactNumber: '+63 (917) 123-4567'
+    });
+
+    const customerSettings = await api.get('/api/reservations/shop-settings');
+    expect(customerSettings.status).toBe(200);
+    expect(customerSettings.body.settings).toMatchObject({
+      pickupAddress,
+      pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
+      contactNumber: '+63 (917) 123-4567'
+    });
+  });
+
+  it('includes the saved shop contact number when loading the admin reservation settings form', async () => {
+    const response = await adminGet('/api/admin/reservations/settings');
+
+    expect(response.status).toBe(200);
+    expect(response.body.settings.contactNumber).toBe(fixtures.settings.contactNumber);
+  });
 });

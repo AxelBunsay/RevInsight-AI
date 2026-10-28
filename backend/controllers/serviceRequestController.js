@@ -95,14 +95,16 @@ const syncCompletedServiceBusinessRecord = async (serviceRequest, session = null
     sourceId: serviceRequest._id,
     customer: customerName,
     customerPhone: user?.phoneNumber || "",
-    itemName: serviceRequest.serviceType,
+    itemName: serviceRequest.pricePerUnit && Number(serviceRequest.units) > 1
+      ? `${serviceRequest.serviceType} x${serviceRequest.units} ${serviceRequest.unitLabel || "unit"}${String(serviceRequest.unitLabel || "").endsWith("s") ? "" : "s"}`
+      : serviceRequest.serviceType,
     category: "Service Booking",
     mechanicId: serviceRequest.mechanicId || serviceRequest.mechanic || null,
     mechanicName: mechanic
       ? `${mechanic.firstName || ""} ${mechanic.lastName || ""}`.trim()
       : "",
     amount: Number(serviceRequest.estimatedPrice) || 0,
-    laborFee: Number(serviceRequest.laborFee) || 0,
+    laborFee: Number(serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
     status: serviceRequest.status,
     completedAt:
       serviceRequest.completedAt ||

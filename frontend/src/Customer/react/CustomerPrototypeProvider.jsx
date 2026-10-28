@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CustomerPrototypeContext } from './CustomerPrototypeContext';
+import { replaceServiceCartItem as replaceServiceCartItemInList } from './serviceCart';
 
 const STORAGE_KEY = 'revinsightCustomerPrototype';
 function readInitialState() {
@@ -34,7 +35,11 @@ export function CustomerPrototypeProvider({ children }) {
     setState((current) => {
       const existing = current.cart.find((entry) => entry.key === key);
       const cart = existing
-        ? current.cart.map((entry) => entry.key === key ? { ...entry, quantity: Math.min(entry.quantity + (item.quantity || 1), entry.stock ?? Infinity) } : entry)
+        ? current.cart.map((entry) => entry.key === key
+          ? item.kind === 'service'
+            ? { ...item, key, quantity: 1 }
+            : { ...entry, quantity: Math.min(entry.quantity + (item.quantity || 1), entry.stock ?? Infinity) }
+          : entry)
         : [...current.cart, { ...item, key, quantity: item.kind === 'service' ? 1 : item.quantity || 1 }];
       return { ...current, cart };
     });
@@ -61,17 +66,18 @@ export function CustomerPrototypeProvider({ children }) {
         }
       : item)
   })), []);
+  const updateCartItemDetails = useCallback((key, details) => setState((current) => ({
+    ...current,
+    cart: current.cart.map((item) => item.key === key ? { ...item, ...details } : item)
+  })), []);
 
   const removeCartItem = (key) => setState((current) => ({ ...current, cart: current.cart.filter((item) => item.key !== key) }));
   const replaceCartItem = (key, item) => {
-    const nextKey = item.kind === 'service'
-      ? `${item.id}:${item.bookingDate}:${item.startTime}`
-      : item.variantId ? `${item.id}:${item.variantId}` : item.id;
     setState((current) => ({
       ...current,
-      cart: current.cart
-        .filter((entry) => entry.key !== key && entry.key !== nextKey)
-        .concat({ ...item, key: nextKey, quantity: item.kind === 'service' ? 1 : item.quantity || 1 })
+      cart: item.kind === 'service'
+        ? replaceServiceCartItemInList(current.cart, key, item).cart
+        : current.cart.map((entry) => entry.key === key ? { ...item, key, quantity: item.quantity || 1 } : entry)
     }));
   };
   const toggleWishlist = (productId) => setState((current) => ({
@@ -93,7 +99,7 @@ export function CustomerPrototypeProvider({ children }) {
   };
 
   return (
-    <CustomerPrototypeContext.Provider value={{ ...state, addCartItem, updateCartItem, setCartItemStock, removeCartItem, replaceCartItem, toggleWishlist, updateProfile, addVehicle, clearCustomerData }}>
+    <CustomerPrototypeContext.Provider value={{ ...state, addCartItem, updateCartItem, setCartItemStock, updateCartItemDetails, removeCartItem, replaceCartItem, toggleWishlist, updateProfile, addVehicle, clearCustomerData }}>
       {children}
     </CustomerPrototypeContext.Provider>
   );
