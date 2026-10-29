@@ -760,6 +760,7 @@ const getPublicSettings = async (req, res) => {
       success: true,
       settings: {
         downPaymentPercent: settings.downPaymentPercent,
+        serviceDownPaymentPercent: settings.serviceDownPaymentPercent ?? settings.downPaymentPercent,
         pendingPaymentHours: settings.pendingPaymentHours,
         holdDays: settings.holdDays,
         paymentInstructions: {
@@ -815,6 +816,7 @@ const getShopSettings = async (req, res) => {
       success: true,
       settings: {
         downPaymentPercent: settings.downPaymentPercent,
+        serviceDownPaymentPercent: settings.serviceDownPaymentPercent ?? settings.downPaymentPercent,
         pickupAddress: settings.pickupAddress,
         pickupHours: settings.pickupHours,
         contactNumber: settings.contactNumber
@@ -890,8 +892,13 @@ const updateBookingSchedule = async (req, res) => {
 const updateSettings = async (req, res) => {
   try {
     const { downPaymentPercent, pendingPaymentHours, holdDays, paymentInstructions, pickupAddress, pickupHours, contactNumber } = req.body || {};
+    const currentSettings = await getSettings();
+    const serviceDownPaymentPercent = Object.prototype.hasOwnProperty.call(req.body || {}, 'serviceDownPaymentPercent')
+      ? req.body.serviceDownPaymentPercent
+      : currentSettings.serviceDownPaymentPercent ?? currentSettings.downPaymentPercent;
     const fieldErrors = {};
     if (!Number.isInteger(downPaymentPercent) || downPaymentPercent < 10 || downPaymentPercent > 100) fieldErrors.downPaymentPercent = 'Down payment percent must be a whole number from 10 to 100.';
+    if (!Number.isInteger(serviceDownPaymentPercent) || serviceDownPaymentPercent < 0 || serviceDownPaymentPercent > 100) fieldErrors.serviceDownPaymentPercent = 'Service down payment percent must be a whole number from 0 to 100.';
     if (!Number.isInteger(pendingPaymentHours) || pendingPaymentHours < 1 || pendingPaymentHours > 720) fieldErrors.pendingPaymentHours = 'Payment deadline must be a whole number from 1 to 720 hours.';
     if (!Number.isInteger(holdDays) || holdDays < 1 || holdDays > 30) fieldErrors.holdDays = 'Pickup hold days must be a whole number from 1 to 30.';
     if (!paymentInstructions || typeof paymentInstructions !== 'object') fieldErrors.paymentInstructions = 'GCash payment details are required.';
@@ -924,7 +931,6 @@ const updateSettings = async (req, res) => {
       });
     }
 
-    const currentSettings = await getSettings();
     const savedPaymentInstructions = {
       ...paymentInstructions,
       qrImageUrl: currentSettings.paymentInstructions.qrImageUrl || '',
@@ -934,6 +940,7 @@ const updateSettings = async (req, res) => {
       { key: 'reservation' },
       { $set: {
         downPaymentPercent,
+        serviceDownPaymentPercent,
         pendingPaymentHours,
         holdDays,
         paymentInstructions: savedPaymentInstructions,

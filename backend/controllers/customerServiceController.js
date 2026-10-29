@@ -2,6 +2,7 @@ const Service = require('../models/service');
 const ServiceRequest = require('../models/serviceRequest');
 const ReservationSettings = require('../models/reservationSettings');
 const mongoose = require('mongoose');
+const { calculateServicePayment } = require('../utils/servicePayment');
 const {
   countActiveBookings,
   readSlotCount,
@@ -84,7 +85,8 @@ const buildScheduleInfo = async () => {
     closeTime: settings.closeTime,
     slotCapacity: settings.slotCapacity,
     maxDaysAhead: settings.maxDaysAhead,
-    pendingPaymentHours: settings.pendingPaymentHours
+    pendingPaymentHours: settings.pendingPaymentHours,
+    serviceDownPaymentPercent: settings.serviceDownPaymentPercent ?? settings.downPaymentPercent
   };
 };
 
@@ -275,6 +277,10 @@ const createServiceBookings = async (req, res) => {
             const unitMechanicFee = Number(configuredService.mechanicFee) || 0;
             const servicePriceTotal = unitPrice * units;
             const mechanicFeeTotal = unitMechanicFee * units;
+            const paymentSnapshot = calculateServicePayment(
+              servicePriceTotal + mechanicFeeTotal,
+              schedule.serviceDownPaymentPercent
+            );
             const serviceDurationMinutes = durationInMinutes(configuredService, units);
             const startMinutes = timeToMinutes(booking.startTime);
             const endTime = minutesToTime(startMinutes + serviceDurationMinutes);
@@ -312,11 +318,17 @@ const createServiceBookings = async (req, res) => {
               unitMechanicFee,
               servicePriceTotal,
               mechanicFeeTotal,
-              estimatedPrice: servicePriceTotal + mechanicFeeTotal,
+              estimatedPrice: paymentSnapshot.totalAmount,
+              ...paymentSnapshot,
+              amountPaid: 0,
+              paymentStatus: paymentSnapshot.downPaymentAmount === 0 ? 'Confirmed' : 'Payment Pending',
+              paymentMethod: paymentSnapshot.downPaymentAmount === 0 ? 'No upfront payment required' : '',
               laborFee: mechanicFeeTotal,
               durationMinutes: serviceDurationMinutes,
               createdAt,
-              paymentDueAt: new Date(createdAt.getTime() + schedule.pendingPaymentHours * 60 * 60 * 1000),
+              paymentDueAt: paymentSnapshot.downPaymentAmount === 0
+                ? null
+                : new Date(createdAt.getTime() + schedule.pendingPaymentHours * 60 * 60 * 1000),
               scheduledDate: dayRange.start,
               startTime: booking.startTime,
               endTime,

@@ -83,7 +83,7 @@ export function CustomerHeader() {
     || currentPath.startsWith('/customer/order-confirmation');
 
   return <header className="customer-header">
-    <Link className="customer-brand" to="/customer/shop"><span className="customer-brand__mark" aria-hidden="true">🔧</span><span className="customer-brand__copy"><strong>Manoy&apos;s Motorcycle</strong><small>Parts, Accessories &amp; Services</small></span></Link>
+    <Link className="customer-brand" to="/customer/shop"><span className="customer-brand__mark" aria-hidden="true">🔧</span><span className="customer-brand__copy"><strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
     <button type="button" className="customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => setIsMenuOpen((open) => !open)}>
       <span /><span /><span />
     </button>
@@ -168,7 +168,7 @@ export function CustomerPage({ title, description, children, includeHeader = tru
     <main className={`customer-page ${title === 'Motorcycle Shop' ? 'shop-page' : ''} ${title === 'Motorcycle Services' ? 'services-page' : ''} ${title === 'My Purchases' || title === 'My Reservations' ? 'orders-page reservations-page' : ''} ${title === 'Profile' || title === 'Account' ? 'profile-page' : ''}`}>
       {includeHeader && <CustomerHeader />}
       <section className="customer-heading">
-        <p className="customer-eyebrow">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>
+        {title !== 'Account' && <p className="customer-eyebrow">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}
         <h1>{title}</h1>
         <p>{description}</p>
       </section>

@@ -7,6 +7,7 @@ const paymentSubmissionSchema = new mongoose.Schema({
   submittedAt: { type: Date, required: true },
   status: { type: String, enum: ['Payment Submitted', 'Confirmed', 'Rejected'], default: 'Payment Submitted' },
   rejectionReason: { type: String, default: '' },
+  amount: { type: Number, min: 0 },
   reviewedAt: { type: Date, default: null },
   reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null }
 }, { _id: true });
@@ -50,6 +51,11 @@ const serviceRequestSchema = new mongoose.Schema({
     min: 0,
     default: 0
   },
+  totalAmount: { type: Number, min: 0 },
+  downPaymentPercent: { type: Number, min: 0, max: 100 },
+  downPaymentAmount: { type: Number, min: 0 },
+  balanceDue: { type: Number, min: 0 },
+  amountPaid: { type: Number, min: 0 },
   units: { type: Number, min: 1, max: 10, default: 1 },
   pricePerUnit: { type: Boolean, default: false },
   unitLabel: { type: String, trim: true, maxlength: 40, default: 'unit' },

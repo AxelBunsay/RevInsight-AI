@@ -6,6 +6,8 @@ import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
 import { serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
+import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
+import { calculateServicePayment, getServicePaymentSummary } from '../../utils/servicePayment';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -33,6 +35,8 @@ export default function Checkout() {
   const productSubtotal = productItems.reduce((total, item) => total + item.price * item.quantity, 0);
   const serviceTotal = serviceItems.reduce((total, item) => total + Number(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)), 0);
   const downPaymentAmount = Math.round((productSubtotal * (settings?.downPaymentPercent ?? 30) / 100 + Number.EPSILON) * 100) / 100;
+  const serviceDownPaymentPercent = settings?.serviceDownPaymentPercent ?? settings?.downPaymentPercent ?? 30;
+  const servicePaymentEstimate = calculateServicePayment(serviceTotal, serviceDownPaymentPercent);
 
   useEffect(() => {
     let isMounted = true;
@@ -203,11 +207,14 @@ export default function Checkout() {
                 <div>
                   <strong>{result.cartItem?.name || result.serviceRequest?.serviceType || 'Service booking'}</strong>
                   <small>{result.cartItem?.units ? `${serviceUnitSummary(result.cartItem.units, result.cartItem.unitLabel)} · ` : ''}{result.cartItem?.bookingDate} · {result.cartItem?.timeSlot}</small>
-                  {result.ok && <ServicePriceBreakdown
-                    servicePriceTotal={result.serviceRequest?.servicePriceTotal}
-                    mechanicFeeTotal={result.serviceRequest?.mechanicFeeTotal}
-                    estimatedPrice={result.serviceRequest?.estimatedPrice}
-                  />}
+                  {result.ok && <>
+                    <ServicePriceBreakdown
+                      servicePriceTotal={result.serviceRequest?.servicePriceTotal}
+                      mechanicFeeTotal={result.serviceRequest?.mechanicFeeTotal}
+                      estimatedPrice={result.serviceRequest?.estimatedPrice}
+                    />
+                    <ServicePaymentBreakdown booking={result.serviceRequest} />
+                  </>}
                 </div>
                 {result.ok
                   ? <div><p>Request created · {result.serviceRequest?.code || result.serviceRequest?._id} · {result.serviceRequest?.paymentStatus || 'Payment Pending'}</p>
@@ -217,8 +224,17 @@ export default function Checkout() {
               </article>)}
               <Link className="customer-secondary-button" to="/customer/profile">View your bookings</Link>
             </section>}
-            <div className="customer-review-lines">{serviceItems.map((item) => <div key={item.key}><span><strong>{item.name}</strong><small>{item.units ? `${serviceUnitSummary(item.units, item.unitLabel)} · ` : ''}{item.bookingDate} · {item.timeSlot} · {item.vehicle}</small><ServicePriceBreakdown servicePriceTotal={item.servicePriceTotal} mechanicFeeTotal={item.mechanicFeeTotal} estimatedPrice={item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)} /></span></div>)}</div>
-            <div className="customer-review-meta"><p><span>Service total</span><strong>{money(serviceTotal)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>
+            <div className="customer-review-lines">{serviceItems.map((item) => {
+              const itemTotal = item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0);
+              const itemPaymentEstimate = calculateServicePayment(itemTotal, serviceDownPaymentPercent);
+              return <div key={item.key}><span>
+                <strong>{item.name}</strong>
+                <small>{item.units ? `${serviceUnitSummary(item.units, item.unitLabel)} · ` : ''}{item.bookingDate} · {item.timeSlot} · {item.vehicle}</small>
+                <ServicePriceBreakdown servicePriceTotal={item.servicePriceTotal} mechanicFeeTotal={item.mechanicFeeTotal} estimatedPrice={itemTotal} />
+                <ServicePaymentBreakdown booking={itemPaymentEstimate} />
+              </span></div>;
+            })}</div>
+            <div className="customer-review-meta"><p><span>Service total</span><strong>{money(serviceTotal)}</strong></p><p><span>Down payment ({serviceDownPaymentPercent}%)</span><strong>{money(servicePaymentEstimate.downPaymentAmount)}</strong></p><p><span>Balance due at the shop</span><strong>{money(servicePaymentEstimate.balanceDue)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>
             {serviceItems.length > 0 && <div className="customer-checkout-actions"><button type="button" className="customer-secondary-button" onClick={() => setStep('payment')}>Back</button><button type="button" className="customer-primary-button" onClick={completeServiceBooking} disabled={isSubmitting}>{isSubmitting ? 'Submitting bookings...' : `Submit ${serviceItems.length} service booking${serviceItems.length === 1 ? '' : 's'}`}</button></div>}
           </>}
         </section>
@@ -234,7 +250,8 @@ export default function Checkout() {
       {servicePayment && <ReservationPaymentForm
         key={servicePayment.serviceRequest?._id}
         reservation={servicePayment.serviceRequest}
-        amount={servicePayment.serviceRequest?.estimatedPrice}
+        amount={getServicePaymentSummary(servicePayment.serviceRequest).downPaymentAmount}
+        showServiceBreakdown
         settings={settings}
         onSubmit={submitServicePayment}
         onClose={() => setServicePayment(null)}

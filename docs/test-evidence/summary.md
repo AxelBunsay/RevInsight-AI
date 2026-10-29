@@ -10,15 +10,17 @@
 
 **Dependency and dead-file cleanup update:** 2026-10-25 20:12 +08:00
 
+**Service down-payment implementation verification:** 2026-10-29
+
 ## Results
 
 | Phase | Status | Evidence |
 |---|---|---|
 | 1. Legacy payment cleanup | PASS | The obsolete payment controller and route are deleted; server mounts/requires and frontend payment-intent methods are removed. Repository searches found no remaining source or dependency references to the removed integration. |
-| 2. Install and static checks | PASS | Backend install/test and frontend install/lint/test/build completed successfully. Latest complete backend suite: 18 files, 96 passed, 0 failed, 0 skipped, including 29 integration tests. Frontend: 2 files, 7 passed, 0 failed, 0 skipped. |
+| 2. Install and static checks | PASS | Latest complete backend suite: 22 files, 158 passed, 0 failed, 0 skipped. Frontend: 17 files, 49 passed, 0 failed, 0 skipped; lint and production build pass. |
 | 3. Startup check | NOT RUN | Explicitly skipped at the user's direction. No server was started and no live curl requests were made. |
 | 4. Consistency checks | PASS | Inventory captured in [routes.md](./routes.md) and [models.md](./models.md). All 18 backend runtime environment names appear in `backend/.env.example`. |
-| 5. Integration flows | PASS | 4 integration files, 29 passed, 0 failed. Reservation, service, revenue, and security flows use the pinned MongoDB 7.0.14 single-node replica set; Cloudinary is mocked. No Atlas or production database was used. |
+| 5. Integration flows | PASS | Reservation, service, revenue, and security integration flows pass against the pinned MongoDB 7.0.14 single-node in-memory replica set; Cloudinary is mocked. No Atlas or production database was used. |
 | 6. Dependency remediation and dead-file cleanup | PASS | Initial npm audits found 4 backend and 3 frontend vulnerable packages. `npm audit fix` (without `--force`) updated compatible dependency resolutions; both post-fix audits report 0 vulnerabilities. Fourteen confirmed unused frontend files were deleted. |
 
 ## Exact Commands and Outcomes
@@ -42,8 +44,24 @@ Commands were run from the indicated project subdirectory. Node and npm versions
 | `git diff --check` | PASS; no whitespace errors. |
 | `Set-Location backend; npm test -- --run tests/integration/revenue.test.js tests/integration/security.test.js` | PASS, exit code 0; 2 files and 9 tests passed. |
 | `Set-Location backend; npm test` (revenue and security integration additions) | PASS, exit code 0; 18 test files, 96 tests passed, 0 failed, 0 skipped. |
+| `Set-Location backend; npm test -- tests/integration/services.test.js` (service down-payment verification) | PASS, exit code 0; 1 test file, 24 tests passed, 0 failed, 0 skipped (21.66 seconds). |
+| `Set-Location backend; npm test` (service down-payment implementation) | PASS, exit code 0; 22 test files, 158 tests passed, 0 failed, 0 skipped (120.86 seconds). |
+| `Set-Location frontend; npm test` (service payment breakdown and modal tests) | PASS, exit code 0; 17 test files, 49 tests passed, 0 failed, 0 skipped. |
+| `Set-Location frontend; npm run lint` | PASS, exit code 0; no lint errors. |
+| `Set-Location frontend; npm run build` | PASS, exit code 0; Vite 6.4.5 produced a production build. |
+| `git diff --check` | PASS; no whitespace errors. |
 
-The updated integration test subset ran in 8.15 seconds; the complete backend suite ran in 11.84 seconds. The revenue API now explicitly excludes the in-progress Manila quarter and reports `insufficientData` until five completed-quarter buckets are available.
+### Service Down-Payment Changes
+
+The setting is independently configurable from 0–100%, uses the existing item percentage as the fallback for older settings documents, and is snapshotted with each booking. Payment submission and review use the server-computed down payment; legacy bookings without the snapshot remain paid in full upfront. Service revenue remains a single full-total record at completion, with labor revenue limited to the mechanic fee.
+
+Changed files for this implementation:
+
+- Backend: `backend/controllers/customerServiceController.js`, `backend/controllers/reservationController.js`, `backend/controllers/serviceRequestController.js`, `backend/models/reservationSettings.js`, `backend/models/serviceRequest.js`, `backend/utils/servicePayment.js`, `backend/tests/integration/services.test.js`, `backend/tests/serviceBookingHardening.test.js`.
+- Frontend: `frontend/src/admin/pages/Transactions.jsx`, `frontend/src/Customer/react/Checkout.jsx`, `frontend/src/Customer/react/Profile.jsx`, `frontend/src/Customer/react/ReservationDetail.jsx`, `frontend/src/Customer/react/ReservationPaymentForm.jsx`, `frontend/src/Customer/react/ReservationPaymentForm.test.jsx`, `frontend/src/Mechanic/MechanicJobTable.jsx`, `frontend/src/Mechanic/MechanicJobTable.test.jsx`, `frontend/src/components/ServicePaymentBreakdown.jsx`, `frontend/src/components/ServicePaymentBreakdown.test.jsx`, `frontend/src/utils/servicePayment.js`, `frontend/src/Customer/styles/customer-flow.css`.
+- Evidence: `docs/test-evidence/models.md`, `docs/test-evidence/summary.md`, `docs/test-evidence/test-list.md`.
+
+The service integration suite now holds a single stable test clock for the whole suite and derives booking dates relative to the test run, avoiding repeated clock resets during MongoDB transactions. The revenue API explicitly excludes the in-progress Manila quarter and reports `insufficientData` until five completed-quarter buckets are available.
 
 ## Dependency Audit Findings and Remediation
 

@@ -105,6 +105,7 @@ describe('service booking hardening', () => {
       _id: requestId,
       status: 'accepted',
       paymentStatus: 'Confirmed',
+      estimatedPrice: 100,
       save: vi.fn()
     };
     vi.spyOn(mongoose, 'startSession').mockResolvedValue(session);

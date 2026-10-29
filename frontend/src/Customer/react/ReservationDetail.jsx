@@ -6,6 +6,8 @@ import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
 import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
+import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
+import { getServiceBookingStatus, getServicePaymentSummary } from '../../utils/servicePayment';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
@@ -131,14 +133,9 @@ export default function ReservationDetail() {
   </CustomerPage>;
 
   if (serviceBooking) {
-    const paymentPending = (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending';
-    const serviceStatus = serviceBooking.paymentStatus === 'Payment Submitted'
-      ? 'Payment Submitted'
-      : serviceBooking.paymentStatus === 'Payment Pending' && serviceBooking.paymentRejectionReason
-        ? 'Payment Pending'
-      : serviceBooking.paymentStatus === 'Confirmed' && serviceBooking.status === 'pending'
-        ? 'Confirmed'
-        : serviceBooking.status;
+    const paymentPending = (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending'
+      && !['cancelled', 'declined', 'completed'].includes(serviceBooking.status);
+    const serviceStatus = getServiceBookingStatus(serviceBooking);
     return <CustomerPage title="Booking details" description="Review your service booking and payment status.">
       <div className="customer-flow-page">
         <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/profile">Account</Link><span>/</span><span>{serviceBooking.code || serviceBooking._id}</span></nav>
@@ -146,10 +143,10 @@ export default function ReservationDetail() {
         {message && <p className="customer-success" role="status">{message}</p>}
         <section className="customer-reservation-detail-card">
           <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{formatServiceName(serviceBooking.serviceType, serviceBooking.units, serviceBooking.unitLabel)}</h1><p>{serviceBooking.pricePerUnit ? `${serviceUnitSummary(serviceBooking.units || 1, serviceBooking.unitLabel)} · ` : ''}{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
-          <div className="customer-reservation-detail-meta"><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><div><span>Payment</span><strong>{serviceBooking.paymentStatus || 'Payment Pending'}</strong></div><div><span>Reference</span><strong>{serviceBooking.code || serviceBooking._id}</strong></div></div>
+          <div className="customer-reservation-detail-meta"><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /><div><span>Payment</span><strong>{serviceStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
           {serviceBooking.paymentRejectionReason && <p className="customer-error" role="alert">Payment needs attention: {serviceBooking.paymentRejectionReason}</p>}
           {paymentPending && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
-          {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={serviceBooking.estimatedPrice} settings={settings} onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
+          {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={getServicePaymentSummary(serviceBooking).downPaymentAmount} settings={settings} showServiceBreakdown onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
           <Link className="customer-secondary-button" to="/customer/profile">Back to Account</Link>
         </section>
       </div>

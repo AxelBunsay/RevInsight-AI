@@ -1,7 +1,41 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import ReservationPaymentForm from './ReservationPaymentForm';
 import PaymentSettingsDisplay from './PaymentSettingsDisplay';
 import { getPaymentDisplaySettings } from './paymentDisplaySettings';
+
+describe('service booking payment amount', () => {
+  it('shows the saved down payment as the amount to pay', () => {
+    const markup = renderToStaticMarkup(
+      <ReservationPaymentForm
+        reservation={{
+          _id: 'booking-1',
+          estimatedPrice: 333,
+          totalAmount: 333,
+          downPaymentPercent: 50,
+          downPaymentAmount: 166.5,
+          balanceDue: 166.5
+        }}
+        amount={166.5}
+        settings={{
+          paymentInstructions: {
+            methodName: 'GCash',
+            accountName: 'Shop',
+            accountNumber: '09171234567'
+          }
+        }}
+        onSubmit={() => {}}
+        onClose={() => {}}
+        isSaving={false}
+        showServiceBreakdown
+      />
+    );
+
+    expect(markup).toMatch(/Amount to pay[\s\S]*?₱166\.50/);
+    expect(markup).toContain('Total</span><strong>₱333.00');
+    expect(markup).toContain('Down payment (50%)');
+  });
+});
 
 const legacySettings = {
   paymentInstructions: {

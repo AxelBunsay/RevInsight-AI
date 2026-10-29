@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { adminApi as api } from "../services/adminApi";
 import { formatServiceName, serviceUnitSummary } from "../../utils/servicePricing";
 import ServicePriceBreakdown from "../../components/ServicePriceBreakdown";
+import { getServicePaymentSummary, getServiceBookingStatus } from "../../utils/servicePayment";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import TransactionsPageActions from "./TransactionsPageActions";
 import { getItemsPageData, getItemsRequest, itemFilterOptions } from "./itemsTransactionView";
@@ -40,6 +41,7 @@ function formatBusinessRecord(record) {
 
 const defaultReservationSettings = {
   downPaymentPercent: 30,
+  serviceDownPaymentPercent: 30,
   pendingPaymentHours: 24,
   holdDays: 3,
   paymentInstructions: { methodName: "", accountName: "", accountNumber: "", qrImageUrl: "", qrImagePublicId: "" },
@@ -100,15 +102,8 @@ function formatReservationRecord(reservation) {
 function formatServiceRequestRecord(request) {
   const customer = request.user || {};
   const customerName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim();
-  const status = request.paymentStatus === "Payment Submitted"
-    ? "Payment Submitted"
-    : request.paymentStatus === "Payment Pending" && request.paymentRejectionReason
-      ? "Payment Pending"
-      : request.paymentStatus === "Confirmed" && request.status === "pending"
-        ? "Confirmed"
-        : request.paymentStatus === "Paid at shop" && request.status === "pending"
-          ? "Paid at shop"
-        : request.status || "pending";
+  const paymentSummary = getServicePaymentSummary(request);
+  const status = getServiceBookingStatus(request);
   return {
     ...request,
     id: request.code || request._id,
@@ -120,7 +115,13 @@ function formatServiceRequestRecord(request) {
       ? new Date(request.scheduledDate).toLocaleDateString("en-PH")
       : new Date(request.createdAt).toLocaleDateString("en-PH"),
     items: formatServiceName(request.serviceType || "Service booking", request.units, request.unitLabel),
-    amount: Number(request.estimatedPrice || 0),
+    amount: paymentSummary.totalAmount,
+    totalAmount: paymentSummary.totalAmount,
+    paid: paymentSummary.amountPaid,
+    balance: Math.max(0, paymentSummary.totalAmount - paymentSummary.amountPaid),
+    downPaymentAmount: paymentSummary.downPaymentAmount,
+    downPaymentPercent: paymentSummary.downPaymentPercent,
+    amountPaid: paymentSummary.amountPaid,
     status,
     bookingStatus: request.status || "pending",
     mechanic: request.mechanic?.firstName
@@ -129,7 +130,6 @@ function formatServiceRequestRecord(request) {
     paymentStatus: request.paymentStatus || "Payment Pending",
     refundDecision: request.refundDecision || null,
     paymentReference: request.paymentReference || "",
-    downPaymentAmount: Number(request.estimatedPrice || 0)
   };
 }
 
@@ -466,6 +466,7 @@ function Transactions() {
       setSettings({
         ...defaultReservationSettings,
         ...response.settings,
+        serviceDownPaymentPercent: response.settings?.serviceDownPaymentPercent ?? response.settings?.downPaymentPercent ?? defaultReservationSettings.serviceDownPaymentPercent,
         paymentInstructions: {
           ...defaultReservationSettings.paymentInstructions,
           ...response.settings?.paymentInstructions,
@@ -557,6 +558,7 @@ function Transactions() {
       setSettings({
         ...defaultReservationSettings,
         ...response.settings,
+        serviceDownPaymentPercent: response.settings?.serviceDownPaymentPercent ?? response.settings?.downPaymentPercent ?? defaultReservationSettings.serviceDownPaymentPercent,
         paymentInstructions: {
           ...defaultReservationSettings.paymentInstructions,
           ...response.settings?.paymentInstructions,
@@ -628,14 +630,14 @@ function Transactions() {
         }
       }
       const headers = activeTab === "services"
-        ? ["Record ID", "Date", "Customer", "Service", "Mechanic", "Amount", "Status"]
+        ? ["Record ID", "Date", "Customer", "Service", "Mechanic", "Total", "Down payment paid", "Balance to collect", "Status"]
         : activeTab === "items"
           ? ["Record/Reservation ID", "Date", "Customer", "Item(s)", "Total", "Paid", "Balance", "Payment reference", "Status"]
           : ["Record ID", "Date", "Type", "Customer", "Item / Service", "Amount", "Paid", "Balance", "Status", "Mechanic"];
       const exportRows = allRows.map((row) => {
         const transaction = formatBusinessRecord(row);
         if (activeTab === "services") {
-          return [transaction.id, transaction.date, transaction.customer, transaction.items, transaction.mechanic, transaction.amount, transaction.status];
+          return [transaction.id, transaction.date, transaction.customer, transaction.items, transaction.mechanic, transaction.amount, transaction.paid, transaction.balance, transaction.status];
         }
         if (activeTab === "items") {
           return [transaction.code || transaction.id, transaction.date, transaction.customer, transaction.items, transaction.amount, transaction.paid, transaction.balance, transaction.paymentReference || "", transaction.status];
@@ -768,7 +770,8 @@ function Transactions() {
                   <th className="transaction-col-items">{activeTab === "items" ? "ITEM(S)" : activeTab === "services" ? "SERVICE" : "ITEM / SERVICE"}</th>
                   {activeTab === "services" && <th className="transaction-col-mechanic">MECHANIC</th>}
                   <th className="transaction-col-total">{activeTab === "items" ? "TOTAL" : "AMOUNT"}</th>
-                  {activeTab !== "services" && <><th className="transaction-col-paid">PAID</th><th className="transaction-col-balance">BALANCE</th></>}
+                  <th className="transaction-col-paid">{activeTab === "services" ? "DOWN PAYMENT PAID" : "PAID"}</th>
+                  <th className="transaction-col-balance">{activeTab === "services" ? "BALANCE TO COLLECT" : "BALANCE"}</th>
                   {activeTab === "items" && <th className="transaction-col-payment">PAYMENT</th>}
                   <th className="transaction-col-status">STATUS</th>
                   {activeTab === "all" && <th className="transaction-col-mechanic">MECHANIC</th>}
@@ -779,7 +782,7 @@ function Transactions() {
                 {isLoading ? (
                   Array.from({ length: 5 }, (_, index) => (
                     <tr className="transactions-skeleton-row" key={`skeleton-${index}`} aria-hidden="true">
-                      <td colSpan={activeTab === "all" ? 11 : activeTab === "items" ? 10 : 8}>
+                      <td colSpan={activeTab === "all" ? 11 : activeTab === "items" ? 10 : 10}>
                         <span className="transactions-skeleton" />
                       </td>
                     </tr>
@@ -831,12 +834,8 @@ function Transactions() {
                         />
                       )}
                     </td>
-                    {activeTab !== "services" && (
-                      <>
-                        <td className="transaction-col-paid">{transaction.recordType === "service" ? "—" : formatMoney(transaction.paid)}</td>
-                        <td className="transaction-col-balance">{transaction.recordType === "service" ? "—" : formatMoney(transaction.balance)}</td>
-                      </>
-                    )}
+                    <td className="transaction-col-paid">{activeTab === "all" && transaction.recordType === "service" ? "—" : formatMoney(transaction.paid)}</td>
+                    <td className="transaction-col-balance">{activeTab === "all" && transaction.recordType === "service" ? "—" : formatMoney(transaction.balance)}</td>
                     {activeTab === "items" && (
                       <td className="transaction-col-payment transaction-reservation-cell">
                         {transaction.paymentMethod && <strong>{transaction.paymentMethod}</strong>}
@@ -849,7 +848,10 @@ function Transactions() {
                         {transaction.status}
                       </span>
                       {activeTab === "services" && transaction.isServiceRequest && (
-                        <small className="transaction-reservation-detail">Payment: {transaction.paymentStatus}</small>
+                        <>
+                          <small className="transaction-reservation-detail">Payment: {transaction.paymentStatus}</small>
+                          {transaction.paymentReference && <small className="transaction-reservation-detail">Ref {transaction.paymentReference}</small>}
+                        </>
                       )}
                       {transaction.status === "Payment Submitted" && <small className="transaction-needs-review">Needs review</small>}
                       {activeTab === "items" && transaction.reservedUntil && <small className="transaction-reservation-detail">Hold until {new Date(transaction.reservedUntil).toLocaleString("en-PH")}</small>}
@@ -863,8 +865,8 @@ function Transactions() {
                           {transaction.paymentStatus === "Payment Submitted" && (
                             <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
                           )}
-                          {transaction.paymentStatus === "Payment Pending" && (
-                            <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : "Mark paid at shop"}</button>
+                          {["Payment Pending", "Confirmed"].includes(transaction.paymentStatus) && transaction.balance > 0 && (
+                            <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : transaction.paid > 0 ? "Mark balance paid at shop" : "Mark paid at shop"}</button>
                           )}
                           <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel-service")}>Cancel booking</button>
                           {["assigned", "confirmed"].includes(transaction.bookingStatus) && (
@@ -934,6 +936,11 @@ function Transactions() {
               Down payment percent
               <input type="number" min="10" max="100" step="1" required aria-invalid={Boolean(settingsFieldErrors.downPaymentPercent)} value={settings.downPaymentPercent} onChange={(event) => updateReservationSetting("downPaymentPercent", Number(event.target.value))} />
               {settingsFieldErrors.downPaymentPercent && <small className="inventory-field-error" role="alert">{settingsFieldErrors.downPaymentPercent}</small>}
+            </label>
+            <label>
+              Service down payment (%)
+              <input type="number" min="0" max="100" step="1" required aria-invalid={Boolean(settingsFieldErrors.serviceDownPaymentPercent)} value={settings.serviceDownPaymentPercent} onChange={(event) => updateReservationSetting("serviceDownPaymentPercent", Number(event.target.value))} />
+              {settingsFieldErrors.serviceDownPaymentPercent && <small className="inventory-field-error" role="alert">{settingsFieldErrors.serviceDownPaymentPercent}</small>}
             </label>
             <label>
               Payment deadline (hours)
@@ -1063,7 +1070,7 @@ function Transactions() {
                 <p><strong>Date and time:</strong> {reservationAction.transaction.isServiceRequest
                   ? `${reservationAction.transaction.date}${reservationAction.transaction.startTime ? ` · ${reservationAction.transaction.startTime} - ${reservationAction.transaction.endTime}` : ""}`
                   : reservationAction.transaction.date}</p>
-                <p><strong>Amount due:</strong> {formatMoney(reservationAction.transaction.downPaymentAmount || reservationAction.transaction.amount)}</p>
+                <p><strong>{reservationAction.transaction.isServiceRequest ? "Down payment expected:" : "Amount due:"}</strong> {formatMoney(reservationAction.transaction.isServiceRequest ? reservationAction.transaction.downPaymentAmount : reservationAction.transaction.downPaymentAmount || reservationAction.transaction.amount)}</p>
                 <p><strong>Reference number:</strong> {reservationAction.transaction.paymentReference || "Not provided"}</p>
                 {reservationAction.transaction.isServiceRequest && (
                   <>
@@ -1075,7 +1082,7 @@ function Transactions() {
                 )}
                 {(reservationAction.transaction.paymentSubmissions || []).map((submission, index) => submission.receiptUrl && (
                   <div key={`${submission.paymentProofPublicId || submission.receiptUrl || "receipt"}-${index}`}>
-                    <strong>Receipt {index + 1} · {submission.status}{submission.rejectionReason ? ` · ${submission.rejectionReason}` : ""}:</strong>
+                    <strong>Receipt {index + 1} · {submission.status}{submission.amount !== undefined ? ` · ${formatMoney(submission.amount)}` : ""}{submission.rejectionReason ? ` · ${submission.rejectionReason}` : ""}:</strong>
                     <a href={submission.receiptUrl} target="_blank" rel="noreferrer">
                       <img className="reservation-payment-proof" src={submission.receiptUrl} alt={`Customer payment receipt ${index + 1}`} />
                     </a>
@@ -1160,7 +1167,7 @@ function Transactions() {
                     <textarea minLength="3" maxLength="300" required value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
                   </label>
                 )}
-                {["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && (
+                {reservationAction.transaction.paid > 0 && ["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && (
                   <fieldset className="reservation-refund-choice">
                     <legend>Service payment decision</legend>
                     <label><input type="radio" name="service-refund-decision" value="refunded" checked={refundDecision === "refunded"} onChange={(event) => setRefundDecision(event.target.value)} /> Refund</label>
@@ -1173,7 +1180,7 @@ function Transactions() {
                     className="btn-small btn-delete"
                     type="submit"
                     disabled={isPerformingReservationAction
-                      || (["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && !refundDecision)
+                      || (reservationAction.transaction.paid > 0 && ["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && !refundDecision)
                       || (reservationAction.transaction.bookingStatus === "in-progress" && reservationAction.action === "cancel-service" && actionReason.trim().length < 3)}
                   >
                     {isPerformingReservationAction ? "Saving..." : "Confirm"}
@@ -1238,6 +1245,15 @@ function Transactions() {
                   0,
               ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
             </p>
+            {selectedTransaction.isServiceRequest && (
+              <>
+                <p><strong>Down payment ({selectedTransaction.downPaymentPercent}%):</strong> {formatMoney(selectedTransaction.downPaymentAmount)}</p>
+                <p><strong>Down payment paid:</strong> {formatMoney(selectedTransaction.paid)}</p>
+                <p><strong>Balance to collect:</strong> {formatMoney(selectedTransaction.balance)}</p>
+                {selectedTransaction.balance > 0 && <p><strong>At service completion:</strong> Collect balance of {formatMoney(selectedTransaction.balance)} at the shop.</p>}
+                <p><strong>Payment reference:</strong> {selectedTransaction.paymentReference || "Not provided"}</p>
+              </>
+            )}
             <p>
               <strong>Items:</strong>{" "}
               {Array.isArray(selectedTransaction.items)

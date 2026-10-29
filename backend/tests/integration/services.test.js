@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import supertest from 'supertest';
 
@@ -19,14 +19,31 @@ const {
 } = require('./helpers');
 const reservationController = require('../../controllers/reservationController');
 const Service = require('../../models/service');
+const ReservationSettings = require('../../models/reservationSettings');
 const revenueUtils = require('../../utils/revenue');
+const { getServicePaymentSummary } = require('../../utils/servicePayment');
 
 const api = supertest(app);
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII=',
   'base64'
 );
-const serviceDate = '2026-10-27';
+
+function dateOffset(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function nextSundayDate() {
+  const daysUntilSunday = (7 - new Date().getDay()) % 7 || 7;
+  return dateOffset(daysUntilSunday);
+}
+
+const serviceDate = dateOffset(1);
 
 let fixtures;
 let customerToken;
@@ -71,18 +88,25 @@ async function createPaidBooking(serviceId = fixtures.service._id, units = 1, re
   return requestId;
 }
 
+async function setServiceDownPaymentPercent(percent) {
+  const settings = await ReservationSettings.getDefaults();
+  settings.serviceDownPaymentPercent = percent;
+  await settings.save();
+}
+
 describe('service booking business flow integration', () => {
   beforeAll(async () => {
     await startReplicaSet();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(`${dateOffset(0)}T20:00:00+08:00`));
   });
 
   afterAll(async () => {
     await stopReplicaSet();
+    vi.useRealTimers();
   });
 
   beforeEach(async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-26T09:00:00+08:00'));
     await clearCollections();
     mockCloudinary();
     fixtures = await createFixtures();
@@ -90,10 +114,6 @@ describe('service booking business flow integration', () => {
     secondCustomerToken = signCustomer(fixtures.secondCustomer);
     mechanicToken = signMechanic(fixtures.mechanic);
     adminToken = signAdmin(fixtures.admin);
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it('uses the configured service price and mechanic fee instead of client-supplied values', async () => {
@@ -118,8 +138,178 @@ describe('service booking business flow integration', () => {
       servicePriceTotal: fixtures.service.price,
       mechanicFeeTotal: fixtures.service.mechanicFee,
       estimatedPrice: fixtures.service.price + fixtures.service.mechanicFee,
+      totalAmount: fixtures.service.price + fixtures.service.mechanicFee,
+      downPaymentPercent: 30,
+      downPaymentAmount: Math.round((fixtures.service.price + fixtures.service.mechanicFee) * 0.3 * 100) / 100,
+      balanceDue: Math.round((fixtures.service.price + fixtures.service.mechanicFee) * 0.7 * 100) / 100,
       laborFee: fixtures.service.mechanicFee
     });
+  });
+
+  it('creates zero-percent bookings without an upfront payment deadline', async () => {
+    await setServiceDownPaymentPercent(0);
+    const created = await createBookings(customerToken, [booking(fixtures.service._id)]);
+    const request = created.body.results[0].serviceRequest;
+
+    expect(request).toMatchObject({
+      paymentStatus: 'Confirmed',
+      totalAmount: fixtures.service.price + fixtures.service.mechanicFee,
+      downPaymentPercent: 0,
+      downPaymentAmount: 0,
+      balanceDue: fixtures.service.price + fixtures.service.mechanicFee,
+      amountPaid: 0,
+      paymentDueAt: null
+    });
+
+    await ServiceRequest.updateOne(
+      { _id: request._id },
+      { $set: { paymentDueAt: new Date(Date.now() - 48 * 60 * 60 * 1000) } }
+    );
+    await require('../../controllers/serviceRequestController').expireServiceBookings();
+    expect((await ServiceRequest.findById(request._id).lean()).status).toBe('pending');
+  });
+
+  it('does not request a refund decision when cancelling a zero-payment booking', async () => {
+    await setServiceDownPaymentPercent(0);
+    const created = await createBookings(customerToken, [booking(fixtures.service._id)]);
+    const requestId = created.body.results[0].serviceRequest._id;
+
+    const cancelled = await api.put('/api/service-requests/status/admin')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ requestId, status: 'cancelled' });
+
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body.serviceRequest.refundDecision).toBeNull();
+  });
+
+  it('accepts a zero service setting and rejects values above 100', async () => {
+    const settings = {
+      downPaymentPercent: 30,
+      serviceDownPaymentPercent: 0,
+      pendingPaymentHours: 24,
+      holdDays: 3,
+      paymentInstructions: { methodName: 'GCash', accountName: 'Shop', accountNumber: '09171234567' },
+      pickupAddress: '',
+      pickupHours: '',
+      contactNumber: ''
+    };
+    const valid = await api.put('/api/admin/reservations/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send(settings);
+    const invalid = await api.put('/api/admin/reservations/settings')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ ...settings, serviceDownPaymentPercent: 101 });
+
+    expect(valid.status).toBe(200);
+    expect(valid.body.settings.serviceDownPaymentPercent).toBe(0);
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.fieldErrors.serviceDownPaymentPercent).toContain('0 to 100');
+  });
+
+  it('uses the existing item percentage for legacy settings without a service percentage', async () => {
+    await ReservationSettings.getDefaults();
+    await ReservationSettings.updateOne(
+      { key: 'reservation' },
+      { $set: { downPaymentPercent: 45 }, $unset: { serviceDownPaymentPercent: 1 } }
+    );
+
+    const settings = await ReservationSettings.getDefaults();
+
+    expect(settings.serviceDownPaymentPercent).toBe(45);
+  });
+
+  it('rounds a 50-percent down payment and keeps the booking snapshot immutable', async () => {
+    await setServiceDownPaymentPercent(50);
+    const service = await Service.create({
+      name: 'Precision Service',
+      price: 300,
+      mechanicFee: 33,
+      durationMinutes: 60
+    });
+    const created = await createBookings(customerToken, [booking(service._id)]);
+    const requestId = created.body.results[0].serviceRequest._id;
+
+    expect(created.body.results[0].serviceRequest).toMatchObject({
+      totalAmount: 333,
+      downPaymentPercent: 50,
+      downPaymentAmount: 166.5,
+      balanceDue: 166.5
+    });
+    await setServiceDownPaymentPercent(100);
+    expect(await ServiceRequest.findById(requestId).lean()).toMatchObject({
+      downPaymentPercent: 50,
+      downPaymentAmount: 166.5,
+      balanceDue: 166.5
+    });
+  });
+
+  it('stores the server-computed down payment on submissions and ignores a client amount', async () => {
+    await setServiceDownPaymentPercent(50);
+    const service = await Service.create({
+      name: 'Payment Snapshot Service',
+      price: 300,
+      mechanicFee: 33,
+      durationMinutes: 60
+    });
+    const created = await createBookings(customerToken, [booking(service._id)]);
+    const requestId = created.body.results[0].serviceRequest._id;
+    const payment = await api
+      .post(`/api/service-requests/${requestId}/payment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .field('reference', '9876543210')
+      .field('amount', '1')
+      .attach('proof', png, { filename: 'service-receipt.png', contentType: 'image/png' });
+    const saved = await ServiceRequest.findById(requestId).lean();
+
+    expect(payment.status).toBe(200);
+    expect(saved.paymentSubmissions[0].amount).toBe(166.5);
+    expect(saved.amountPaid).toBe(0);
+  });
+
+  it('treats a legacy confirmed booking without payment snapshots as fully paid upfront', () => {
+    expect(getServicePaymentSummary({
+      estimatedPrice: 333,
+      paymentStatus: 'Confirmed'
+    })).toEqual({
+      totalAmount: 333,
+      downPaymentPercent: 100,
+      downPaymentAmount: 333,
+      balanceDue: 0,
+      amountPaid: 333
+    });
+  });
+
+  it.each([50, 100])('counts a %s-percent down payment as one full-total service revenue at completion', async (percent) => {
+    await setServiceDownPaymentPercent(percent);
+    const requestId = await createPaidBooking(fixtures.service._id, 1, percent === 50 ? '9876543210' : '9876543211');
+    const request = await ServiceRequest.findById(requestId).lean();
+    expect(request.downPaymentPercent).toBe(percent);
+    expect(request.amountPaid).toBe(request.downPaymentAmount);
+
+    const accepted = await api.post(`/api/mechanic/jobs/${requestId}/accept`)
+      .set('Authorization', `Bearer ${mechanicToken}`);
+    const started = await api.post(`/api/mechanic/jobs/${requestId}/start`)
+      .set('Authorization', `Bearer ${mechanicToken}`);
+    const completed = await api.post(`/api/mechanic/jobs/${requestId}/complete`)
+      .set('Authorization', `Bearer ${mechanicToken}`);
+    const revenue = await BusinessRecord.find({ recordType: 'service', sourceId: requestId }).lean();
+    const entries = await revenueUtils.getRevenueEntries({
+      Order: require('../../models/orderingModels/order'),
+      Reservation: require('../../models/orderingModels/reservation'),
+      ServiceRequest,
+      Product
+    });
+
+    expect(accepted.status).toBe(200);
+    expect(started.status).toBe(200);
+    expect(completed.status).toBe(200);
+    expect(revenue).toHaveLength(1);
+    expect(revenue[0]).toMatchObject({
+      amount: fixtures.service.price + fixtures.service.mechanicFee,
+      laborFee: fixtures.service.mechanicFee
+    });
+    expect(entries).toHaveLength(1);
+    expect(entries[0].revenue).toBe(fixtures.service.price + fixtures.service.mechanicFee);
   });
 
   it('stores server-calculated one-unit and two-unit prices, fees, labels, and scaled durations', async () => {
@@ -267,10 +457,10 @@ describe('service booking business flow integration', () => {
 
   it('rejects a closed day and a time that has already passed', async () => {
     const closedDay = await createBookings(customerToken, [
-      booking(fixtures.service._id, { date: '2026-11-01', startTime: '10:00' })
+      booking(fixtures.service._id, { date: nextSundayDate(), startTime: '10:00' })
     ]);
     const pastTime = await createBookings(secondCustomerToken, [
-      booking(fixtures.service._id, { date: '2026-10-26', startTime: '09:00' })
+      booking(fixtures.service._id, { date: dateOffset(0), startTime: '09:00' })
     ]);
 
     expect(closedDay.body.results[0]).toMatchObject({ ok: false, status: 400 });
@@ -460,7 +650,10 @@ describe('service booking business flow integration', () => {
   it('expires an unpaid booking and makes its slot available again', async () => {
     const created = await createBookings(customerToken, [booking(fixtures.service._id)]);
     const requestId = created.body.results[0].serviceRequest._id;
-    vi.advanceTimersByTime(60 * 60 * 1000 + 1);
+    await ServiceRequest.updateOne(
+      { _id: requestId },
+      { $set: { paymentDueAt: new Date(Date.now() - 1) } }
+    );
 
     await reservationController.expireReservations();
 

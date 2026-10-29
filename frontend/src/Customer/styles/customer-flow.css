@@ -715,6 +715,35 @@
   font-weight: 700;
 }
 
+.service-payment-breakdown {
+  display: grid;
+  gap: 4px;
+  max-width: 360px;
+}
+
+.service-payment-breakdown > p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  color: #766a61;
+  font-size: 11px;
+}
+
+.service-payment-breakdown > p strong {
+  margin-left: auto;
+  color: #322820;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.service-payment-breakdown > p:last-child {
+  color: #322820;
+  font-weight: 700;
+}
+
 .customer-service-cart-summary {
   margin-top: 16px;
   padding-top: 14px;
@@ -2143,6 +2172,247 @@
   .customer-booking-panel { padding: 17px; }
   .customer-booking-fields { grid-template-columns: 1fr; }
 }
+
+.customer-page.profile-page {
+  padding: 0 0 64px;
+}
+
+.customer-page.profile-page .customer-header {
+  width: 100%;
+  max-width: none;
+  padding-right: var(--customer-wide-content-padding);
+  padding-left: var(--customer-wide-content-padding);
+  box-sizing: border-box;
+}
+
+.customer-page.profile-page > .customer-heading {
+  width: 100%;
+  max-width: none;
+  padding-right: var(--customer-wide-content-padding);
+  padding-left: var(--customer-wide-content-padding);
+  box-sizing: border-box;
+}
+
+.customer-page.profile-page .customer-flow-page.customer-account-page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding-right: var(--customer-wide-content-padding);
+  padding-left: var(--customer-wide-content-padding);
+  box-sizing: border-box;
+}
+
+.customer-page.profile-page .customer-account-page {
+  grid-template-columns: minmax(280px, 300px) minmax(0, 1fr);
+}
+
+.customer-page.profile-page .customer-account-page > .customer-account-tabs {
+  width: 100%;
+  min-width: 0;
+}
+
+.customer-page.profile-page .customer-account-panel {
+  width: 100%;
+  min-width: 0;
+}
+
+.customer-page.profile-page .customer-account-form {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.customer-page.profile-page .customer-account-records {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+}
+
+.customer-page.profile-page .customer-reservation-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+}
+
+.customer-page.profile-page .customer-account-records article,
+.customer-page.profile-page .customer-reservation-card {
+  min-width: 0;
+}
+
+.customer-page.profile-page .customer-account-identity-copy,
+.customer-page.profile-page .customer-account-identity strong,
+.customer-page.profile-page .customer-reservation-card-top > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.customer-page.profile-page .customer-reservation-card-top,
+.customer-page.profile-page .customer-reservation-card-bottom {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .customer-page.profile-page .customer-header,
+  .customer-page.profile-page > .customer-heading,
+  .customer-page.profile-page .customer-flow-page.customer-account-page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .customer-page.profile-page .customer-account-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-page.profile-page .customer-account-identity,
+  .customer-page.profile-page .customer-account-tabs,
+  .customer-page.profile-page .customer-account-page > .customer-success,
+  .customer-page.profile-page .customer-account-panel {
+    grid-column: 1;
+  }
+
+  .customer-page.profile-page .customer-account-identity {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .customer-page.profile-page .customer-account-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-page.profile-page .customer-account-panel {
+    padding: 16px;
+  }
+}
+
+.customer-page.profile-page #account-panel-profile > .customer-account-form,
+.customer-page.profile-page .customer-account-subsection .customer-account-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.customer-page.profile-page #account-panel-profile > .customer-account-form label,
+.customer-page.profile-page .customer-account-subsection .customer-account-form label {
+  min-width: 0;
+  align-content: start;
+  align-items: start;
+  grid-template-rows: auto 44px minmax(18px, auto);
+}
+
+.customer-page.profile-page #account-panel-profile > .customer-account-form input,
+.customer-page.profile-page .customer-account-subsection .customer-account-form input {
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  grid-row: 2;
+  align-self: start;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: 8px;
+}
+
+.customer-page.profile-page #account-panel-profile > .customer-account-form label > small,
+.customer-page.profile-page .customer-account-subsection .customer-account-form label > small {
+  grid-row: 3;
+  min-height: 18px;
+}
+
+.customer-page.profile-page #account-panel-profile > .customer-account-form > button,
+.customer-page.profile-page .customer-account-subsection .customer-account-form > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  align-self: start;
+  width: auto;
+  min-width: 0;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.customer-page.profile-page .customer-account-subsection .customer-flow-section-heading {
+  align-items: center;
+}
+
+.customer-page.profile-page .customer-account-subsection .customer-password-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.customer-page.profile-page .customer-account-delete .customer-danger-button {
+  width: auto;
+  min-width: 0;
+  min-height: 40px;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+@media (min-width: 481px) and (max-width: 1199px) {
+  .customer-page.profile-page #account-panel-profile > .customer-account-form,
+  .customer-page.profile-page .customer-account-subsection .customer-account-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .customer-page.profile-page #account-panel-profile > .customer-account-form,
+  .customer-page.profile-page .customer-account-subsection .customer-account-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-page.profile-page #account-panel-profile > .customer-account-form > button,
+  .customer-page.profile-page .customer-account-subsection .customer-account-form > button,
+  .customer-page.profile-page .customer-account-delete .customer-danger-button {
+    width: 100%;
+  }
+}
+
+.customer-page.customer-page .customer-brand {
+  min-width: 0;
+  min-height: 64px;
+}
+
+.customer-page.customer-page .customer-brand__mark {
+  width: 40px;
+  height: 40px;
+  align-self: center;
+}
+
+.customer-page.customer-page .customer-brand__copy {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.customer-page.customer-page .customer-brand__copy strong {
+  color: #211a16;
+  font: 800 24px/1 'Segoe UI', sans-serif;
+}
+
+.customer-page.customer-page .customer-brand__copy small {
+  color: #ef701b;
+  font: 700 11px/1.2 'Segoe UI', sans-serif;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .customer-page.customer-page .customer-brand__copy small {
+    font-size: 9px;
+    letter-spacing: .04em;
+  }
+}
+
+@media (max-width: 480px) {
+  .customer-page.customer-page .customer-brand__copy strong {
+    font-size: 20px;
+  }
+}
+
 
 .customer-reservation-payment,
 .customer-reservation-payment-instructions {

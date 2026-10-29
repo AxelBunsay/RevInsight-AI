@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import PaymentSettingsDisplay from './PaymentSettingsDisplay';
 import { getPaymentDisplaySettings } from './paymentDisplaySettings';
+import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const MAX_RECEIPT_SIZE = 2 * 1024 * 1024;
 
-export default function ReservationPaymentForm({ reservation, amount, settings, onSubmit, isSaving, onClose }) {
+export default function ReservationPaymentForm({ reservation, amount, settings, onSubmit, isSaving, onClose, showServiceBreakdown = false }) {
   const [reference, setReference] = useState('');
   const [proof, setProof] = useState(null);
   const [fileError, setFileError] = useState('');
@@ -92,6 +93,7 @@ export default function ReservationPaymentForm({ reservation, amount, settings, 
         <button type="button" className="gcash-payment-close" aria-label="Close payment dialog" onClick={onClose} disabled={isSaving}>×</button>
       </header>
       <div className="gcash-payment-body">
+        {showServiceBreakdown && <ServicePaymentBreakdown booking={reservation} className="gcash-service-payment-breakdown" />}
         <PaymentSettingsDisplay
           settings={instructions}
           amount={money(paymentAmount)}

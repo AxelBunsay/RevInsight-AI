@@ -12,6 +12,7 @@ const gcashPaymentSettingsSchema = new mongoose.Schema({
 const reservationSettingsSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, default: 'reservation' },
   downPaymentPercent: { type: Number, default: 30, min: 1, max: 100 },
+  serviceDownPaymentPercent: { type: Number, min: 0, max: 100 },
   pendingPaymentHours: { type: Number, default: 24, min: 1, max: 720 },
   holdDays: { type: Number, default: 3, min: 1, max: 30 },
   paymentInstructions: {
@@ -39,6 +40,7 @@ reservationSettingsSchema.statics.getDefaults = function getDefaults() {
       $setOnInsert: {
         key: 'reservation',
         downPaymentPercent: 30,
+        serviceDownPaymentPercent: 30,
         pendingPaymentHours: 24,
         holdDays: 3,
         openDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -49,7 +51,12 @@ reservationSettingsSchema.statics.getDefaults = function getDefaults() {
       }
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  ).then((settings) => {
+    if (settings.serviceDownPaymentPercent === undefined || settings.serviceDownPaymentPercent === null) {
+      settings.serviceDownPaymentPercent = settings.downPaymentPercent ?? 30;
+    }
+    return settings;
+  });
 };
 
 module.exports = mongoose.model('ReservationSettings', reservationSettingsSchema);

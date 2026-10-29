@@ -5,6 +5,8 @@ import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
+import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
+import { getServiceBookingStatus } from '../../utils/servicePayment';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
@@ -56,15 +58,7 @@ function ServiceBookingCard({ booking, prototype = false }) {
   const serviceName = prototype ? booking.name : formatServiceName(booking.serviceType || 'Service booking', booking.units, booking.unitLabel);
   const bookingId = prototype ? booking.id : booking._id;
   const date = prototype ? booking.bookingDate : booking.scheduledDate;
-  const status = prototype
-    ? booking.status
-    : booking.paymentStatus === 'Payment Submitted'
-      ? booking.paymentStatus
-      : booking.paymentStatus === 'Payment Pending' && booking.paymentRejectionReason
-        ? 'Payment Pending'
-      : booking.paymentStatus === 'Confirmed' && booking.status === 'pending'
-        ? 'Confirmed'
-        : booking.status;
+  const status = prototype ? booking.status : getServiceBookingStatus(booking);
   const dateLabel = date
     ? (prototype
       ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`))
@@ -90,6 +84,7 @@ function ServiceBookingCard({ booking, prototype = false }) {
           mechanicFeeTotal={booking.mechanicFeeTotal}
           estimatedPrice={booking.estimatedPrice}
         />}
+      {!prototype && <ServicePaymentBreakdown booking={booking} />}
       {prototype
         ? <Link to={`/customer/reservations/${bookingId}`}>View booking <span aria-hidden="true">→</span></Link>
         : <><span>{booking.description}</span><Link to={`/customer/reservations/${booking._id}`}>View booking <span aria-hidden="true">→</span></Link></>}
