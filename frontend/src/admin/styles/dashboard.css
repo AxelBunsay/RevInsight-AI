@@ -873,7 +873,202 @@
   resize: vertical;
 }
 .admin-root .ai-revenue-modal.ai-revenue-ai-panel {
-  margin: 16px auto 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 16px 0 0;
+  overflow: visible;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--good);
+  border-radius: 16px;
+  background: #fff;
+}
+.admin-root .ai-revenue-ai-panel h2 {
+  margin: 0 0 10px;
+}
+.admin-root .ai-revenue-ai-panel .ai-revenue-modal__detail {
+  margin: 4px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.admin-root .ai-revenue-ai-suggestions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+  align-items: stretch;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+.admin-root .ai-revenue-ai-suggestion {
+  min-height: 48px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffaf5;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+.admin-root .ai-revenue-ai-suggestion:hover:not(:disabled) {
+  border-color: #efb27e;
+  background: #fff2e5;
+}
+.admin-root .ai-revenue-ai-suggestion:disabled {
+  opacity: .6;
+  cursor: default;
+}
+.admin-root .ai-revenue-ai-question {
+  box-sizing: border-box;
+  min-height: 76px;
+  max-height: 160px;
+  overflow-y: hidden;
+  resize: none;
+  line-height: 1.55;
+}
+.admin-root .ai-revenue-ai-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+}
+.admin-root .ai-revenue-ai-question-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.admin-root .ai-revenue-ai-controls .ai-revenue-settings__primary {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.admin-root .ai-revenue-ai-controls .ai-revenue-settings__primary:disabled {
+  opacity: .6;
+  cursor: default;
+}
+.admin-root .ai-revenue-ai-skeleton {
+  display: grid;
+  gap: 11px;
+  margin-top: 22px;
+  padding: 20px;
+  border: 1px solid #e4ebe6;
+  border-radius: 12px;
+  background: #f7faf8;
+}
+.admin-root .ai-revenue-ai-skeleton span {
+  display: block;
+  width: 100%;
+  height: 12px;
+  border-radius: 99px;
+  background: #e4e9e6;
+}
+.admin-root .ai-revenue-ai-skeleton span:nth-child(2) { width: 84%; }
+.admin-root .ai-revenue-ai-skeleton span:nth-child(3) { width: 62%; }
+.admin-root .ai-revenue-ai-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid #f0c9bd;
+  border-radius: 10px;
+  background: #fff5f1;
+  color: #8e3724;
+}
+.admin-root .ai-revenue-ai-error p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.admin-root .ai-revenue-ai-error button,
+.admin-root .ai-revenue-ai-answer-footer button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.admin-root .ai-revenue-ai-answer-wrap {
+  margin-top: 22px;
+  padding: 22px 24px;
+  border: 1px solid #dfece4;
+  border-left: 4px solid var(--good);
+  border-radius: 12px;
+  background: #f8fcf9;
+  color: var(--ink);
+}
+.admin-root .ai-revenue-answer {
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.admin-root .ai-revenue-answer__heading {
+  margin: 20px 0 10px;
+  padding-left: 10px;
+  border-left: 3px solid var(--brand);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+.admin-root .ai-revenue-answer__heading:first-child {
+  margin-top: 0;
+}
+.admin-root .ai-revenue-answer__paragraph {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.admin-root .ai-revenue-answer__list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-left: 24px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.65;
+}
+.admin-root .ai-revenue-answer__list li {
+  padding-left: 2px;
+}
+.admin-root .ai-revenue-answer__number {
+  white-space: nowrap;
+}
+.admin-root .ai-revenue-answer__rule {
+  height: 1px;
+  margin: 18px 0;
+  border: 0;
+  background: #dce5df;
+}
+.admin-root .ai-revenue-ai-answer-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid #e3ebe6;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.admin-root .ai-revenue-ai-answer-footer > span {
+  flex: 1 1 360px;
+}
+.admin-root .ai-revenue-ai-answer-footer > small {
+  flex-basis: 100%;
 }
 .admin-root .ai-revenue-thresholds__note {
   margin-top: 12px;
@@ -1056,6 +1251,20 @@
   }
   .admin-root .ai-revenue-modal {
     padding: 23px 18px;
+  }
+  .admin-root .ai-revenue-modal.ai-revenue-ai-panel {
+    padding: 20px 16px;
+  }
+  .admin-root .ai-revenue-ai-controls {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .admin-root .ai-revenue-ai-answer-wrap {
+    padding: 18px 14px;
+  }
+  .admin-root .ai-revenue-ai-error {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

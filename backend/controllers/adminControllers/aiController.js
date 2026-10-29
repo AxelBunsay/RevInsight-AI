@@ -2,6 +2,10 @@ const { generateRevenueInsights } = require('../../services/aiService');
 const dashboardController = require('./dashboardController');
 const { REVENUE_TIMEZONE } = require('../../utils/revenue');
 
+function formatRevenueAnswer(answer) {
+  return String(answer).replace(/\$(?=\d)/g, '₱');
+}
+
 function getRecentMonthlyRevenue(rows, now = new Date(), monthCount = 24) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: REVENUE_TIMEZONE,
@@ -62,7 +66,9 @@ async function getControllerResult(controller, req) {
   return result;
 }
 
-async function askRevenueAI(req, res) {
+async function askRevenueAI(req, res, dependencies = {}) {
+  const revenueInsights = dependencies.generateRevenueInsights || generateRevenueInsights;
+  const dashboard = dependencies.dashboardController || dashboardController;
   const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
   if (!question) {
     return res.status(400).json({ success: false, message: 'Question is required' });
@@ -74,11 +80,11 @@ async function askRevenueAI(req, res) {
   try {
     const mockReq = { ...req, query: {} };
     const [statsRes, quarterlyRes, riskRes, concentrationRes, monthlyRes] = await Promise.all([
-      getControllerResult(dashboardController.getDashboardStats, mockReq),
-      getControllerResult(dashboardController.getQuarterlyData, mockReq),
-      getControllerResult(dashboardController.getRevenueRisk, mockReq),
-      getControllerResult(dashboardController.getRevenueConcentration, mockReq),
-      getControllerResult(dashboardController.getRevenueData, mockReq)
+      getControllerResult(dashboard.getDashboardStats, mockReq),
+      getControllerResult(dashboard.getQuarterlyData, mockReq),
+      getControllerResult(dashboard.getRevenueRisk, mockReq),
+      getControllerResult(dashboard.getRevenueConcentration, mockReq),
+      getControllerResult(dashboard.getRevenueData, mockReq)
     ]);
 
     const revenueData = {
@@ -89,7 +95,7 @@ async function askRevenueAI(req, res) {
       monthly: getRecentMonthlyRevenue(monthlyRes.data, new Date())
     };
 
-    const answer = await generateRevenueInsights(question, revenueData);
+    const answer = formatRevenueAnswer(await revenueInsights(question, revenueData));
 
     res.json({
       success: true,
@@ -103,4 +109,4 @@ async function askRevenueAI(req, res) {
   }
 }
 
-module.exports = { askRevenueAI, getControllerResult, getRecentMonthlyRevenue };
+module.exports = { askRevenueAI, formatRevenueAnswer, getControllerResult, getRecentMonthlyRevenue };

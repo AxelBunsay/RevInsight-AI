@@ -2,7 +2,12 @@ import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { getControllerResult, getRecentMonthlyRevenue, askRevenueAI } = require('../controllers/adminControllers/aiController');
+const {
+  getControllerResult,
+  getRecentMonthlyRevenue,
+  askRevenueAI,
+  formatRevenueAnswer
+} = require('../controllers/adminControllers/aiController');
 
 describe('revenue AI controller helpers', () => {
   it('rejects failed dashboard controller responses', async () => {
@@ -51,5 +56,37 @@ describe('revenue AI controller helpers', () => {
       success: false,
       message: 'Question must be 500 characters or fewer.'
     });
+  });
+
+  it('formats dollar-prefixed model amounts as Philippine pesos', () => {
+    expect(formatRevenueAnswer('Revenue was $1,234 this month.')).toBe('Revenue was ₱1,234 this month.');
+  });
+
+  it('returns a peso-formatted answer from the revenue AI endpoint', async () => {
+    let responseBody;
+    const successController = async (_req, res) => res.json({ success: true, data: [] });
+    const dashboardController = {
+      getDashboardStats: successController,
+      getQuarterlyData: successController,
+      getRevenueRisk: successController,
+      getRevenueConcentration: successController,
+      getRevenueData: successController
+    };
+    const res = {
+      json(body) {
+        responseBody = body;
+        return body;
+      },
+      status(code) {
+        throw new Error(`Unexpected status ${code}`);
+      }
+    };
+
+    await askRevenueAI({ body: { question: 'How much did we earn?' } }, res, {
+      dashboardController,
+      generateRevenueInsights: async () => 'Revenue reached $1,234.'
+    });
+
+    expect(responseBody).toMatchObject({ success: true, answer: 'Revenue reached ₱1,234.' });
   });
 });

@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
+import MarkdownAnswer from './MarkdownAnswer';
+import { askRevenueQuestion, handleQuestionKeyDown } from './askRevenueQuestion';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
 const defaultThresholds = { topCategory: 40, highTop: 60, topTwo: 70, highTopTwo: 85 };
@@ -239,27 +241,38 @@ function AskRevenueAIPanel() {
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [answerTimestamp, setAnswerTimestamp] = useState('');
+  const [copyMessage, setCopyMessage] = useState('');
+  const inFlightRef = useRef(false);
+  const lastQuestionRef = useRef('');
 
-  const submitQuestion = async (event) => {
+  const submitQuestion = async (value = question) => {
+    const trimmedQuestion = value.trim();
+    if (!trimmedQuestion) return;
+    lastQuestionRef.current = trimmedQuestion;
+    setCopyMessage('');
+    await askRevenueQuestion({
+      question: trimmedQuestion,
+      inFlightRef,
+      request: adminApi.askRevenueAI,
+      setIsLoading,
+      setAnswer,
+      setTimestamp: setAnswerTimestamp,
+      setError
+    });
+  };
+
+  const submitForm = (event) => {
     event.preventDefault();
-    const trimmedQuestion = question.trim();
-    if (!trimmedQuestion) {
-      setError('Enter a question about revenue.');
-      return;
-    }
-    setIsLoading(true);
-    setError('');
-    setAnswer('');
+    submitQuestion(question);
+  };
+
+  const copyAnswer = async () => {
     try {
-      const response = await adminApi.askRevenueAI(trimmedQuestion);
-      if (typeof response?.answer !== 'string' || !response.answer.trim()) {
-        throw new Error('The AI returned an empty answer. Please try again.');
-      }
-      setAnswer(response.answer);
-    } catch (requestError) {
-      setError(requestError.message || 'Could not generate a revenue answer. Please try again.');
-    } finally {
-      setIsLoading(false);
+      await navigator.clipboard.writeText(answer);
+      setCopyMessage('Answer copied.');
+    } catch {
+      setCopyMessage('Could not copy the answer. Select and copy the text instead.');
     }
   };
 
@@ -267,16 +280,19 @@ function AskRevenueAIPanel() {
     <p className="ai-revenue-modal__eyebrow">Revenue analysis</p>
     <h2 id="ai-revenue-ai-title">Ask AI</h2>
     <p className="ai-revenue-modal__detail">Ask a question about your revenue data.</p>
-    <div className="ai-revenue-toolbar" aria-label="Suggested questions">
+    <div className="ai-revenue-ai-suggestions" aria-label="Suggested questions">
       {suggestions.map((suggestion) => <button
         type="button"
-        className="ai-revenue-toolbar__action"
+        className="ai-revenue-ai-suggestion"
         key={suggestion}
         disabled={isLoading}
-        onClick={() => setQuestion(suggestion)}
+        onClick={() => {
+          setQuestion(suggestion);
+          submitQuestion(suggestion);
+        }}
       >{suggestion}</button>)}
     </div>
-    <form onSubmit={submitQuestion}>
+    <form onSubmit={submitForm}>
       <div className="ai-revenue-thresholds">
         <label htmlFor="ai-revenue-question">Your question
           <textarea
@@ -286,20 +302,46 @@ function AskRevenueAIPanel() {
             maxLength={500}
             rows={3}
             placeholder="Ask about revenue trends, risk, or concentration..."
-            onChange={(event) => setQuestion(event.target.value)}
+            onChange={(event) => {
+              const textarea = event.currentTarget;
+              setQuestion(textarea.value);
+              textarea.style.height = 'auto';
+              textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+              textarea.style.overflowY = textarea.scrollHeight > 160 ? 'auto' : 'hidden';
+            }}
+            onKeyDown={(event) => handleQuestionKeyDown(event, () => submitQuestion(question))}
           />
         </label>
       </div>
-      <div className="ai-revenue-settings__actions">
-        <small>{question.length}/500</small>
+      <div className="ai-revenue-ai-controls">
+        <div className="ai-revenue-ai-question-meta">
+          <small>{question.length}/500</small>
+          <small>Enter to send, Shift+Enter for a new line</small>
+        </div>
         <button className="ai-revenue-settings__primary" type="submit" disabled={isLoading || !question.trim()}>
           {isLoading ? 'Thinking...' : 'Ask AI'}
         </button>
       </div>
     </form>
-    {isLoading && <p className="ai-revenue-empty" role="status">Analyzing revenue data...</p>}
-    {error && <p className="ai-revenue-report__error" role="alert">{error}</p>}
-    {answer && <div className="ai-revenue-callout" aria-live="polite"><strong>Answer</strong><p>{answer}</p></div>}
+    {isLoading && <div className="ai-revenue-ai-skeleton" role="status" aria-label="Analyzing revenue data">
+      <span /><span /><span />
+    </div>}
+    {error && <div className="ai-revenue-ai-error" role="alert">
+      <p>{error}</p>
+      <button type="button" onClick={() => submitQuestion(lastQuestionRef.current)}>Try again</button>
+    </div>}
+    {answer && <div className="ai-revenue-ai-answer-wrap" aria-live="polite">
+      <MarkdownAnswer markdown={answer} />
+      <footer className="ai-revenue-ai-answer-footer">
+        <span>Generated by AI from your revenue data on {new Intl.DateTimeFormat('en-PH', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+          timeZone: 'Asia/Manila'
+        }).format(new Date(answerTimestamp))}. Check important figures in the Revenue analysis cards.</span>
+        <button type="button" onClick={copyAnswer}>Copy answer</button>
+        {copyMessage && <small role="status">{copyMessage}</small>}
+      </footer>
+    </div>}
   </section>;
 }
 
@@ -459,7 +501,8 @@ function AIRevenueAnalysis({ dashboardData }) {
     }] : [])
   ];
 
-  return <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
+  return <>
+  <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
     <div className="ai-revenue-analysis__header">
       <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue, risk, and concentration from business data</p></div></div>
       <div className="ai-revenue-toolbar">
@@ -531,8 +574,6 @@ function AIRevenueAnalysis({ dashboardData }) {
             {analysis.quarters.length < 5 && <p className="ai-revenue-empty" role="status">Fewer than 5 quarters are available. The quarterly trend is shown; the estimate will appear after more data is recorded.</p>}
           </>}
 
-    <AskRevenueAIPanel />
-
     {settingsOpen && <div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
       <section className="ai-revenue-modal ai-revenue-settings" role="dialog" aria-modal="true" aria-labelledby="ai-thresholds-title">
         <button type="button" className="ai-revenue-modal__close" aria-label="Close thresholds" onClick={() => setSettingsOpen(false)}>×</button>
@@ -600,7 +641,9 @@ function AIRevenueAnalysis({ dashboardData }) {
         </> : <p className="ai-revenue-empty">There is no backend data for this concentration view.</p>}
       </section>
     </div>}
-  </section>;
+  </section>
+  <AskRevenueAIPanel />
+  </>;
 }
 
 export default AIRevenueAnalysis;
