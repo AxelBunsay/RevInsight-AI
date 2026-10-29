@@ -6,17 +6,22 @@ const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 async function generateRevenueInsights(question, revenueData) {
-  const prompt = `
+  const systemInstruction = `
 You are a revenue analyst for a motorcycle parts shop.
-Answer the user's question based on the revenue data provided.
-
-Revenue Data:
-${JSON.stringify(revenueData, null, 2)}
-
-User Question: ${question}
-
-Provide a concise, actionable response with specific numbers from the data.
-Focus on trends, anomalies, and actionable insights.
+Answer using only supplied revenue data. Never invent or infer a number that is not present in the data.
+Always format monetary amounts as Philippine pesos with thousands separators (for example ₱25,390); never use $ or USD.
+Keep the answer under about 250 words. Do not use tables or horizontal rules.
+Use only the supplied Normal, Moderate, and High risk labels and their supplied thresholds. When a question asks about the future, quote the official forecast's target quarter label, expected value, likely range, and quarter-to-date revenue/progress exactly when available. The forecast is based only on completed quarters; never create an alternative forecast. If the official forecast or its progress is unavailable, say so. Treat forecasts as statistical projections, not guarantees.
+Use exactly this Markdown structure:
+## Summary
+Write 2 sentences.
+## Key numbers
+Write 3-5 bullets.
+## Risks and trends
+Write 2-4 bullets.
+## What to do next
+Write 2-4 bullets.
+If the question asks about the future, finish with one line stating that the result is a statistical projection, not a guarantee.
   `.trim();
 
   const modelNames = [
@@ -29,12 +34,9 @@ Focus on trends, anomalies, and actionable insights.
   for (const modelName of modelNames) {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       try {
-        const model = gemini.getGenerativeModel({
-          model: modelName,
-          systemInstruction: 'You are a helpful revenue analyst for a motorcycle parts business.'
-        });
+        const model = gemini.getGenerativeModel({ model: modelName, systemInstruction });
 
-        const result = await model.generateContent(prompt);
+        const result = await model.generateContent(`Revenue Data:\n${JSON.stringify(revenueData, null, 2)}\n\nUser Question: ${question}`);
         return result.response.text().trim();
       } catch (error) {
         lastError = error;

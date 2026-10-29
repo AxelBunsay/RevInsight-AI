@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
@@ -7,6 +7,11 @@ import { formatServiceName } from '../../utils/servicePricing';
 import { calculateServiceAmounts } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
+import {
+  canSubmitServiceBooking,
+  getDateChangeState
+} from './serviceBookingTime';
+import ServiceBookingTimeSelect from './ServiceBookingTimeSelect';
 import '../styles/customer-flow.css';
 
 function formatDuration(minutes) {
@@ -52,10 +57,6 @@ function localTimeLabel(time) {
   if (!time) return '';
   const [hours, minutes] = time.split(':').map(Number);
   return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
-}
-
-function ProductSlotSkeleton() {
-  return <span className="customer-slot-skeleton" aria-hidden="true" />;
 }
 
 function VehicleForm({ value, onChange, onSave, submitLabel = 'Save motorcycle' }) {
@@ -209,15 +210,17 @@ export default function ServiceDetail() {
     if (service) void Promise.resolve().then(() => loadSlots(bookingDate));
   }, [bookingDate, loadSlots, service]);
 
-  const slotGroups = useMemo(() => ({
-    Morning: slots.filter((slot) => Number(slot.startTime.slice(0, 2)) < 12),
-    Afternoon: slots.filter((slot) => Number(slot.startTime.slice(0, 2)) >= 12)
-  }), [slots]);
   const selectedSlot = slots.find((slot) => slot.startTime === timeSlot);
   const nextDateLimit = schedule?.maxDaysAhead ?? 30;
   const maximumDate = addDays(today, nextDateLimit);
   const allSlotsUnavailable = !isLoadingSlots && slots.length > 0 && slots.every((slot) => slot.status !== 'available');
-  const canAddBooking = Boolean(bookingDate && selectedSlot?.status === 'available' && vehicle.trim() && !isLoadingSlots);
+  const canAddBooking = canSubmitServiceBooking({
+    bookingDate,
+    timeSlot,
+    selectedSlot,
+    motorcycle: vehicle,
+    isLoadingSlots
+  });
 
   if (isLoadingService) return <CustomerPage title="Loading service" description="Loading service details." />;
   if (serviceError === 'not-found') return <CustomerPage title="Service not found" description="This service could not be found."><Link to="/customer/services">Back to Services</Link></CustomerPage>;
@@ -239,19 +242,23 @@ export default function ServiceDetail() {
     slotRequestRef.current += 1;
     nextAvailableRequestRef.current += 1;
     if (!nextDate) {
-      setBookingDate('');
-      setTimeSlot('');
+      const state = getDateChangeState('');
+      setBookingDate(state.bookingDate);
+      setTimeSlot(state.timeSlot);
       setClosedMessage('');
       return;
     }
     const dayName = weekdayForDate(nextDate);
     if (schedule && !schedule.openDays.includes(dayName)) {
       setClosedMessage(`The shop is closed on ${dayName === 'Sun' ? 'Sundays' : `${dayName}s`}.`);
-      setTimeSlot('');
+      const state = getDateChangeState(nextDate);
+      setTimeSlot(state.timeSlot);
       return;
     }
     setClosedMessage('');
-    setBookingDate(nextDate);
+    const state = getDateChangeState(nextDate);
+    setBookingDate(state.bookingDate);
+    setTimeSlot(state.timeSlot);
   };
 
   const handleNextAvailable = async () => {
@@ -397,24 +404,22 @@ export default function ServiceDetail() {
               : <VehicleForm value={vehicleForm} onChange={setVehicleForm} onSave={saveVehicle} />}
             {vehicles.length > 0 && showVehicleForm && <button className="customer-vehicle-cancel" type="button" onClick={() => { setShowVehicleForm(false); setVehicle(vehicles[0].name); }}>Choose a saved motorcycle</button>}
           </div>
+          <ServiceBookingTimeSelect
+            slots={slots}
+            timeSlot={timeSlot}
+            isLoading={isLoadingSlots}
+            closedMessage={closedMessage}
+            availabilityError={availabilityError}
+            onChange={(event) => {
+              setTimeSlot(event.target.value);
+              setBookingError('');
+            }}
+          />
         </div>
         {availabilityError && <p className="customer-error" role="alert">{availabilityError}</p>}
         {bookingError && <p className="customer-error" role="alert">{bookingError}</p>}
         {closedMessage && <p className="customer-shop-closed-message" role="status">{closedMessage}</p>}
-        <fieldset className="customer-time-slots">
-          <legend>Available booking times</legend>
-          {isLoadingSlots
-            ? <div className="customer-slot-loading" aria-label="Loading available times">{Array.from({ length: 6 }, (_, index) => <ProductSlotSkeleton key={index} />)}</div>
-            : Object.entries(slotGroups).map(([group, groupSlots]) => groupSlots.length > 0 && <section className="customer-slot-group" key={group}>
-              <h3>{group}</h3>
-              <div className="customer-slot-options">{groupSlots.map((slot) => <button type="button" key={slot.startTime} disabled={slot.status !== 'available'} aria-pressed={timeSlot === slot.startTime} className={`customer-slot-chip is-${slot.status}${timeSlot === slot.startTime ? ' is-selected' : ''}`} onClick={() => { setTimeSlot(slot.startTime); setBookingError(''); }}>
-                <strong>{slot.label}</strong>
-                {slot.status === 'full' ? <small>Full</small> : slot.status === 'passed' ? <small>Passed</small> : slot.remainingLabel && <small>{slot.remainingLabel}</small>}
-              </button>)}</div>
-            </section>)}
-          {!isLoadingSlots && !closedMessage && !availabilityError && slots.length === 0 && <p className="customer-empty">No booking times fit this service on the selected date.</p>}
-          {allSlotsUnavailable && <div className="customer-no-slots"><p>No slots left on this date</p><button type="button" className="customer-secondary-button" onClick={handleNextAvailable} disabled={isFindingNext}>{isFindingNext ? 'Finding a date...' : 'Show next available'}</button></div>}
-        </fieldset>
+        {allSlotsUnavailable && <div className="customer-no-slots"><p>No slots left on this date</p><button type="button" className="customer-secondary-button" onClick={handleNextAvailable} disabled={isFindingNext}>{isFindingNext ? 'Finding a date...' : 'Show next available'}</button></div>}
         <label className="customer-notes-field">Notes for the mechanic<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" /><small>{service.pricePerUnit ? 'Notes do not change the price. Choose the quantity above.' : 'Notes do not change the service price.'}</small></label>
         <div className="customer-booking-summary">
           <p>{summary}</p>

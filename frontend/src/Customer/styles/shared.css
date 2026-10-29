@@ -1,6 +1,7 @@
 .customer-page.shop-page,
 .customer-page.services-page,
-.customer-page.profile-page {
+.customer-page.profile-page,
+.customer-page.orders-page {
   --customer-wide-content-padding: clamp(16px, 3vw, 44px);
 }
 

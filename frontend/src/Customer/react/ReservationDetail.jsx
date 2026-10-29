@@ -127,7 +127,7 @@ export default function ReservationDetail() {
   if (isLoading) return <CustomerPage title="Reservation" description="Loading reservation details."><p>Loading...</p></CustomerPage>;
 
   if (serviceReservation) return <CustomerPage title="Booking details" description="Follow your service booking from confirmation to pickup.">
-    <div className="customer-flow-page"><nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/purchases">My bookings</Link><span>/</span><span>{serviceReservation.id}</span></nav>
+    <div className="customer-flow-page"><nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/my-purchases?tab=services">My bookings</Link><span>/</span><span>{serviceReservation.id}</span></nav>
       <section className="customer-reservation-detail-card"><div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceReservation.id}</p><h1>{serviceReservation.name}</h1><p>{serviceReservation.bookingDate} at {serviceReservation.timeSlot} · {serviceReservation.vehicle}</p></div><span className="customer-status-pill">{serviceReservation.status}</span></div><div className="customer-reservation-detail-meta"><div><span>Estimated total</span><strong>{money(serviceReservation.price)}</strong></div><div><span>Duration</span><strong>{serviceReservation.duration}</strong></div><div><span>Booking reference</span><strong>{serviceReservation.orderId}</strong></div></div><h2>Booking progress</h2><ol className="customer-reservation-timeline">{serviceReservation.timeline.map((event) => <li className={event.complete ? 'is-complete' : ''} key={event.label}><span className="customer-timeline-marker">{event.complete ? '✓' : ''}</span><div><strong>{event.label}</strong><small>{event.complete ? new Date(event.date).toLocaleString('en-PH') : 'Pending update'}</small></div></li>)}</ol><Link className="customer-secondary-button" to="/customer/services">Book another service</Link></section>
     </div>
   </CustomerPage>;
@@ -138,7 +138,7 @@ export default function ReservationDetail() {
     const serviceStatus = getServiceBookingStatus(serviceBooking);
     return <CustomerPage title="Booking details" description="Review your service booking and payment status.">
       <div className="customer-flow-page">
-        <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/profile">Account</Link><span>/</span><span>{serviceBooking.code || serviceBooking._id}</span></nav>
+        <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/my-purchases?tab=services">My bookings</Link><span>/</span><span>{serviceBooking.code || serviceBooking._id}</span></nav>
         {error && <p className="customer-error" role="alert">{error}</p>}
         {message && <p className="customer-success" role="status">{message}</p>}
         <section className="customer-reservation-detail-card">
@@ -147,13 +147,13 @@ export default function ReservationDetail() {
           {serviceBooking.paymentRejectionReason && <p className="customer-error" role="alert">Payment needs attention: {serviceBooking.paymentRejectionReason}</p>}
           {paymentPending && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
           {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={getServicePaymentSummary(serviceBooking).downPaymentAmount} settings={settings} showServiceBreakdown onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
-          <Link className="customer-secondary-button" to="/customer/profile">Back to Account</Link>
+          <Link className="customer-secondary-button" to="/my-purchases?tab=services">Back to bookings</Link>
         </section>
       </div>
     </CustomerPage>;
   }
 
-  if (!reservation) return <CustomerPage title="Details not found" description={error || 'This record is not in your account.'}>{error && <p className="customer-error" role="alert">{error}</p>}<Link to="/customer/purchases">Back to My Purchases</Link></CustomerPage>;
+  if (!reservation) return <CustomerPage title="Details not found" description={error || 'This record is not in your account.'}>{error && <p className="customer-error" role="alert">{error}</p>}<Link to="/my-purchases?tab=all">Back to My Purchases</Link></CustomerPage>;
 
   const canSubmitPayment = reservation.status === 'Pending Down Payment';
   const canCustomerCancel = ['Pending Down Payment', 'Payment Submitted'].includes(reservation.status);
@@ -175,7 +175,7 @@ export default function ReservationDetail() {
 
   return <CustomerPage title="Reservation details" description="Submit your down payment and track your pickup reservation.">
     <div className="customer-flow-page">
-      <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/purchases">My Purchases</Link><span>/</span><span>{reservation.code}</span></nav>
+      <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/my-purchases?tab=items">My Purchases</Link><span>/</span><span>{reservation.code}</span></nav>
       {error && <p className="customer-error" role="alert">{error}</p>}
       {message && <p className="customer-success" role="status">{message}</p>}
       <section className="customer-reservation-detail-card">
@@ -197,7 +197,7 @@ export default function ReservationDetail() {
         {canSubmitPayment && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
         {canSubmitPayment && showPaymentForm && <ReservationPaymentForm reservation={reservation} settings={settings} onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
         {canCustomerCancel && <button className="customer-secondary-button" type="button" onClick={() => setShowCancelDialog(true)} disabled={isSaving}>Cancel reservation</button>}
-        <Link className="customer-secondary-button" to="/customer/purchases">Back to My Purchases</Link>
+        <Link className="customer-secondary-button" to="/my-purchases?tab=items">Back to My Purchases</Link>
       </section>
       {showCancelDialog && <div className="customer-confirmation-backdrop" role="presentation"><section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-reservation-title"><h2 id="cancel-reservation-title">Cancel reservation?</h2><p>Cancel reservation {reservation.code}? This cannot be undone.</p><div><button type="button" className="customer-secondary-button" onClick={() => setShowCancelDialog(false)} disabled={isSaving}>Keep reservation</button><button type="button" className="customer-danger-button" onClick={cancelReservation} disabled={isSaving}>{isSaving ? 'Cancelling...' : 'Cancel reservation'}</button></div></section></div>}
     </div>

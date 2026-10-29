@@ -650,7 +650,11 @@ const deleteAccount = async (req, res) => {
               { session }
             );
           }
-          await Notification.deleteMany({ audience: 'customer', customerId: user._id }, { session });
+          await Notification.updateMany(
+            { audience: 'customer', customerId: user._id, clearedAt: null },
+            { $set: { clearedAt: new Date() } },
+            { session }
+          );
         }
       });
     } finally {

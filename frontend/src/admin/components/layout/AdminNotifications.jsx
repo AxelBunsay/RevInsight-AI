@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../../services/adminApi';
+import NotificationDropdown from '../../../components/NotificationDropdown';
 import NotificationContent from '../../../components/NotificationContent';
+import { clearNotificationList } from '../../../utils/notificationActions';
 
 function AdminNotifications() {
   const navigate = useNavigate();
@@ -9,6 +11,8 @@ function AdminNotifications() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState('');
+  const [isClearing, setIsClearing] = useState(false);
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -45,13 +49,28 @@ function AdminNotifications() {
   };
 
   const markAllRead = async () => {
+    setIsMarkingAllRead(true);
     try {
       await adminApi.markAllNotificationsRead();
       setUnreadCount(0);
       setNotifications((current) => current.map((item) => ({ ...item, read: true })));
+      setError('');
     } catch (markError) {
       setError(markError.message || 'Notifications could not be updated.');
+    } finally {
+      setIsMarkingAllRead(false);
     }
+  };
+
+  const clearAll = async () => {
+    setIsClearing(true);
+    await clearNotificationList({
+      clearApi: adminApi.clearNotifications,
+      setNotifications,
+      setUnreadCount,
+      setError
+    });
+    setIsClearing(false);
   };
 
   return <div className="admin-notification-area">
@@ -59,15 +78,18 @@ function AdminNotifications() {
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
       {unreadCount > 0 && <span className="admin-notification-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}
     </button>
-    {isOpen && <section className="admin-notification-popover" aria-label="Notifications">
-      <div className="admin-notification-popover-header"><strong>Notifications</strong><button type="button" disabled={!unreadCount} onClick={markAllRead}>Mark all read</button></div>
-      {error && <p role="alert">{error}</p>}
-      {notifications.length
-        ? <ul>{notifications.map((notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
+    {isOpen && <NotificationDropdown
+      className="admin-notification-popover"
+      notifications={notifications}
+      error={error}
+      isClearing={isClearing}
+      onClearAll={clearAll}
+      onMarkAllRead={markAllRead}
+      isMarkingAllRead={isMarkingAllRead}
+      renderNotification={(notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
           <button type="button" onClick={() => openNotification(notification)}><NotificationContent message={notification.message} timestamp={notification.createdAt} /></button>
-        </li>)}</ul>
-        : !error && <p className="admin-notification-empty">No notifications yet.</p>}
-    </section>}
+        </li>}
+    />}
   </div>;
 }
 

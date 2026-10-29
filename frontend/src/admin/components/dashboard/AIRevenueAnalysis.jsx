@@ -1,8 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
+import MarkdownAnswer from './MarkdownAnswer';
+import { askRevenueQuestion, handleQuestionKeyDown } from './askRevenueQuestion';
+import riskThresholds from '../../../../../shared/revenueRiskConfig.json';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
-const defaultThresholds = { topCategory: 40, highTop: 60, topTwo: 70, highTopTwo: 85 };
+const qoqModerateRange = `${riskThresholds.qoqChange.moderateMin}% to ${riskThresholds.qoqChange.normalMin}%`;
+const hhiModerateRange = `${riskThresholds.concentrationHhi.normalMaxExclusive}–${riskThresholds.concentrationHhi.moderateMaxInclusive}`;
+const contributorModerateRange = `${riskThresholds.topContributorShare.normalMaxExclusive}–${riskThresholds.topContributorShare.moderateMaxInclusive}%`;
+const forecastModerateRange = `${riskThresholds.forecastVsFourQuarterAverage.moderateMin}% to ${riskThresholds.forecastVsFourQuarterAverage.normalMin}%`;
+const riskThresholdTooltip = [
+  `QoQ: Normal ≥ ${riskThresholds.qoqChange.normalMin}%; Moderate ${qoqModerateRange}; High < ${riskThresholds.qoqChange.moderateMin}%.`,
+  `HHI: Normal < ${riskThresholds.concentrationHhi.normalMaxExclusive}; Moderate ${hhiModerateRange}; High > ${riskThresholds.concentrationHhi.moderateMaxInclusive}.`,
+  `Top contributor: Normal < ${riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate ${contributorModerateRange}; High > ${riskThresholds.topContributorShare.moderateMaxInclusive}%.`,
+  `Forecast vs 4-quarter average: Normal ≥ ${riskThresholds.forecastVsFourQuarterAverage.normalMin}%; Moderate ${forecastModerateRange}; High < ${riskThresholds.forecastVsFourQuarterAverage.moderateMin}%.`
+].join('\n');
+
+function RiskChip({ level, why }) {
+  const tone = ['Normal', 'Moderate', 'High'].includes(level) ? level.toLowerCase() : 'unknown';
+  return <span className="ai-revenue-risk">
+    <span className={`ai-revenue-risk__chip is-${tone}`}>{level || 'Not enough data'}</span>
+    <span className="ai-revenue-risk__why">Why: {why || 'Risk indicators are not available.'}</span>
+    <span className="ai-revenue-risk__info" tabIndex={0} title={riskThresholdTooltip} aria-label={`Risk thresholds. ${riskThresholdTooltip.replaceAll('\n', ' ')}`}>i</span>
+  </span>;
+}
 
 function quarterName(year, quarter) {
   return `${year} Q${quarter}`;
@@ -28,6 +49,35 @@ function percentChange(current, previous) {
 function signedPercent(value) {
   if (value === null || !Number.isFinite(value)) return '—';
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
+}
+
+function getOverallRiskWhy(overallRisk, indicators) {
+  if (overallRisk.level === 'Normal') return 'All indicators are within the normal range.';
+  if (!['Moderate', 'High'].includes(overallRisk.level)) {
+    return overallRisk.reason || 'Not enough data to calculate overall risk.';
+  }
+
+  const indicatorLabels = {
+    qoqChange: { reason: 'quarter-over-quarter change', label: 'quarter-over-quarter change' },
+    concentrationHhi: { reason: 'revenue concentration (HHI)', label: 'revenue concentration (HHI)' },
+    topContributorShare: { reason: 'top contributor share', label: 'top contributor share' },
+    forecastVsFourQuarterAverage: {
+      reason: 'forecast versus the four-quarter average',
+      label: 'forecast vs average of the last 4 completed quarters'
+    }
+  };
+  const driver = Object.entries(indicatorLabels)
+    .find(([key, detail]) => overallRisk.reason === detail.reason
+      && Number.isFinite(Number(indicators[key]?.value)));
+  if (!driver) return overallRisk.reason ? `Driven by: ${overallRisk.reason}` : 'Risk driver is unavailable.';
+
+  const [key, detail] = driver;
+  const value = Number(indicators[key].value);
+  const sign = ['qoqChange', 'forecastVsFourQuarterAverage'].includes(key) && value > 0 ? '+' : '';
+  const formattedValue = key === 'concentrationHhi'
+    ? value.toFixed(3)
+    : `${sign}${Number.isInteger(value) ? value : Number(value.toFixed(1))}%`;
+  return `Driven by: ${detail.label} (${formattedValue})`;
 }
 
 function getQuarterRows(rows) {
@@ -77,40 +127,6 @@ function normalizeContributors(items, getName) {
     .sort((left, right) => right.value - left.value);
 }
 
-function getTier(items, thresholds) {
-  const top = items[0]?.share || 0;
-  const topTwo = (items[0]?.share || 0) + (items[1]?.share || 0);
-  if (top > thresholds.highTop || topTwo > thresholds.highTopTwo) return 'High';
-  if (top >= thresholds.topCategory || topTwo >= thresholds.topTwo) return 'Moderate';
-  return 'Normal';
-}
-
-function calculateEstimate(rows, index, availableQuarterCount) {
-  if (availableQuarterCount < 5 || index < 0) return null;
-  const values = rows.slice(0, index + 1).map((row) => row.revenue);
-  const growthRates = values.slice(1).flatMap((value, rateIndex) => {
-    const previous = values[rateIndex];
-    return previous > 0 ? [(value - previous) / previous] : [];
-  });
-  const averageGrowth = growthRates.length
-    ? growthRates.reduce((sum, value) => sum + value, 0) / growthRates.length
-    : 0;
-  const variance = growthRates.length
-    ? growthRates.reduce((sum, value) => sum + (value - averageGrowth) ** 2, 0) / growthRates.length
-    : 0;
-  const current = rows[index];
-  const target = nextQuarter(current.year, current.quarter);
-  const expected = Math.max(0, Math.round(current.revenue * (1 + averageGrowth)));
-  const range = Math.sqrt(variance);
-  return {
-    expected,
-    low: Math.max(0, Math.round(expected * (1 - range))),
-    high: Math.round(expected * (1 + range)),
-    target: quarterName(target.year, target.quarter),
-    targetLabel: 'Estimate'
-  };
-}
-
 function QuarterlyBarChart({ quarters, estimate, selectedKey, currentKey }) {
   const minWidth = 700;
   const height = 190;
@@ -127,7 +143,7 @@ function QuarterlyBarChart({ quarters, estimate, selectedKey, currentKey }) {
     })),
     ...(estimate ? [{
       key: estimate.target,
-      label: 'Estimate',
+      label: 'Forecast',
       value: estimate.expected,
       count: null,
       inProgress: false,
@@ -239,27 +255,38 @@ function AskRevenueAIPanel() {
   const [answer, setAnswer] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [answerTimestamp, setAnswerTimestamp] = useState('');
+  const [copyMessage, setCopyMessage] = useState('');
+  const inFlightRef = useRef(false);
+  const lastQuestionRef = useRef('');
 
-  const submitQuestion = async (event) => {
+  const submitQuestion = async (value = question) => {
+    const trimmedQuestion = value.trim();
+    if (!trimmedQuestion) return;
+    lastQuestionRef.current = trimmedQuestion;
+    setCopyMessage('');
+    await askRevenueQuestion({
+      question: trimmedQuestion,
+      inFlightRef,
+      request: adminApi.askRevenueAI,
+      setIsLoading,
+      setAnswer,
+      setTimestamp: setAnswerTimestamp,
+      setError
+    });
+  };
+
+  const submitForm = (event) => {
     event.preventDefault();
-    const trimmedQuestion = question.trim();
-    if (!trimmedQuestion) {
-      setError('Enter a question about revenue.');
-      return;
-    }
-    setIsLoading(true);
-    setError('');
-    setAnswer('');
+    submitQuestion(question);
+  };
+
+  const copyAnswer = async () => {
     try {
-      const response = await adminApi.askRevenueAI(trimmedQuestion);
-      if (typeof response?.answer !== 'string' || !response.answer.trim()) {
-        throw new Error('The AI returned an empty answer. Please try again.');
-      }
-      setAnswer(response.answer);
-    } catch (requestError) {
-      setError(requestError.message || 'Could not generate a revenue answer. Please try again.');
-    } finally {
-      setIsLoading(false);
+      await navigator.clipboard.writeText(answer);
+      setCopyMessage('Answer copied.');
+    } catch {
+      setCopyMessage('Could not copy the answer. Select and copy the text instead.');
     }
   };
 
@@ -267,16 +294,19 @@ function AskRevenueAIPanel() {
     <p className="ai-revenue-modal__eyebrow">Revenue analysis</p>
     <h2 id="ai-revenue-ai-title">Ask AI</h2>
     <p className="ai-revenue-modal__detail">Ask a question about your revenue data.</p>
-    <div className="ai-revenue-toolbar" aria-label="Suggested questions">
+    <div className="ai-revenue-ai-suggestions" aria-label="Suggested questions">
       {suggestions.map((suggestion) => <button
         type="button"
-        className="ai-revenue-toolbar__action"
+        className="ai-revenue-ai-suggestion"
         key={suggestion}
         disabled={isLoading}
-        onClick={() => setQuestion(suggestion)}
+        onClick={() => {
+          setQuestion(suggestion);
+          submitQuestion(suggestion);
+        }}
       >{suggestion}</button>)}
     </div>
-    <form onSubmit={submitQuestion}>
+    <form onSubmit={submitForm}>
       <div className="ai-revenue-thresholds">
         <label htmlFor="ai-revenue-question">Your question
           <textarea
@@ -286,20 +316,46 @@ function AskRevenueAIPanel() {
             maxLength={500}
             rows={3}
             placeholder="Ask about revenue trends, risk, or concentration..."
-            onChange={(event) => setQuestion(event.target.value)}
+            onChange={(event) => {
+              const textarea = event.currentTarget;
+              setQuestion(textarea.value);
+              textarea.style.height = 'auto';
+              textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+              textarea.style.overflowY = textarea.scrollHeight > 160 ? 'auto' : 'hidden';
+            }}
+            onKeyDown={(event) => handleQuestionKeyDown(event, () => submitQuestion(question))}
           />
         </label>
       </div>
-      <div className="ai-revenue-settings__actions">
-        <small>{question.length}/500</small>
+      <div className="ai-revenue-ai-controls">
+        <div className="ai-revenue-ai-question-meta">
+          <small>{question.length}/500</small>
+          <small>Enter to send, Shift+Enter for a new line</small>
+        </div>
         <button className="ai-revenue-settings__primary" type="submit" disabled={isLoading || !question.trim()}>
           {isLoading ? 'Thinking...' : 'Ask AI'}
         </button>
       </div>
     </form>
-    {isLoading && <p className="ai-revenue-empty" role="status">Analyzing revenue data...</p>}
-    {error && <p className="ai-revenue-report__error" role="alert">{error}</p>}
-    {answer && <div className="ai-revenue-callout" aria-live="polite"><strong>Answer</strong><p>{answer}</p></div>}
+    {isLoading && <div className="ai-revenue-ai-skeleton" role="status" aria-label="Analyzing revenue data">
+      <span /><span /><span />
+    </div>}
+    {error && <div className="ai-revenue-ai-error" role="alert">
+      <p>{error}</p>
+      <button type="button" onClick={() => submitQuestion(lastQuestionRef.current)}>Try again</button>
+    </div>}
+    {answer && <div className="ai-revenue-ai-answer-wrap" aria-live="polite">
+      <MarkdownAnswer markdown={answer} />
+      <footer className="ai-revenue-ai-answer-footer">
+        <span>Generated by AI from your revenue data on {new Intl.DateTimeFormat('en-PH', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+          timeZone: 'Asia/Manila'
+        }).format(new Date(answerTimestamp))}. Check important figures in the Revenue analysis cards.</span>
+        <button type="button" onClick={copyAnswer}>Copy answer</button>
+        {copyMessage && <small role="status">{copyMessage}</small>}
+      </footer>
+    </div>}
   </section>;
 }
 
@@ -315,7 +371,6 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [reportRows, setReportRows] = useState([]);
   const [reportError, setReportError] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
-  const [thresholds, setThresholds] = useState(defaultThresholds);
 
   useEffect(() => {
     let active = true;
@@ -358,16 +413,11 @@ function AIRevenueAnalysis({ dashboardData }) {
   const yearAgo = current && quarters.find((row) => row.year === current.year - 1 && row.quarter === current.quarter);
   const qoq = current && previous ? percentChange(current.revenue, previous.revenue) : null;
   const yoy = current && yearAgo ? percentChange(current.revenue, yearAgo.revenue) : null;
-  const estimate = current
-    ? calculateEstimate(quarters, selectedIndex, analysis.quarters.filter((row) => row.year < current.year
-      || (row.year === current.year && row.quarter <= current.quarter)).length)
-    : null;
-  const chartEstimate = quarters.length
-    ? calculateEstimate(quarters, quarters.length - 1, analysis.quarters.length)
-    : null;
+  const estimate = analysis.risk?.officialForecast || null;
+  const chartEstimate = estimate;
   const currentQuarterKey = todayQuarter.key;
   const categoryItems = useMemo(
-    () => normalizeContributors(analysis.risk?.byCategory, (item) => item?._id),
+    () => normalizeContributors(analysis.risk?.riskByCategory || analysis.risk?.byCategory, (item) => item?._id),
     [analysis.risk]
   );
   const contributorItems = useMemo(
@@ -429,14 +479,40 @@ function AIRevenueAnalysis({ dashboardData }) {
     : modalId === 'concentration'
       ? { title: 'Revenue concentration', items: contributorItems }
       : { title: 'Service type concentration', items: serviceItems };
-  const selectedTier = getTier(selectedAnalysis.items, thresholds);
+  const indicators = analysis.risk?.indicators || {};
+  const overallRisk = analysis.risk?.overallRisk || {
+    level: 'Not enough data',
+    reason: `fewer than ${riskThresholds.minimumCompletedQuarters} completed quarters are available`
+  };
+  const overallRiskWhy = getOverallRiskWhy(overallRisk, indicators);
+  const selectedTier = modalId === 'risk'
+    ? overallRisk.level
+    : modalId === 'concentration'
+      ? indicators.concentrationHhi?.level || 'Not enough data'
+      : indicators.topContributorShare?.level || 'Not enough data';
   const selectedTop = selectedAnalysis.items[0];
+  const topContributorIndicator = indicators.topContributorShare;
+  const uncatShare = Number(analysis.risk?.uncategorized?.share || 0);
+  const getRiskWhy = (key, fallback) => {
+    const indicator = indicators[key];
+    if (key === 'qoqChange' && indicator?.reason) return indicator.reason;
+    if (!indicator || indicator.level === 'Not enough data') {
+      return `Fewer than ${riskThresholds.minimumCompletedQuarters} completed quarters are available.`;
+    }
+    if (key === 'qoqChange') return `completed-quarter revenue changed ${signedPercent(indicator.value)}.`;
+    if (key === 'concentrationHhi') return `HHI is ${Number(indicator.value).toFixed(3)}.`;
+    if (key === 'topContributorShare') return `${indicator.contributor || 'The top contributor'} represents ${Number(indicator.value).toFixed(1)}% of categorized revenue.`;
+    if (key === 'forecastVsFourQuarterAverage') return `the official forecast is ${signedPercent(indicator.value)} versus the four-quarter average.`;
+    return fallback;
+  };
   const cardDetails = [
     {
       id: 'risk',
       title: 'Revenue risk by category',
       icon: '✣',
       items: categoryItems,
+      riskLevel: overallRisk.level,
+      why: overallRisk.reason ? `overall risk is driven by ${overallRisk.reason}.` : 'Overall risk is not available.',
       description: analysis.risk?.topCategory
         ? `${analysis.risk.topCategory} is the largest revenue category`
         : 'No category revenue is available'
@@ -446,8 +522,10 @@ function AIRevenueAnalysis({ dashboardData }) {
       title: 'Revenue concentration',
       icon: '●',
       items: contributorItems,
+      riskLevel: indicators.concentrationHhi?.level || 'Not enough data',
+      why: getRiskWhy('concentrationHhi'),
       description: analysis.concentration?.indicators
-        ? `${Number(analysis.concentration.indicators.topOneShare || 0).toFixed(1)}% from the top contributor`
+        ? `HHI ${Number(analysis.concentration.indicators.hhi || 0).toFixed(3)} · ${Number(analysis.concentration.indicators.topOneShare || 0).toFixed(1)}% top contributor`
         : 'No contributor data is available'
     },
     ...(serviceItems.length ? [{
@@ -455,17 +533,36 @@ function AIRevenueAnalysis({ dashboardData }) {
       title: 'Service type concentration',
       icon: '⌁',
       items: serviceItems,
+      riskLevel: topContributorIndicator?.level || 'Not enough data',
+      why: getRiskWhy('topContributorShare'),
       description: `${serviceItems[0].share.toFixed(1)}% from ${serviceItems[0].name}`
     }] : [])
   ];
 
-  return <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
+  return <>
+  <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
     <div className="ai-revenue-analysis__header">
       <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue, risk, and concentration from business data</p></div></div>
       <div className="ai-revenue-toolbar">
-        <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>⚙️ Thresholds</button>
+        <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>ⓘ Risk thresholds</button>
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportMonth(null); setReportOpen(true); }}>⬇ Export report</button>
       </div>
+    </div>
+    <div className="ai-revenue-overall-risk">
+      <div className="ai-revenue-overall-risk__title">
+        <strong>Overall risk</strong>
+        <button
+          type="button"
+          className="ai-revenue-overall-risk__info"
+          aria-label="Show revenue risk thresholds"
+          aria-haspopup="dialog"
+          onClick={() => setSettingsOpen(true)}
+        >i</button>
+      </div>
+      <span className={`ai-revenue-overall-risk__chip is-${['Normal', 'Moderate', 'High'].includes(overallRisk.level) ? overallRisk.level.toLowerCase() : 'unknown'}`}>
+        {overallRisk.level || 'Not enough data'}
+      </span>
+      <p className="ai-revenue-overall-risk__why">{overallRiskWhy}</p>
     </div>
 
     {isLoading ? <p className="ai-revenue-empty" role="status">Loading revenue analysis…</p>
@@ -498,8 +595,8 @@ function AIRevenueAnalysis({ dashboardData }) {
                   currentKey={currentQuarterKey}
                 />
                 {chartEstimate
-                  ? <><p className="ai-revenue-estimate-note">Next quarter estimate: {peso.format(chartEstimate.expected)} · likely {peso.format(chartEstimate.low)} to {peso.format(chartEstimate.high)}</p><div className="ai-revenue-estimate-legend"><span><i className="is-actual" />Actual</span><span><i className="is-estimate" />Estimate</span><span>Current quarter is marked in progress</span></div></>
-                  : <p className="ai-revenue-estimate-note">Estimate needs at least 5 quarters of data. {analysis.quarters.length} available.</p>}
+                  ? <><p className="ai-revenue-estimate-note">{chartEstimate.targetLabel}: {peso.format(chartEstimate.expected)} · likely {peso.format(chartEstimate.low)} to {peso.format(chartEstimate.high)}</p><div className="ai-revenue-estimate-legend"><span><i className="is-actual" />Actual</span><span><i className="is-estimate" />Forecast</span><span>Current quarter is marked in progress</span></div></>
+                  : <p className="ai-revenue-estimate-note">Estimate needs at least {riskThresholds.minimumCompletedQuarters} quarters of data. {analysis.quarters.length} available.</p>}
               </div>
             </div>
             <div className="ai-revenue-collected-row">
@@ -509,41 +606,43 @@ function AIRevenueAnalysis({ dashboardData }) {
             </div>
             <div className="ai-revenue-cards">
               <button type="button" className="ai-revenue-card" onClick={() => setModalId('trend')}>
-                <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">↗</span><em className={`ai-revenue-pill ${qoq !== null && qoq < 0 ? 'is-bad' : 'is-good'}`}>{signedPercent(qoq)} QoQ</em></div>
+                <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">↗</span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
                 <strong>Revenue trend &amp; growth</strong><b>{peso.format(current.revenue)}</b>
+                <small>Why: QoQ risk uses completed-quarter revenue, not the in-progress quarter.</small>
                 <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
               </button>
               {cardDetails.map((card) => {
-                const tier = getTier(card.items, thresholds);
                 return <button type="button" className="ai-revenue-card" key={card.id} onClick={() => setModalId(card.id)}>
-                  <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">{card.icon}</span><em className={`ai-revenue-pill ${tier === 'High' ? 'is-bad' : tier === 'Moderate' ? 'is-warn' : 'is-good'}`}>{card.items.length ? `${tier} risk` : 'No data'}</em></div>
+                  <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">{card.icon}</span><RiskChip level={card.riskLevel} why={card.why} /></div>
                   <strong>{card.title}</strong>
                   <b>{card.items.length ? `${card.items[0].share.toFixed(1)}% from ${card.items[0].name}` : 'No data'}</b>
                   <small>{card.description}</small>
                 </button>;
               })}
               <button type="button" className="ai-revenue-card" onClick={() => setModalId('estimate')}>
-                <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">◌</span><em className={`ai-revenue-pill ${estimate ? 'is-neutral' : 'is-warn'}`}>{estimate ? 'Estimate' : 'Need 5+ quarters'}</em></div>
-                <strong>Quarterly estimate</strong><b>{estimate ? `${peso.format(estimate.expected)} expected` : 'Limited history'}</b>
-                <small>{estimate ? `Likely range ${peso.format(estimate.low)} to ${peso.format(estimate.high)} for ${estimate.target}` : 'At least five quarters are required.'}</small>
+                <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">◌</span><RiskChip level={indicators.forecastVsFourQuarterAverage?.level || 'Not enough data'} why={getRiskWhy('forecastVsFourQuarterAverage')} /></div>
+                <strong>{estimate?.targetLabel || 'Quarterly forecast'}</strong><b>{estimate ? `${peso.format(estimate.expected)} expected` : 'Limited history'}</b>
+                <small>Why: forecast compared with the average of the last four completed quarters.</small>
+                {estimate?.quarterToDate && <small>So far: {peso.format(estimate.quarterToDate.revenue)} ({estimate.quarterToDate.percentElapsed}% of the quarter elapsed)</small>}
+                <small>{estimate ? `Likely range ${peso.format(estimate.low)} to ${peso.format(estimate.high)}` : `At least ${riskThresholds.minimumCompletedQuarters} completed quarters are required.`}</small>
               </button>
             </div>
-            {analysis.quarters.length < 5 && <p className="ai-revenue-empty" role="status">Fewer than 5 quarters are available. The quarterly trend is shown; the estimate will appear after more data is recorded.</p>}
+            <p className="ai-revenue-uncategorized">Uncategorized (historical): {uncatShare.toFixed(1)}% of revenue</p>
+            {(analysis.risk?.completedQuarterCount || 0) < riskThresholds.minimumCompletedQuarters && <p className="ai-revenue-empty" role="status">Fewer than {riskThresholds.minimumCompletedQuarters} completed quarters are available. The quarterly trend is shown; the forecast will appear after more data is recorded.</p>}
           </>}
-
-    <AskRevenueAIPanel />
 
     {settingsOpen && <div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
       <section className="ai-revenue-modal ai-revenue-settings" role="dialog" aria-modal="true" aria-labelledby="ai-thresholds-title">
         <button type="button" className="ai-revenue-modal__close" aria-label="Close thresholds" onClick={() => setSettingsOpen(false)}>×</button>
-        <p className="ai-revenue-modal__eyebrow">Settings</p><h2 id="ai-thresholds-title">Risk thresholds</h2>
-        <div className="ai-revenue-thresholds">
-          <label><span>Moderate starts at (top category %)</span><input type="number" min="0" max="100" value={thresholds.topCategory} onChange={(event) => setThresholds((value) => ({ ...value, topCategory: Number(event.target.value) || 0 }))} /></label>
-          <label><span>High starts at (top category %)</span><input type="number" min="0" max="100" value={thresholds.highTop} onChange={(event) => setThresholds((value) => ({ ...value, highTop: Number(event.target.value) || 0 }))} /></label>
-          <label><span>Moderate starts at (top 2 %)</span><input type="number" min="0" max="100" value={thresholds.topTwo} onChange={(event) => setThresholds((value) => ({ ...value, topTwo: Number(event.target.value) || 0 }))} /></label>
-          <label><span>High starts at (top 2 %)</span><input type="number" min="0" max="100" value={thresholds.highTopTwo} onChange={(event) => setThresholds((value) => ({ ...value, highTopTwo: Number(event.target.value) || 0 }))} /></label>
+        <p className="ai-revenue-modal__eyebrow">Reference</p><h2 id="ai-thresholds-title">Risk thresholds</h2>
+        <div className="ai-revenue-thresholds__reference">
+          <p><strong>Quarter-over-quarter change:</strong> Normal ≥ {riskThresholds.qoqChange.normalMin}%; Moderate {qoqModerateRange}%; High &lt; {riskThresholds.qoqChange.moderateMin}%.</p>
+          <p><strong>Concentration (HHI):</strong> Normal &lt; {riskThresholds.concentrationHhi.normalMaxExclusive}; Moderate {hhiModerateRange}; High &gt; {riskThresholds.concentrationHhi.moderateMaxInclusive}.</p>
+          <p><strong>Top contributor share:</strong> Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate {contributorModerateRange}; High &gt; {riskThresholds.topContributorShare.moderateMaxInclusive}%.</p>
+          <p><strong>Forecast vs. last four completed-quarter average:</strong> Normal ≥ {riskThresholds.forecastVsFourQuarterAverage.normalMin}%; Moderate {forecastModerateRange}; High &lt; {riskThresholds.forecastVsFourQuarterAverage.moderateMin}%.</p>
+          <p>Overall risk is the highest indicator level. Uncategorized historical revenue is excluded from concentration calculations and shown separately.</p>
         </div>
-        <div className="ai-revenue-settings__actions"><button type="button" className="ai-revenue-settings__secondary" onClick={() => setThresholds(defaultThresholds)}>Reset to default</button><button type="button" className="ai-revenue-settings__primary" onClick={() => setSettingsOpen(false)}>Apply</button></div>
+        <div className="ai-revenue-settings__actions"><button type="button" className="ai-revenue-settings__primary" onClick={() => setSettingsOpen(false)}>Close</button></div>
       </section>
     </div>}
 
@@ -580,9 +679,9 @@ function AIRevenueAnalysis({ dashboardData }) {
       <section className="ai-revenue-modal" role="dialog" aria-modal="true" aria-labelledby="ai-analysis-modal-title">
         <button type="button" className="ai-revenue-modal__close" aria-label="Close analysis" onClick={() => setModalId(null)}>×</button>
         <p className="ai-revenue-modal__eyebrow">{quarterName(current.year, current.quarter)} analysis</p>
-        <h2 id="ai-analysis-modal-title">{modalId === 'estimate' ? 'Quarterly estimate' : 'Revenue trend & growth'}</h2>
+        <h2 id="ai-analysis-modal-title">{modalId === 'estimate' ? 'Quarterly forecast' : 'Revenue trend & growth'}</h2>
         <strong className="ai-revenue-modal__headline">{modalId === 'estimate' ? estimate ? `${peso.format(estimate.expected)} estimate for ${estimate.target}` : 'Limited history' : `${peso.format(current.revenue)} revenue`}</strong>
-        <p className="ai-revenue-modal__detail">{modalId === 'estimate' ? estimate ? `Likely range: ${peso.format(estimate.low)} to ${peso.format(estimate.high)}.` : 'At least five quarters are needed for an estimate.' : `QoQ change: ${signedPercent(qoq)} · YoY change: ${signedPercent(yoy)}`}</p>
+        <p className="ai-revenue-modal__detail">{modalId === 'estimate' ? estimate ? `Likely range: ${peso.format(estimate.low)} to ${peso.format(estimate.high)}.` : `At least ${riskThresholds.minimumCompletedQuarters} quarters are needed for an estimate.` : `QoQ change: ${signedPercent(qoq)} · YoY change: ${signedPercent(yoy)}`}</p>
         <QuarterlyBarChart quarters={quarters.slice(0, selectedIndex + 1)} estimate={estimate} selectedKey={`${current.year}-Q${current.quarter}`} currentKey={currentQuarterKey} />
         <div className="ai-revenue-callout is-normal">Estimate is a simple planning aid based on average observed quarter-over-quarter growth, not a target.</div>
       </section>
@@ -596,11 +695,13 @@ function AIRevenueAnalysis({ dashboardData }) {
           <div className="ai-revenue-tier-tabs">{['Normal', 'Moderate', 'High'].map((tier) => <span className={selectedTier === tier ? 'is-active' : ''} key={tier}>{tier}</span>)}</div>
           <div className={`ai-revenue-callout is-${selectedTier.toLowerCase()}`}><strong>{selectedTier} concentration</strong><span>{selectedTop?.name} contributes {selectedTop?.share.toFixed(1)}% of the displayed revenue mix.</span></div>
           <HorizontalBars items={selectedAnalysis.items} />
-          <div className="ai-revenue-thresholds__note">Threshold reference: Moderate at {thresholds.topCategory}% top category / {thresholds.topTwo}% top two; High at {thresholds.highTop}% top category / {thresholds.highTopTwo}% top two.</div>
+          <div className="ai-revenue-thresholds__note">Threshold reference: Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate through {riskThresholds.topContributorShare.moderateMaxInclusive}%; High above {riskThresholds.topContributorShare.moderateMaxInclusive}%.</div>
         </> : <p className="ai-revenue-empty">There is no backend data for this concentration view.</p>}
       </section>
     </div>}
-  </section>;
+  </section>
+  <AskRevenueAIPanel />
+  </>;
 }
 
 export default AIRevenueAnalysis;

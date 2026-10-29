@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const {
   app,
   BusinessRecord,
+  Notification,
   Reservation,
   ServiceRequest,
   startReplicaSet,
@@ -141,6 +142,14 @@ describe('security integration', () => {
   it('anonymizes historical customer records without changing their amounts or dates', async () => {
     const password = 'CustomerPass1';
     await User.updateOne({ _id: fixtures.customer._id }, { $set: { password: await bcrypt.hash(password, 10) } });
+    const [notification] = await Notification.create([{
+      audience: 'customer',
+      customerId: fixtures.customer._id,
+      type: 'payment_confirmed',
+      message: 'A historical reservation was confirmed.',
+      recordId: fixtures.product._id,
+      recordType: 'item'
+    }]);
     const purchasedAt = new Date('2025-08-12T09:30:00+08:00');
     const reservationDate = new Date('2025-08-14T16:15:00+08:00');
     const bookingDate = new Date('2025-08-16T11:45:00+08:00');
@@ -207,6 +216,9 @@ describe('security integration', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.message).toBe('Your account was deleted.');
+    const retainedNotification = await Notification.findById(notification._id).lean();
+    expect(retainedNotification).not.toBeNull();
+    expect(retainedNotification.clearedAt).toBeInstanceOf(Date);
     const deletedUser = await User.findById(fixtures.customer._id).lean();
     expect(deletedUser).toMatchObject({
       isDeleted: true,

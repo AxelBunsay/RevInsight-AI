@@ -20,9 +20,10 @@ const {
   getRevenueEntries,
   groupRevenueByPeriod,
   summarizeRevenue,
-  groupRevenueByCategory,
-  groupRevenueContributors,
-  projectNextQuarter,
+  calculateRevenueRisk,
+  getRevenueRiskLevel,
+  REVENUE_RISK_THRESHOLDS,
+  calculateDashboardForecast,
   parseManilaDateBound,
   getManilaDateParts
 } = require('../../utils/revenue');
@@ -49,28 +50,32 @@ const getRevenueByPeriod = async (unit, fromDate) => {
 const getRevenueConcentration = async (req, res) => {
   try {
     const entries = await loadRevenueEntries();
-    const contributors = groupRevenueContributors(entries)
-      .filter((item) => Number(item.revenue) > 0)
-      .sort((left, right) => right.revenue - left.revenue);
-    const totalRevenue = contributors.reduce((sum, item) => sum + item.revenue, 0);
-    const rankedContributors = contributors.map((item) => ({
-      ...item,
-      share: totalRevenue ? Number(((item.revenue / totalRevenue) * 100).toFixed(2)) : 0
-    }));
-    const topOneShare = rankedContributors[0]?.share || 0;
-    const topThreeShare = rankedContributors.slice(0, 3).reduce((sum, item) => sum + item.share, 0);
-    const hhi = Number(rankedContributors.reduce((sum, item) => sum + ((item.share / 100) ** 2), 0).toFixed(4));
-    const concentrationLevel = topOneShare >= 50 || topThreeShare >= 80 || hhi >= 0.25
-      ? 'High'
-      : topOneShare >= 30 || topThreeShare >= 60 || hhi >= 0.15 ? 'Moderate' : 'Low';
+    const data = calculateRevenueRisk(entries, []);
+    const topOneShare = data.indicators.topContributorShare.value || 0;
+    const topThreeShare = data.contributors.slice(0, 3).reduce((sum, item) => sum + item.share, 0);
+    const hhi = data.indicators.concentrationHhi.value || 0;
+    const concentrationLevel = data.completedQuarterCount < REVENUE_RISK_THRESHOLDS.minimumCompletedQuarters
+      ? 'Not enough data'
+      : [
+        getRevenueRiskLevel('concentrationHhi', hhi),
+        getRevenueRiskLevel('topContributorShare', topOneShare)
+      ].sort((left, right) => ['Normal', 'Moderate', 'High'].indexOf(right) - ['Normal', 'Moderate', 'High'].indexOf(left))[0];
 
     res.json({
       success: true,
       data: {
-        totalRevenue,
-        contributors: rankedContributors,
-        indicators: { topOneShare, topThreeShare, hhi, concentrationLevel },
-        dependentOnLimitedContributors: concentrationLevel !== 'Low'
+        totalRevenue: data.totalRevenue,
+        analyzedRevenue: data.totalRevenue - data.uncategorized.revenue,
+        uncategorized: data.uncategorized,
+        contributors: data.contributors,
+        indicators: {
+          topOneShare,
+          topThreeShare,
+          hhi,
+          concentrationLevel,
+          thresholds: REVENUE_RISK_THRESHOLDS
+        },
+        dependentOnLimitedContributors: concentrationLevel !== 'Normal'
       }
     });
   } catch (error) {
@@ -175,28 +180,15 @@ const getDailyData = async (req, res) => {
 // Get Revenue Risk
 const getRevenueRisk = async (req, res) => {
   try {
-    const entries = await loadRevenueEntries();
-    const revenueByCategory = groupRevenueByCategory(entries);
-    const totalRevenue = revenueByCategory.reduce((sum, item) => sum + item.revenue, 0);
-    const topCategory = revenueByCategory[0];
-    const concentration = totalRevenue > 0 && topCategory
-      ? topCategory.revenue / totalRevenue * 100
-      : 0;
-    const riskLevel = concentration > 80 ? 'High' : 'Low';
-    const categoriesWithShare = revenueByCategory.map((item) => ({
-      ...item,
-      percentage: totalRevenue ? item.revenue / totalRevenue * 100 : 0
-    }));
+    const [entries, quarterlyData] = await Promise.all([
+      loadRevenueEntries(),
+      getRevenueByPeriod('quarter')
+    ]);
+    const risk = calculateRevenueRisk(entries, quarterlyData);
 
     res.json({
       success: true,
-      data: {
-        totalRevenue,
-        riskLevel,
-        topCategory: topCategory?._id,
-        concentration: concentration.toFixed(2),
-        byCategory: categoriesWithShare
-      }
+      data: risk
     });
   } catch (error) {
     console.error('[getRevenueRisk] error', error);
@@ -213,14 +205,26 @@ const getProjectedRevenue = async (req, res) => {
       row._id.year < currentQuarter.year
       || (row._id.year === currentQuarter.year && row._id.quarter < currentQuarter.quarter)
     );
-    const insufficientData = completedQuarters.length < 5;
+    const forecast = calculateDashboardForecast(quarterlyData);
+    const insufficientData = forecast === null;
 
     res.json({
       success: true,
       data: {
         insufficientData,
         availableQuarters: completedQuarters.length,
-        projection: insufficientData ? [] : projectNextQuarter(completedQuarters)
+        projection: forecast ? [{
+          _id: forecast.targetQuarter,
+          revenue: forecast.expected,
+          low: forecast.low,
+          high: forecast.high,
+          target: forecast.target,
+          targetLabel: forecast.targetLabel,
+          baseRevenue: forecast.baseRevenue,
+          growthRates: forecast.growthRates,
+          averageGrowthRate: forecast.averageGrowthRate,
+          quarterToDate: forecast.quarterToDate
+        }] : []
       }
     });
   } catch (error) {

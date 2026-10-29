@@ -10,7 +10,12 @@ const {
   summarizeRevenue,
   groupRevenueByCategory,
   groupRevenueContributors,
-  projectNextQuarter
+  projectNextQuarter,
+  REVENUE_RISK_THRESHOLDS,
+  getRevenueRiskLevel,
+  calculateDashboardForecast,
+  getCompletedQuarterRows,
+  calculateRevenueRisk
 } = revenue;
 
 const fixtures = {
@@ -145,5 +150,179 @@ describe('shared revenue helpers', () => {
       isProjection: true
     }]);
     expect(projectNextQuarter([])).toEqual([]);
+  });
+
+  it('classifies every risk threshold boundary consistently', () => {
+    expect(getRevenueRiskLevel('qoqChange', -5)).toBe('Normal');
+    expect(getRevenueRiskLevel('qoqChange', -5.001)).toBe('Moderate');
+    expect(getRevenueRiskLevel('qoqChange', -15)).toBe('Moderate');
+    expect(getRevenueRiskLevel('qoqChange', -15.001)).toBe('High');
+    expect(getRevenueRiskLevel('concentrationHhi', 0.1499)).toBe('Normal');
+    expect(getRevenueRiskLevel('concentrationHhi', 0.15)).toBe('Moderate');
+    expect(getRevenueRiskLevel('concentrationHhi', 0.25)).toBe('Moderate');
+    expect(getRevenueRiskLevel('concentrationHhi', 0.2501)).toBe('High');
+    expect(getRevenueRiskLevel('topContributorShare', 39.99)).toBe('Normal');
+    expect(getRevenueRiskLevel('topContributorShare', 40)).toBe('Moderate');
+    expect(getRevenueRiskLevel('topContributorShare', 60)).toBe('Moderate');
+    expect(getRevenueRiskLevel('topContributorShare', 60.01)).toBe('High');
+    expect(getRevenueRiskLevel('forecastVsFourQuarterAverage', -10)).toBe('Normal');
+    expect(getRevenueRiskLevel('forecastVsFourQuarterAverage', -10.001)).toBe('Moderate');
+    expect(getRevenueRiskLevel('forecastVsFourQuarterAverage', -25)).toBe('Moderate');
+    expect(getRevenueRiskLevel('forecastVsFourQuarterAverage', -25.001)).toBe('High');
+    expect(REVENUE_RISK_THRESHOLDS).toMatchObject({
+      minimumCompletedQuarters: 5,
+      qoqChange: { normalMin: -5, moderateMin: -15 },
+      concentrationHhi: { normalMaxExclusive: 0.15, moderateMaxInclusive: 0.25 },
+      topContributorShare: { normalMaxExclusive: 40, moderateMaxInclusive: 60 },
+      forecastVsFourQuarterAverage: { normalMin: -10, moderateMin: -25 }
+    });
+  });
+
+  it('excludes uncategorized historical revenue from risk concentration and reports its overall share', () => {
+    const entries = [
+      { source: 'order', name: 'Historic sales', category: 'Uncategorized', contributorType: 'Uncategorized', revenue: 900 },
+      { source: 'order', name: 'Pads', category: 'Brakes', contributorType: 'Brakes', revenue: 50 },
+      { source: 'order', name: 'Oil', category: 'Fluids', contributorType: 'Fluids', revenue: 30 },
+      { source: 'service', name: 'Tune-up', category: null, contributorType: 'Labor service', revenue: 20 }
+    ];
+    const quarters = Array.from({ length: 5 }, (_, index) => ({
+      _id: { year: 2025 + Math.floor(index / 4), quarter: index % 4 + 1 },
+      revenue: 1000
+    }));
+    const result = calculateRevenueRisk(entries, quarters, new Date('2027-01-15T00:00:00+08:00'));
+
+    expect(result.totalRevenue).toBe(1000);
+    expect(result.uncategorized).toEqual({ revenue: 900, share: 90 });
+    expect(result.indicators.concentrationHhi.value).toBe(0.38);
+    expect(result.indicators.topContributorShare.value).toBe(50);
+    expect(result.riskByCategory.some((category) => category._id === 'Uncategorized')).toBe(false);
+    expect(result.byCategory.some((category) => category._id === 'Uncategorized')).toBe(true);
+    expect(result.overallRisk.level).toBe('High');
+    expect(result.overallRisk.reason).toBe('revenue concentration (HHI)');
+  });
+
+  it('returns Not enough data before five completed quarters', () => {
+    const result = calculateRevenueRisk([], [
+      { _id: { year: 2026, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2026, quarter: 2 }, revenue: 120 },
+      { _id: { year: 2026, quarter: 3 }, revenue: 90 },
+      { _id: { year: 2026, quarter: 4 }, revenue: 110 }
+    ], new Date('2027-01-15T00:00:00+08:00'));
+
+    expect(result.completedQuarterCount).toBe(4);
+    expect(result.overallRisk).toMatchObject({ level: 'Not enough data' });
+    expect(Object.values(result.indicators).map((indicator) => indicator.level))
+      .toEqual(['Not enough data', 'Not enough data', 'Not enough data', 'Not enough data']);
+  });
+
+  it('does not zero-fill missing completed quarters in the risk quarter series', () => {
+    const quarters = getCompletedQuarterRows([
+      { _id: { year: 2026, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2026, quarter: 3 }, revenue: 50 },
+      { _id: { year: 2026, quarter: 4 }, revenue: 200 }
+    ], new Date('2026-10-15T00:00:00+08:00'));
+
+    expect(quarters.map((row) => [row._id.year, row._id.quarter, row.revenue]))
+      .toEqual([[2026, 1, 100], [2026, 3, 50]]);
+  });
+
+  it('marks QoQ n/a across a quarter gap without treating the gap as a -100% drop', () => {
+    const quarters = [
+      { _id: { year: 2025, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2025, quarter: 2 }, revenue: 100 },
+      { _id: { year: 2025, quarter: 3 }, revenue: 100 },
+      { _id: { year: 2025, quarter: 4 }, revenue: 100 },
+      { _id: { year: 2026, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2026, quarter: 3 }, revenue: 50 }
+    ];
+    const result = calculateRevenueRisk([
+      { source: 'order', name: 'Parts', category: 'Brakes', contributorType: 'Brakes', revenue: 100 }
+    ], quarters, new Date('2027-01-15T00:00:00+08:00'));
+
+    expect(result.indicators.qoqChange).toMatchObject({
+      value: null,
+      level: 'Not enough data',
+      reason: 'QoQ is n/a because the latest completed quarters are not consecutive.'
+    });
+    expect(result.indicators.qoqChange.value).not.toBe(-100);
+    expect(result.overallRisk.reason).toBe('revenue concentration (HHI)');
+  });
+
+  it('excludes the in-progress quarter from forecast base, growth rates, and range', () => {
+    const rows = [
+      { _id: { year: 2025, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2025, quarter: 2 }, revenue: 110 },
+      { _id: { year: 2025, quarter: 3 }, revenue: 121 },
+      { _id: { year: 2025, quarter: 4 }, revenue: 133 },
+      { _id: { year: 2026, quarter: 1 }, revenue: 146 },
+      { _id: { year: 2026, quarter: 2 }, revenue: 1 }
+    ];
+    const now = new Date('2026-04-15T00:00:00+08:00');
+    const withPartialQuarter = calculateDashboardForecast(rows, now);
+    const withoutPartialQuarter = calculateDashboardForecast(rows.slice(0, -1), now);
+
+    expect(withPartialQuarter).toEqual({
+      ...withoutPartialQuarter,
+      quarterToDate: { quarter: '2026 Q2', revenue: 1, percentElapsed: 15 }
+    });
+    expect(withPartialQuarter).toMatchObject({
+      target: '2026 Q2',
+      targetLabel: 'Forecast for 2026 Q2',
+      baseRevenue: 146,
+      expected: 160,
+      low: 160,
+      high: 160,
+      growthRates: expect.arrayContaining([0.1]),
+      quarterToDate: { quarter: '2026 Q2', revenue: 1, percentElapsed: 15 }
+    });
+    expect(withPartialQuarter.growthRates).toHaveLength(4);
+    expect(withPartialQuarter.averageGrowthRate).toBeCloseTo(0.099229478, 7);
+    expect(withPartialQuarter).not.toMatchObject({
+      baseRevenue: 1,
+      target: '2026 Q3'
+    });
+  });
+
+  it('moves the forecast target forward when the in-progress quarter completes', () => {
+    const quarters = [
+      { _id: { year: 2025, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2025, quarter: 2 }, revenue: 110 },
+      { _id: { year: 2025, quarter: 3 }, revenue: 121 },
+      { _id: { year: 2025, quarter: 4 }, revenue: 133 },
+      { _id: { year: 2026, quarter: 1 }, revenue: 146 },
+      { _id: { year: 2026, quarter: 2 }, revenue: 160 },
+      { _id: { year: 2026, quarter: 3 }, revenue: 176 }
+    ];
+
+    expect(calculateDashboardForecast(quarters, new Date('2026-07-15T00:00:00+08:00')))
+      .toMatchObject({
+        target: '2026 Q3',
+        targetLabel: 'Forecast for 2026 Q3',
+        baseRevenue: 160,
+        quarterToDate: { quarter: '2026 Q3' }
+      });
+  });
+
+  it('uses the corrected completed-quarter forecast in the forecast risk indicator', () => {
+    const quarters = [
+      { _id: { year: 2025, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2025, quarter: 2 }, revenue: 110 },
+      { _id: { year: 2025, quarter: 3 }, revenue: 121 },
+      { _id: { year: 2025, quarter: 4 }, revenue: 133 },
+      { _id: { year: 2026, quarter: 1 }, revenue: 146 },
+      { _id: { year: 2026, quarter: 2 }, revenue: 1 }
+    ];
+    const now = new Date('2026-04-15T00:00:00+08:00');
+    const risk = calculateRevenueRisk([
+      { source: 'order', name: 'Brake pads', category: 'Brakes', contributorType: 'Brakes', revenue: 100 }
+    ], quarters, now);
+    const forecast = calculateDashboardForecast(quarters, now);
+    const expectedFourQuarterAverage = (110 + 121 + 133 + 146) / 4;
+
+    expect(risk.officialForecast.expected).toBe(forecast.expected);
+    expect(risk.indicators.forecastVsFourQuarterAverage.forecast).toBe(forecast.expected);
+    expect(risk.indicators.forecastVsFourQuarterAverage.average).toBe(expectedFourQuarterAverage);
+    expect(risk.indicators.forecastVsFourQuarterAverage.value)
+      .toBeCloseTo((forecast.expected - expectedFourQuarterAverage) / expectedFourQuarterAverage * 100, 8);
   });
 });

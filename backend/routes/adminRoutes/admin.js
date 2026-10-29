@@ -18,6 +18,7 @@ router.post('/login', createLoginRateLimit(), login);
 // Protected routes
 router.get('/admin', protect, getAdmin);
 router.get('/notifications', protect, notifications.getAdminNotifications);
+router.delete('/notifications', protect, notifications.clearAdminNotifications);
 router.post('/notifications/read-all', protect, notifications.markAllAdminNotificationsRead);
 router.post('/notifications/:id/read', protect, notifications.markAdminNotificationRead);
 router.get('/mechanics/summary', protect, mechanicController.getMechanicsSummary);

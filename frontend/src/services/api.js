@@ -115,6 +115,7 @@ export const api = {
     return request(`/api/reservations/${reservationId}/payment`, { method: 'POST', body, tokenKey: 'customerToken' });
   },
   getCustomerNotifications: () => request('/api/notifications', { tokenKey: 'customerToken' }),
+  clearCustomerNotifications: () => request('/api/notifications', { method: 'DELETE', tokenKey: 'customerToken' }),
   markCustomerNotificationRead: (id) => request(`/api/notifications/${id}/read`, { method: 'POST', tokenKey: 'customerToken' }),
   cancelCustomerReservation: (reservationId, reason) => request(`/api/reservations/${reservationId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }), tokenKey: 'customerToken' }),
   reorder: (orderId) => request(`/api/orders/${orderId}/reorder`, { method: 'POST', tokenKey: 'customerToken' }),
