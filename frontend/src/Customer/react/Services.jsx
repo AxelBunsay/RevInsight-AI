@@ -61,108 +61,113 @@ export default function Services() {
       title="Motorcycle Services"
       description="Book expert care for your motorcycle."
     >
-      <section
-        className="services-hero"
-        aria-label="Mechanic services introduction"
-      >
-        <div>
-          <p className="services-hero-eyebrow">
-            MANOY&apos;S MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES
-          </p>
-          <h2>
-            Mechanic Services <span aria-hidden="true">🔧</span>
-          </h2>
-          <p>
-            Book a service and our skilled mechanics will handle the rest.
-          </p>
-          <div className="services-hero-stats">
-            <span>{services.length} Services</span>
-            <span>Expert Mechanics</span>
-            <span>Quality Guaranteed</span>
-          </div>
-        </div>
-        <div className="services-hero-wheel" aria-hidden="true">
-          ◉
-        </div>
-      </section>
-
-      <div className="services-toolbar">
-        <label className="services-search">
-          <span aria-hidden="true">⌕</span>
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search services..."
-            aria-label="Search services"
-          />
-        </label>
-        <div
-          className="service-category-pills"
-          role="tablist"
-          aria-label="Service categories"
+      <div className="services-content">
+        <section
+          className="services-hero"
+          aria-label="Mechanic services introduction"
         >
-          {categories.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={category === item ? "active" : ""}
-              onClick={() => setCategory(item)}
-            >
-              {item}{" "}
-              <small>
-                {item === "All"
-                  ? services.length
-                  : services.filter(
-                      (service) => (service.category || "General") === item,
-                    ).length}
-              </small>
-            </button>
-          ))}
-        </div>
-        <Link className="services-my-bookings" to="/my-purchases?tab=services">My bookings</Link>
-      </div>
+          <div>
+            <p className="services-hero-eyebrow">
+              MANOY&apos;S MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES
+            </p>
+            <h2>
+              Mechanic Services <span aria-hidden="true">🔧</span>
+            </h2>
+            <p>
+              Book a service and our skilled mechanics will handle the rest.
+            </p>
+            <div className="services-hero-stats">
+              <span>{services.length} Services</span>
+              <span>Expert Mechanics</span>
+              <span>Quality Guaranteed</span>
+            </div>
+          </div>
+          <div className="services-hero-wheel" aria-hidden="true">
+            ◉
+          </div>
+        </section>
 
-      <div className="service-card-grid">
-        {isLoading
-          ? Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)
-          : visibleServices.map((service) => (
-            <article
-              className="service-card tone-sun"
-              key={service._id}
-            >
-              <div className="service-card-art">
-                <span className="service-code">Code: {service.code}</span>
-                <span className="service-duration">{formatDuration(service.durationMinutes)}</span>
-                <div className="service-icon" aria-hidden="true">🔧</div>
-              </div>
-              <div className="service-card-body">
-                <p className="service-category-label">{service.category || "General"}</p>
-                <h2>{service.name}</h2>
-                <p>{service.description || "Service details available at the shop."}</p>
+        <div className="services-toolbar">
+          <label className="services-search">
+            <span aria-hidden="true">⌕</span>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search services..."
+              aria-label="Search services"
+            />
+          </label>
+          <div
+            className="service-category-pills"
+            role="tablist"
+            aria-label="Service categories"
+          >
+            {categories.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={category === item ? "active" : ""}
+                onClick={() => setCategory(item)}
+              >
+                {item}{" "}
+                <small>
+                  {item === "All"
+                    ? services.length
+                    : services.filter(
+                        (service) => (service.category || "General") === item,
+                      ).length}
+                </small>
+              </button>
+            ))}
+          </div>
+          <Link className="services-my-bookings" to="/my-purchases?tab=services">My bookings</Link>
+        </div>
+
+        <div className="service-card-grid">
+          {isLoading
+            ? Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)
+            : visibleServices.map((service) => (
+              <article
+                className="service-card tone-sun"
+                key={service._id}
+              >
+                <div className="service-card-art">
+                  <span className="service-code">Code: {service.code}</span>
+                  <span className="service-duration">{formatDuration(service.durationMinutes)}</span>
+                  <div className="service-icon" aria-hidden="true">🔧</div>
+                </div>
+                <div className="service-card-body">
+                  <p className="service-category-label">{service.category || "General"}</p>
+                  <h2 title={service.name}>{service.name}</h2>
+                  <p
+                    className="service-card-description"
+                    title={service.description || "Service details available at the shop."}
+                  >{service.description || "Service details available at the shop."}</p>
+                </div>
                 <div className="service-card-footer">
                   <strong>₱{(Number(service.price || 0) + Number(service.mechanicFee || 0)).toLocaleString("en-PH")} total{service.pricePerUnit ? ` / ${service.unitLabel || "unit"}` : ""}</strong>
                   <Link to={`/customer/services/${service._id}`} className="service-book-link">Book service</Link>
                 </div>
-              </div>
-            </article>
-          ))}
-      </div>
-      {!isLoading && error && (
-        <div className="customer-empty" role="alert">
-          <p>Could not load services. Try again.</p>
-          <button type="button" className="customer-secondary-button" onClick={() => {
-            setError(false);
-            setIsLoading(true);
-            setRetryKey((key) => key + 1);
-          }}>Try again</button>
+              </article>
+            ))}
         </div>
-      )}
-      {!isLoading && !error && !services.length && (
-        <p className="customer-empty">No services available</p>
-      )}
-      {!isLoading && !error && services.length > 0 && !visibleServices.length && (
-        <p className="customer-empty">No services match your search.</p>
-      )}
+        {!isLoading && error && (
+          <div className="customer-empty" role="alert">
+            <p>Could not load services. Try again.</p>
+            <button type="button" className="customer-secondary-button" onClick={() => {
+              setError(false);
+              setIsLoading(true);
+              setRetryKey((key) => key + 1);
+            }}>Try again</button>
+          </div>
+        )}
+        {!isLoading && !error && !services.length && (
+          <p className="customer-empty">No services available</p>
+        )}
+        {!isLoading && !error && services.length > 0 && !visibleServices.length && (
+          <p className="customer-empty">No services match your search.</p>
+        )}
+      </div>
     </CustomerPage>
   );
 }
