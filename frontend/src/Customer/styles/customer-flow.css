@@ -405,8 +405,8 @@
 
 .customer-booking-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .customer-booking-fields label,
@@ -430,95 +430,45 @@
   font: 13px 'Segoe UI', sans-serif;
 }
 
-.customer-time-slots {
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.customer-time-slots legend {
-  margin-bottom: 9px;
+.customer-booking-fields > label,
+.customer-booking-fields > .customer-motorcycle-field,
+.customer-booking-fields > .customer-booking-time-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 7px;
   color: #544941;
   font-size: 11px;
   font-weight: 700;
 }
 
-.customer-time-slots > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
+.customer-booking-fields > label input,
+.customer-booking-fields > .customer-motorcycle-field > select,
+.customer-booking-fields > .customer-booking-time-field > select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #e8dcd2;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #322a25;
+  font: 13px 'Segoe UI', sans-serif;
 }
 
-.customer-time-slots button {
-  display: grid;
-  gap: 3px;
-  min-width: 112px;
-  padding: 10px 12px;
-  border: 1px solid #eadfd6;
-  border-radius: 8px;
-  background: #fff;
-  color: #51463f;
+.customer-booking-fields > .customer-motorcycle-field > label,
+.customer-booking-fields > .customer-booking-time-field > label {
+  color: #544941;
   font-size: 11px;
   font-weight: 700;
-  cursor: pointer;
 }
 
-.customer-time-slots button.is-selected {
-  border-color: #fa7117;
-  background: #fff2e7;
-  color: #c7500e;
+.customer-booking-fields > .customer-booking-time-field > select:disabled {
+  background-color: #f7f4f1;
+  color: #82756c;
 }
 
-.customer-time-slots button:disabled {
-  background: #f5f2ef;
-  color: #a69b93;
-  cursor: not-allowed;
-  text-decoration: line-through;
-}
-
-.customer-time-slots button small {
-  color: #a69b93;
-  font-size: 9px;
-  text-decoration: none;
-}
-
-.customer-slot-group { margin-top: 12px; }
-.customer-slot-group h3 { margin: 0 0 8px; color: #49372f; font-size: 12px; }
-.customer-slot-options,
-.customer-slot-loading { display: flex; flex-wrap: wrap; gap: 9px; }
-.customer-time-slots .customer-slot-chip {
-  min-width: 112px;
-  min-height: 48px;
-  border-color: #eadfd6;
-  background: #fff;
-  color: #51463f;
-  text-decoration: none;
-}
-.customer-time-slots .customer-slot-chip.is-selected {
-  border-color: #d4540a;
-  background: #d4540a;
-  color: #fff;
-}
-.customer-time-slots .customer-slot-chip small { color: inherit; font-size: 10px; }
-.customer-time-slots .customer-slot-chip.is-full,
-.customer-time-slots .customer-slot-chip.is-passed {
-  border-color: #e7e2de;
-  background: #f0eeec;
-  color: #77716c;
-  text-decoration: none;
-}
-.customer-time-slots .customer-slot-chip:disabled { text-decoration: none; }
-.customer-slot-skeleton {
-  width: 112px;
-  height: 48px;
-  border-radius: 8px;
-  background: linear-gradient(90deg, #f0ece8 25%, #faf8f6 50%, #f0ece8 75%);
-  background-size: 220% 100%;
-  animation: customer-slot-shimmer 1.2s ease-in-out infinite;
-}
-@keyframes customer-slot-shimmer {
-  to { background-position: -220% 0; }
-}
 .customer-no-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; }
 .customer-no-slots p,
 .customer-shop-closed-message { margin: 0; color: #765342; font-size: 12px; font-weight: 700; }
@@ -828,6 +778,75 @@
   align-items: center;
 }
 
+.customer-account-menu-area {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.customer-account-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #806b60;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customer-account-menu-trigger:hover,
+.customer-account-menu-trigger.active {
+  background: #fff0e7;
+  color: #d94d22;
+}
+
+.customer-account-menu-trigger svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.customer-account-menu {
+  position: absolute;
+  z-index: 101;
+  top: calc(100% + 6px);
+  right: 0;
+  box-sizing: border-box;
+  width: min(220px, calc(100vw - 24px));
+  min-width: min(180px, calc(100vw - 24px));
+  padding: 6px;
+  border: 1px solid #eadfd5;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(48, 31, 20, .16);
+}
+
+.customer-nav .customer-account-menu a {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #49372f;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.customer-nav .customer-account-menu a:hover {
+  background: #fff0e7;
+  color: #d94d22;
+}
+
 .customer-notification-bell {
   position: relative;
   display: grid;
@@ -875,7 +894,7 @@
   right: 0;
   width: min(360px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
-  max-height: min(70vh, 420px);
+  max-height: min(420px, calc(100dvh - 100px));
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
@@ -886,6 +905,53 @@
   color: #3a2c23;
 }
 
+.notification-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.notification-dropdown-header > strong {
+  min-width: 0;
+  color: #3a2c23;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.notification-dropdown-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.notification-dropdown-actions button {
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #c54f0a;
+  font: 700 11px 'Segoe UI', sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.notification-dropdown-actions button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+.customer-notification-popover .notification-dropdown-error,
+.admin-notification-popover .notification-dropdown-error {
+  color: #a53828;
+}
+
+.notification-dropdown-empty {
+  color: #817268;
+}
+
 .customer-notification-popover-header {
   position: sticky;
   top: 0;
@@ -894,6 +960,12 @@
   padding: 14px 16px 10px;
   border-bottom: 1px solid #f0e8e1;
   background: #fff;
+}
+
+.customer-notification-popover .customer-notification-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .customer-notification-popover ul {
@@ -932,10 +1004,24 @@
   cursor: pointer;
 }
 
+.customer-notification-popover li a,
+.admin-notification-popover li button,
+.customer-notification-popover li,
+.admin-notification-popover li {
+  text-align: left;
+}
+
+.customer-notification-popover .notification-content,
+.admin-notification-popover .notification-content {
+  width: 100%;
+  align-items: flex-start;
+  text-align: left;
+}
+
 .customer-notification-popover small,
 .admin-notification-popover small {
   color: #817268;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .notification-content {
@@ -953,15 +1039,18 @@
   overflow-wrap: anywhere;
   line-height: 1.4;
   font-size: 14px;
+  font-weight: 600;
+  text-align: left;
   word-break: normal;
 }
 
 .notification-timestamp {
   display: block;
   color: #817268;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.3;
   white-space: normal;
+  text-align: left;
 }
 
 .customer-notification-popover > p,
@@ -1661,9 +1750,110 @@
   font-size: 10px;
 }
 
+.customer-account-identity-stats a {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.customer-account-identity-stats a:hover {
+  color: #d4540a;
+  text-decoration: underline;
+}
+
 .customer-account-identity-stats strong {
   display: inline;
   color: #d4540a;
+}
+
+.customer-account-data-error {
+  grid-column: 2;
+  margin: 0;
+}
+
+.customer-purchase-type {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #fff0e4;
+  color: #b84b11;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.customer-purchase-date {
+  display: block;
+  margin-top: 5px;
+  color: #82756c;
+  font-size: 10px;
+}
+
+.customer-purchases-page {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-purchases-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid #eee3da;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.customer-purchases-tabs button {
+  min-height: 40px;
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #766a61;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.customer-purchases-tabs button.is-active {
+  background: #fa7117;
+  color: #fff;
+}
+
+.customer-purchases-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(240px, 420px);
+  gap: 12px;
+}
+
+.customer-purchases-filters label {
+  display: grid;
+  gap: 6px;
+  color: #51463f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.customer-purchases-filters select,
+.customer-purchases-filters input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #e8dcd2;
+  border-radius: 7px;
+  background: #fff;
+  color: #322a25;
+  font: 12px 'Segoe UI', sans-serif;
+}
+
+.customer-purchases-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
 }
 
 .customer-account-tabs {
@@ -1932,6 +2122,23 @@
   padding: 7px;
 }
 
+.customer-page.customer-page .customer-nav .customer-account-menu a,
+.customer-auth-page .customer-nav .customer-account-menu a {
+  display: block;
+  min-height: 0;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: #49372f;
+  text-align: left;
+}
+
+.customer-page.customer-page .customer-nav .customer-account-menu a:hover,
+.customer-auth-page .customer-nav .customer-account-menu a:hover {
+  background: #fff0e7;
+  color: #d94d22;
+}
+
 .customer-header-cart svg {
   width: 19px;
   height: 19px;
@@ -2170,7 +2377,96 @@
   .customer-detail-art { min-height: 240px; }
   .customer-related-grid { grid-template-columns: 1fr; }
   .customer-booking-panel { padding: 17px; }
+}
+
+@media (min-width: 600px) and (max-width: 900px) {
+  .customer-booking-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 599px) {
   .customer-booking-fields { grid-template-columns: 1fr; }
+}
+
+.customer-page.orders-page {
+  padding: 0 0 64px;
+}
+
+.customer-page.orders-page .customer-header,
+.customer-page.orders-page > .customer-heading,
+.customer-page.orders-page .customer-flow-page.customer-purchases-page {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding-right: var(--customer-wide-content-padding);
+  padding-left: var(--customer-wide-content-padding);
+}
+
+.customer-page.orders-page .customer-header,
+.customer-page.orders-page .customer-flow-page.customer-purchases-page {
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.customer-page.orders-page .customer-flow-page.customer-purchases-page .customer-reservation-list {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+}
+
+.customer-page.orders-page .customer-reservation-card,
+.customer-page.orders-page .customer-reservation-card-top > div {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .customer-page.orders-page .customer-header,
+  .customer-page.orders-page > .customer-heading,
+  .customer-page.orders-page .customer-flow-page.customer-purchases-page {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .customer-page.customer-page .customer-nav .customer-account-menu-area {
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .customer-page.customer-page .customer-nav .customer-account-menu-trigger {
+    width: 100%;
+    min-height: 44px;
+    justify-content: space-between;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .customer-page.customer-page .customer-nav .customer-account-menu {
+    top: calc(100% + 2px);
+    right: 0;
+    max-width: calc(100vw - 24px);
+  }
+
+  .customer-page.customer-page .customer-nav .customer-account-menu a {
+    min-height: 0;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .customer-purchases-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-purchases-tabs button {
+    flex: 1;
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .customer-purchases-empty-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .customer-page.profile-page {
@@ -2261,7 +2557,8 @@
   .customer-page.profile-page .customer-account-identity,
   .customer-page.profile-page .customer-account-tabs,
   .customer-page.profile-page .customer-account-page > .customer-success,
-  .customer-page.profile-page .customer-account-panel {
+  .customer-page.profile-page .customer-account-panel,
+  .customer-page.profile-page .customer-account-data-error {
     grid-column: 1;
   }
 
@@ -2369,6 +2666,7 @@
 }
 
 .customer-page.customer-page .customer-brand {
+  --customer-brand-accent: #C2410C;
   min-width: 0;
   min-height: 64px;
 }
@@ -2389,12 +2687,12 @@
 }
 
 .customer-page.customer-page .customer-brand__copy strong {
-  color: #211a16;
+  color: var(--customer-brand-accent);
   font: 800 24px/1 'Segoe UI', sans-serif;
 }
 
 .customer-page.customer-page .customer-brand__copy small {
-  color: #ef701b;
+  color: var(--customer-brand-accent);
   font: 700 11px/1.2 'Segoe UI', sans-serif;
   letter-spacing: .08em;
   white-space: nowrap;

@@ -27,14 +27,14 @@
 
 .services-hero {
   display: flex;
-  min-height: 150px;
+  min-height: 144px;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  margin-bottom: 24px;
-  padding: 18px 32px;
+  margin: 0 auto 18px;
+  padding: 18px;
   overflow: hidden;
-  border-radius: 28px;
+  border-radius: 12px;
   background: linear-gradient(110deg, #281004, #6f2e12 54%, #f4771b);
   color: #fff;
 }
@@ -62,7 +62,7 @@
 }
 .services-hero-stats {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }
@@ -364,25 +364,18 @@
   .service-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .services-hero {
-    padding: 18px 24px;
-  }
   .services-hero-wheel {
     display: none;
   }
 }
 @media (max-width: 767px) {
   .customer-page.services-page .customer-header {
-    padding-right: 16px;
-    padding-left: 16px;
+    padding-right: var(--customer-wide-content-padding);
+    padding-left: var(--customer-wide-content-padding);
   }
   .services-page > :not(.customer-header):not(.customer-site-footer) {
-    padding-right: 16px;
-    padding-left: 16px;
-  }
-  .services-hero {
-    min-height: 0;
-    padding: 20px 18px;
+    padding-right: var(--customer-wide-content-padding);
+    padding-left: var(--customer-wide-content-padding);
   }
   .services-hero > div:first-child > p:not(.services-hero-eyebrow) {
     white-space: normal;
@@ -399,10 +392,7 @@
     padding: 0 0 40px;
   }
   .services-hero {
-    min-height: 0;
-    margin-bottom: 24px;
-    padding: 20px 18px;
-    border-radius: 20px;
+    min-height: 144px;
   }
   .services-hero-eyebrow {
     font-size: 10px;

@@ -3,16 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
-import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
-import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
-import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
-import { getServiceBookingStatus } from '../../utils/servicePayment';
-import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
 const activeReservationStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved'];
-const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
-const statusClass = (status) => `status-${String(status || '').toLowerCase().replaceAll(' ', '-')}`;
 
 function formatPhoneNumber(value) {
   let digits = String(value || '').replace(/\D/g, '');
@@ -41,63 +34,6 @@ function dateKeyInManila(value) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function itemReservationDeadline(reservation) {
-  if (reservation.status === 'Pending Down Payment' && reservation.paymentDueAt) {
-    const remaining = Math.max(0, new Date(reservation.paymentDueAt).getTime() - Date.now());
-    const hours = Math.floor(remaining / 3600000);
-    const minutes = Math.floor((remaining % 3600000) / 60000);
-    return `Pay within ${hours ? `${hours}h ` : ''}${minutes}m`;
-  }
-  if (reservation.status === 'Reserved' && reservation.reservedUntil) {
-    return `Reserved until ${new Date(reservation.reservedUntil).toLocaleDateString('en-PH', { dateStyle: 'medium' })}`;
-  }
-  return '';
-}
-
-function ServiceBookingCard({ booking, prototype = false }) {
-  const serviceName = prototype ? booking.name : formatServiceName(booking.serviceType || 'Service booking', booking.units, booking.unitLabel);
-  const bookingId = prototype ? booking.id : booking._id;
-  const date = prototype ? booking.bookingDate : booking.scheduledDate;
-  const status = prototype ? booking.status : getServiceBookingStatus(booking);
-  const dateLabel = date
-    ? (prototype
-      ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`))
-      : new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: 'Asia/Manila' }).format(new Date(date)))
-    : 'Date to be confirmed';
-  const bookingTime = prototype
-    ? booking.timeSlot
-    : [booking.startTime, booking.endTime].filter(Boolean).map(displayTime).join(' - ');
-  return <article className="customer-reservation-card">
-    <div className="customer-reservation-card-top">
-      <div>
-        <span className="customer-cart-item-kind">SERVICE BOOKING · {bookingId}</span>
-        <h2>{serviceName}</h2>
-        <p>{!prototype && booking.pricePerUnit ? `${serviceUnitSummary(booking.units || 1, booking.unitLabel)} · ` : ''}{dateLabel}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
-      </div>
-      <span className={`customer-status-pill ${statusClass(status)}`}>{status}</span>
-    </div>
-    <div className="customer-reservation-card-bottom">
-      {prototype
-        ? <strong>{money(booking.price)}</strong>
-        : <ServicePriceBreakdown
-          servicePriceTotal={booking.servicePriceTotal}
-          mechanicFeeTotal={booking.mechanicFeeTotal}
-          estimatedPrice={booking.estimatedPrice}
-        />}
-      {!prototype && <ServicePaymentBreakdown booking={booking} />}
-      {prototype
-        ? <Link to={`/customer/reservations/${bookingId}`}>View booking <span aria-hidden="true">→</span></Link>
-        : <><span>{booking.description}</span><Link to={`/customer/reservations/${booking._id}`}>View booking <span aria-hidden="true">→</span></Link></>}
-    </div>
-  </article>;
-}
-
-function displayTime(value) {
-  if (!value) return '';
-  const [hours, minutes] = value.split(':').map(Number);
-  return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
-}
-
 export default function CustomerProfile() {
   const navigate = useNavigate();
   const { profile, vehicles, reservations: prototypeBookings, updateProfile, addVehicle, clearCustomerData } = useCustomerPrototype();
@@ -111,7 +47,6 @@ export default function CustomerProfile() {
   const [vehicleForm, setVehicleForm] = useState({ make: '', model: '', year: '', plate: '' });
   const [itemReservations, setItemReservations] = useState([]);
   const [serviceBookings, setServiceBookings] = useState([]);
-  const [isLoadingReservations, setIsLoadingReservations] = useState(true);
   const [reservationError, setReservationError] = useState('');
   const [bookingError, setBookingError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -146,7 +81,6 @@ export default function CustomerProfile() {
       } else {
         setBookingError(bookingsResult.reason.message || 'Service bookings could not be loaded.');
       }
-      setIsLoadingReservations(false);
     });
     return () => { isMounted = false; };
   }, []);
@@ -280,18 +214,13 @@ export default function CustomerProfile() {
     setToast('Motorcycle saved.');
   };
 
-  const tabs = [
-    ['profile', 'Profile'],
-    ['vehicles', 'My vehicles'],
-    ['reservations', 'Reservations'],
-    ['bookings', 'Bookings']
-  ];
+  const tabs = [['profile', 'Profile'], ['vehicles', 'My vehicles']];
 
   return <CustomerPage title="Account" description="Manage your profile and motorcycles.">
     <div className="customer-flow-page customer-account-page">
       <div className="customer-account-tabs" role="tablist" aria-label="Account sections">
         {tabs.map(([key, label]) => <button type="button" role="tab" aria-selected={activeTab === key} aria-controls={`account-panel-${key}`} id={`account-tab-${key}`} className={activeTab === key ? 'is-active' : ''} key={key} onClick={() => { setActiveTab(key); setToast(''); setFieldErrors({}); }}>
-          {label}{key === 'reservations' && <span className="customer-account-tab-count" aria-label={`${activeReservationCount} active reservations`}>{activeReservationCount}</span>}
+          {label}
         </button>)}
       </div>
 
@@ -302,10 +231,11 @@ export default function CustomerProfile() {
           <small>{profileForm.email || profile.email || 'Local prototype account'}</small>
         </div>
         <div className="customer-account-identity-stats">
-          <span>Active reservations: <strong>{activeReservationCount}</strong></span>
-          <span>Upcoming bookings: <strong>{upcomingBookingsCount}</strong></span>
+          <Link to="/my-purchases?tab=items">Active reservations: <strong>{activeReservationCount}</strong></Link>
+          <Link to="/my-purchases?tab=services">Upcoming bookings: <strong>{upcomingBookingsCount}</strong></Link>
         </div>
       </aside>
+      {(reservationError || bookingError) && <p className="customer-error customer-account-data-error" role="alert">{[reservationError, bookingError].filter(Boolean).join(' ')}</p>}
 
       {toast && <p className="customer-success customer-account-toast" role="status">{toast}</p>}
 
@@ -353,33 +283,6 @@ export default function CustomerProfile() {
         </form>
       </section>}
 
-      {activeTab === 'reservations' && <section className="customer-account-panel" id="account-panel-reservations" role="tabpanel" aria-labelledby="account-tab-reservations">
-        <div className="customer-flow-section-heading"><div><p className="customer-eyebrow">ITEM PURCHASES</p><h2>Reservations</h2></div><span>{itemReservations.length} total</span></div>
-        {reservationError && <p className="customer-error" role="alert">{reservationError}</p>}
-        {isLoadingReservations
-          ? <p className="customer-empty">Loading reservations...</p>
-          : itemReservations.length
-            ? <div className="customer-reservation-list">{itemReservations.map((reservation) => <article className="customer-reservation-card" key={reservation._id}>
-              <div className="customer-reservation-card-top">
-                <div><span className="customer-cart-item-kind">RESERVATION · {reservation.code}</span><div className="customer-reservation-item-list">{reservation.items.map((item) => <span className="customer-reservation-item-row" key={item.productId}><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><strong>{item.name} × {item.qty}</strong></span>)}</div><p>{itemReservationDeadline(reservation)}</p></div>
-                <span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span>
-              </div>
-              <div className="customer-reservation-card-finances"><span>Total <strong>{money(reservation.total)}</strong></span><span>Paid <strong>{money(reservation.amountPaid)}</strong></span><span>Balance <strong>{money(reservation.balanceDue)}</strong></span></div>
-              <div className="customer-reservation-card-bottom"><Link to={`/customer/reservations/${reservation._id}`}>View reservation <span aria-hidden="true">→</span></Link></div>
-            </article>)}</div>
-            : !reservationError && <section className="customer-empty-cart"><span aria-hidden="true">▱</span><h2>No item reservations yet</h2><p>Your item reservations and pickup status will appear here.</p><Link className="customer-primary-button" to="/customer/shop">Browse the shop</Link></section>}
-      </section>}
-
-      {activeTab === 'bookings' && <section className="customer-account-panel" id="account-panel-bookings" role="tabpanel" aria-labelledby="account-tab-bookings">
-        <div className="customer-flow-section-heading"><div><p className="customer-eyebrow">MECHANIC SERVICES</p><h2>Bookings</h2></div><span>{allBookings.length} total</span></div>
-        {bookingError && <p className="customer-error" role="alert">{bookingError}</p>}
-        {isLoadingReservations
-          ? <p className="customer-empty">Loading bookings...</p>
-          : allBookings.length
-            ? <div className="customer-reservation-list">{allBookings.map((booking) => <ServiceBookingCard key={`${booking.source}-${booking.id || booking._id}`} booking={booking} prototype={booking.source === 'prototype'} />)}</div>
-            : !bookingError && <section className="customer-empty-cart"><span aria-hidden="true">⌁</span><h2>No service bookings yet</h2><p>Your service bookings will appear here.</p><Link className="customer-primary-button" to="/customer/services">Browse services</Link></section>}
-      </section>}
-
       {isDeleteModalOpen && <div className="customer-confirmation-backdrop" role="presentation">
         <section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
           <h2 id="delete-account-title">Delete your account?</h2>
@@ -389,8 +292,8 @@ export default function CustomerProfile() {
             <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
             {deleteError && <p className="customer-field-error" role="alert">{deleteError}</p>}
             {hasBlockedRecords && <div className="customer-delete-record-links">
-              <a href="#account-tab-reservations" onClick={(event) => { event.preventDefault(); setActiveTab('reservations'); setIsDeleteModalOpen(false); }}>View reservations</a>
-              <a href="#account-tab-bookings" onClick={(event) => { event.preventDefault(); setActiveTab('bookings'); setIsDeleteModalOpen(false); }}>View bookings</a>
+              <Link to="/my-purchases?tab=items">View reservations</Link>
+              <Link to="/my-purchases?tab=services">View bookings</Link>
             </div>}
             <div>
               <button type="button" className="customer-primary-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>

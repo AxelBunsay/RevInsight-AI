@@ -1,10 +1,16 @@
 const Notification = require('../models/notification');
 
+const getAdminNotificationFilter = (adminId) => ({
+  audience: 'admin',
+  clearedBy: { $ne: adminId }
+});
+
 const getAdminNotifications = async (req, res) => {
   try {
+    const filter = getAdminNotificationFilter(req.admin.id);
     const [notifications, unreadCount] = await Promise.all([
-      Notification.find({ audience: 'admin' }).sort({ createdAt: -1 }).limit(50).lean(),
-      Notification.countDocuments({ audience: 'admin', read: false })
+      Notification.find(filter).sort({ createdAt: -1 }).limit(50).lean(),
+      Notification.countDocuments({ ...filter, read: false })
     ]);
     res.json({ notifications, unreadCount });
   } catch (error) {
@@ -16,7 +22,7 @@ const getAdminNotifications = async (req, res) => {
 const markAdminNotificationRead = async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
-      { _id: req.params.id, audience: 'admin' },
+      { _id: req.params.id, ...getAdminNotificationFilter(req.admin.id) },
       { $set: { read: true } },
       { new: true }
     );
@@ -30,7 +36,10 @@ const markAdminNotificationRead = async (req, res) => {
 
 const markAllAdminNotificationsRead = async (req, res) => {
   try {
-    await Notification.updateMany({ audience: 'admin', read: false }, { $set: { read: true } });
+    await Notification.updateMany(
+      { ...getAdminNotificationFilter(req.admin.id), read: false },
+      { $set: { read: true } }
+    );
     res.json({ success: true });
   } catch (error) {
     console.error('[markAllAdminNotificationsRead] error', error);
@@ -38,12 +47,30 @@ const markAllAdminNotificationsRead = async (req, res) => {
   }
 };
 
+const clearAdminNotifications = async (req, res) => {
+  try {
+    await Notification.updateMany(
+      getAdminNotificationFilter(req.admin.id),
+      { $addToSet: { clearedBy: req.admin.id } }
+    );
+    const unreadCount = await Notification.countDocuments({
+      ...getAdminNotificationFilter(req.admin.id),
+      read: false
+    });
+    res.json({ success: true, unreadCount });
+  } catch (error) {
+    console.error('[clearAdminNotifications] error', error);
+    res.status(500).json({ message: 'Notifications could not be cleared.' });
+  }
+};
+
 const getCustomerNotifications = async (req, res) => {
   try {
     const customerId = req.user.userId;
+    const filter = { audience: 'customer', customerId, clearedAt: null };
     const [notifications, unreadCount] = await Promise.all([
-      Notification.find({ audience: 'customer', customerId }).sort({ createdAt: -1 }).limit(50).lean(),
-      Notification.countDocuments({ audience: 'customer', customerId, read: false })
+      Notification.find(filter).sort({ createdAt: -1 }).limit(50).lean(),
+      Notification.countDocuments({ ...filter, read: false })
     ]);
     res.json({ notifications, unreadCount });
   } catch (error) {
@@ -55,7 +82,7 @@ const getCustomerNotifications = async (req, res) => {
 const markCustomerNotificationRead = async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
-      { _id: req.params.id, audience: 'customer', customerId: req.user.userId },
+      { _id: req.params.id, audience: 'customer', customerId: req.user.userId, clearedAt: null },
       { $set: { read: true } },
       { new: true }
     );
@@ -67,10 +94,33 @@ const markCustomerNotificationRead = async (req, res) => {
   }
 };
 
+const clearCustomerNotifications = async (req, res) => {
+  try {
+    const filter = {
+      audience: 'customer',
+      customerId: req.user.userId,
+      clearedAt: null
+    };
+    await Notification.updateMany(filter, { $set: { clearedAt: new Date() } });
+    const unreadCount = await Notification.countDocuments({
+      audience: 'customer',
+      customerId: req.user.userId,
+      clearedAt: null,
+      read: false
+    });
+    res.json({ success: true, unreadCount });
+  } catch (error) {
+    console.error('[clearCustomerNotifications] error', error);
+    res.status(500).json({ message: 'Notifications could not be cleared.' });
+  }
+};
+
 module.exports = {
   getAdminNotifications,
   markAdminNotificationRead,
   markAllAdminNotificationsRead,
+  clearAdminNotifications,
   getCustomerNotifications,
-  markCustomerNotificationRead
+  markCustomerNotificationRead,
+  clearCustomerNotifications
 };

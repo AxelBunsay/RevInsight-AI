@@ -222,7 +222,7 @@ export default function Checkout() {
                   </div>
                   : <div><p>{result.message}</p>{result.cartItem && <Link to={`/customer/services/${result.cartItem.id}`} state={{ bookingDate: result.cartItem.bookingDate, replaceBookingKey: result.cartKey, message: result.message === 'That time was just booked. Please choose another.' ? result.message : '' }}>Choose another time</Link>}</div>}
               </article>)}
-              <Link className="customer-secondary-button" to="/customer/profile">View your bookings</Link>
+              <Link className="customer-secondary-button" to="/my-purchases?tab=services">View your bookings</Link>
             </section>}
             <div className="customer-review-lines">{serviceItems.map((item) => {
               const itemTotal = item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0);

@@ -227,6 +227,7 @@ export const adminApi = {
   deleteMechanic: (id) => request(`/api/mechanics/${id}`, { method: 'DELETE' }),
   getMechanicsSummary: () => request('/api/admin/mechanics/summary'),
   getNotifications: () => request('/api/admin/notifications'),
+  clearNotifications: () => request('/api/admin/notifications', { method: 'DELETE' }),
   markNotificationRead: (id) => request(`/api/admin/notifications/${id}/read`, { method: 'POST' }),
   markAllNotificationsRead: () => request('/api/admin/notifications/read-all', { method: 'POST' }),
   getAdminServiceRequests: (query = {}) => {

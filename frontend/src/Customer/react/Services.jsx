@@ -119,7 +119,7 @@ export default function Services() {
             </button>
           ))}
         </div>
-        <Link className="services-my-bookings" to="/customer/purchases">My bookings</Link>
+        <Link className="services-my-bookings" to="/my-purchases?tab=services">My bookings</Link>
       </div>
 
       <div className="service-card-grid">
