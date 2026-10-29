@@ -214,6 +214,11 @@ describe('revenue integration', () => {
     expect(sufficient.body.data.availableQuarters).toBe(5);
     expect(sufficient.body.data.projection[0]._id).toEqual({ year: 2026, quarter: 4 });
     expect(sufficient.body.data.projection[0].revenue).not.toBe(9900);
+    expect(sufficient.body.data.projection[0]).toMatchObject({
+      targetLabel: 'Forecast for 2026 Q4',
+      baseRevenue: 2000,
+      quarterToDate: { quarter: '2026 Q4', revenue: 9900 }
+    });
 
     await Order.deleteOne({ customerName: 'Quarterly customer', createdAt: new Date('2025-07-15T04:00:00.000Z') });
     const insufficient = await api.get('/api/dashboard/analytics/projected-revenue')

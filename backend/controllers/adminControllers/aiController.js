@@ -1,6 +1,10 @@
 const { generateRevenueInsights } = require('../../services/aiService');
 const dashboardController = require('./dashboardController');
-const { REVENUE_TIMEZONE } = require('../../utils/revenue');
+const {
+  REVENUE_TIMEZONE,
+  REVENUE_RISK_THRESHOLDS,
+  calculateDashboardForecast
+} = require('../../utils/revenue');
 
 function formatRevenueAnswer(answer) {
   return String(answer).replace(/\$(?=\d)/g, '₱');
@@ -69,6 +73,7 @@ async function getControllerResult(controller, req) {
 async function askRevenueAI(req, res, dependencies = {}) {
   const revenueInsights = dependencies.generateRevenueInsights || generateRevenueInsights;
   const dashboard = dependencies.dashboardController || dashboardController;
+  const now = dependencies.now || new Date();
   const question = typeof req.body?.question === 'string' ? req.body.question.trim() : '';
   if (!question) {
     return res.status(400).json({ success: false, message: 'Question is required' });
@@ -92,7 +97,12 @@ async function askRevenueAI(req, res, dependencies = {}) {
       quarterly: quarterlyRes.data,
       revenueRisk: riskRes.data,
       revenueConcentration: concentrationRes.data,
-      monthly: getRecentMonthlyRevenue(monthlyRes.data, new Date())
+      monthly: getRecentMonthlyRevenue(monthlyRes.data, now),
+      officialForecast: riskRes.data.officialForecast || calculateDashboardForecast(quarterlyRes.data, now),
+      riskLevels: riskRes.data.indicators || {},
+      overallRisk: riskRes.data.overallRisk || { level: 'Not enough data', reason: 'risk data is unavailable' },
+      thresholds: REVENUE_RISK_THRESHOLDS,
+      uncategorizedShare: riskRes.data.uncategorized || concentrationRes.data.uncategorized || { revenue: 0, share: 0 }
     };
 
     const answer = formatRevenueAnswer(await revenueInsights(question, revenueData));
@@ -101,7 +111,7 @@ async function askRevenueAI(req, res, dependencies = {}) {
       success: true,
       question,
       answer,
-      timestamp: new Date().toISOString()
+      timestamp: now.toISOString()
     });
   } catch (error) {
     console.error('[askRevenueAI] error', error);

@@ -376,6 +376,131 @@
   gap: 18px;
   margin-bottom: 16px;
 }
+.admin-root .ai-revenue-overall-risk {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 20px 24px;
+  border: 1px solid #f6d3b0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .65);
+}
+.admin-root .ai-revenue-overall-risk__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-root .ai-revenue-overall-risk__title > strong {
+  color: #6b5440;
+  font-size: 16px;
+  font-weight: 700;
+}
+.admin-root .ai-revenue-overall-risk__info {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #d6b99f;
+  border-radius: 50%;
+  background: transparent;
+  color: #754a2c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.admin-root .ai-revenue-overall-risk__info:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.admin-root .ai-revenue-overall-risk__chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: #e8edf0;
+  color: #475569;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+.admin-root .ai-revenue-overall-risk__chip.is-normal {
+  background: #dff3e6;
+  color: #1f7a3d;
+}
+.admin-root .ai-revenue-overall-risk__chip.is-moderate {
+  background: #fde9b8;
+  color: #7a4f00;
+}
+.admin-root .ai-revenue-overall-risk__chip.is-high {
+  background: #fbd9d3;
+  color: #a3271b;
+}
+.admin-root .ai-revenue-overall-risk__why {
+  width: 100%;
+  margin: 0;
+  color: #6b5440;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.admin-root .ai-revenue-risk {
+  display: grid;
+  grid-template-columns: auto 18px;
+  align-items: center;
+  gap: 4px 7px;
+  min-width: 0;
+}
+.admin-root .ai-revenue-risk__chip {
+  justify-self: start;
+  padding: 4px 8px;
+  border-radius: 99px;
+  background: #e8edf0;
+  color: #475569;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.admin-root .ai-revenue-risk__chip.is-normal {
+  background: #dff3e6;
+  color: #1f7a3d;
+}
+.admin-root .ai-revenue-risk__chip.is-moderate {
+  background: #fde9b8;
+  color: #7a4f00;
+}
+.admin-root .ai-revenue-risk__chip.is-high {
+  background: #fbd9d3;
+  color: #a3271b;
+}
+.admin-root .ai-revenue-risk__why {
+  grid-column: 1 / -1;
+  color: #6b5440;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.admin-root .ai-revenue-risk__info {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid #d6b99f;
+  border-radius: 50%;
+  color: #754a2c;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
+}
+.admin-root .ai-revenue-risk__info:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .admin-root .ai-revenue-analysis__title {
   display: flex;
   align-items: center;
@@ -682,6 +807,25 @@
   color: #6b5440;
   font-size: 12.5px;
   line-height: 1.4;
+}
+.admin-root .ai-revenue-uncategorized {
+  margin: 10px 0 0;
+  color: #6b5440;
+  font-size: 12px;
+}
+.admin-root .ai-revenue-thresholds__reference {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.admin-root .ai-revenue-thresholds__reference p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.admin-root .ai-revenue-thresholds__reference strong {
+  color: var(--ink);
 }
 .admin-root .ai-revenue-pill {
   padding: 4px 7px;
@@ -1077,6 +1221,11 @@
   color: var(--muted);
   font-size: 12px;
   padding: 10px 12px;
+}
+@media (max-width: 540px) {
+  .admin-root .ai-revenue-overall-risk {
+    padding: 16px;
+  }
 }
 .admin-root .ai-revenue-settings__actions {
   display: flex;

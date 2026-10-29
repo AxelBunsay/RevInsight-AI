@@ -1,0 +1,19 @@
+{
+  "minimumCompletedQuarters": 5,
+  "qoqChange": {
+    "normalMin": -5,
+    "moderateMin": -15
+  },
+  "concentrationHhi": {
+    "normalMaxExclusive": 0.15,
+    "moderateMaxInclusive": 0.25
+  },
+  "topContributorShare": {
+    "normalMaxExclusive": 40,
+    "moderateMaxInclusive": 60
+  },
+  "forecastVsFourQuarterAverage": {
+    "normalMin": -10,
+    "moderateMin": -25
+  }
+}

@@ -8,6 +8,10 @@ const {
   askRevenueAI,
   formatRevenueAnswer
 } = require('../controllers/adminControllers/aiController');
+const {
+  REVENUE_RISK_THRESHOLDS,
+  calculateDashboardForecast
+} = require('../utils/revenue');
 
 describe('revenue AI controller helpers', () => {
   it('rejects failed dashboard controller responses', async () => {
@@ -88,5 +92,73 @@ describe('revenue AI controller helpers', () => {
     });
 
     expect(responseBody).toMatchObject({ success: true, answer: 'Revenue reached ₱1,234.' });
+  });
+
+  it('includes the dashboard forecast, official risk levels, shared thresholds, and uncategorized share in the AI payload', async () => {
+    let responseBody;
+    let aiPayload;
+    const now = new Date('2026-04-15T00:00:00+08:00');
+    const quarterly = [
+      { _id: { year: 2025, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2025, quarter: 2 }, revenue: 110 },
+      { _id: { year: 2025, quarter: 3 }, revenue: 120 },
+      { _id: { year: 2025, quarter: 4 }, revenue: 130 },
+      { _id: { year: 2026, quarter: 1 }, revenue: 140 },
+      { _id: { year: 2026, quarter: 2 }, revenue: 3 }
+    ];
+    const replies = {
+      getDashboardStats: { totalRevenue: 600 },
+      getQuarterlyData: quarterly,
+      getRevenueRisk: {
+        indicators: {
+          qoqChange: { value: 7.69, level: 'Normal' },
+          concentrationHhi: { value: 0.2, level: 'Moderate' },
+          topContributorShare: { value: 45, contributor: 'Brake pads', level: 'Moderate' },
+          forecastVsFourQuarterAverage: { value: 10, level: 'Normal' }
+        },
+        overallRisk: { level: 'Moderate', reason: 'revenue concentration (HHI)' },
+        uncategorized: { revenue: 60, share: 10 }
+      },
+      getRevenueConcentration: { indicators: { hhi: 0.2 }, uncategorized: { revenue: 60, share: 10 } },
+      getRevenueData: []
+    };
+    const controller = (name) => async (_req, res) => res.json({ success: true, data: replies[name] });
+    const dashboardController = Object.fromEntries(
+      Object.keys(replies).map((name) => [name, controller(name)])
+    );
+    const res = {
+      json(body) {
+        responseBody = body;
+        return body;
+      },
+      status(code) {
+        throw new Error(`Unexpected status ${code}`);
+      }
+    };
+
+    await askRevenueAI({ body: { question: 'What is the next quarter outlook?' } }, res, {
+      dashboardController,
+      now,
+      generateRevenueInsights: async (_question, payload) => {
+        aiPayload = payload;
+        return 'Forecast available.';
+      }
+    });
+
+    expect(aiPayload.officialForecast).toEqual(calculateDashboardForecast(quarterly, now));
+    expect(aiPayload.officialForecast).toMatchObject({
+      target: '2026 Q2',
+      targetLabel: 'Forecast for 2026 Q2',
+      baseRevenue: 140,
+      quarterToDate: { quarter: '2026 Q2', revenue: 3, percentElapsed: 15 }
+    });
+    expect(aiPayload.riskLevels).toMatchObject({
+      qoqChange: { level: 'Normal' },
+      concentrationHhi: { level: 'Moderate' }
+    });
+    expect(aiPayload.overallRisk).toMatchObject({ level: 'Moderate' });
+    expect(aiPayload.thresholds).toEqual(REVENUE_RISK_THRESHOLDS);
+    expect(aiPayload.uncategorizedShare).toEqual({ revenue: 60, share: 10 });
+    expect(responseBody.success).toBe(true);
   });
 });
