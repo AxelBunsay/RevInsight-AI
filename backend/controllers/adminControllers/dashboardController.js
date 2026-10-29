@@ -1,18 +1,21 @@
 const Order = require('../../models/orderingModels/order');
+const mongoose = require('mongoose');
 const Product = require('../../models/product');
 const User = require('../../models/user');
 const Mechanic = require('../../models/mechanic');
 const ServiceRequest = require('../../models/serviceRequest');
 const BusinessRecord = require('../../models/businessRecord');
 const Reservation = require('../../models/orderingModels/reservation');
-const { validateProductInput } = require('../../utils/inventoryValidation');
 const { archiveOrDeleteProduct, hasActiveProductReservation } = require('../../utils/safeDeleteInventoryRecord');
 const { expireReservations } = require('../reservationController');
 const {
-  uploadProductImage,
   getProductImagePublicId,
   removeProductImageSafely
 } = require('../../utils/productImage');
+const {
+  prepareProductMutation,
+  uploadProductMutationImages
+} = require('../../utils/productVariants');
 const {
   getRevenueEntries,
   groupRevenueByPeriod,
@@ -25,8 +28,6 @@ const {
 } = require('../../utils/revenue');
 const { getAvailableStock, isLowStock } = require('../../utils/inventory');
 
-const isRemoveImageRequested = (value) => value === true || value === 'true';
-
 const loadRevenueEntries = (options = {}) => getRevenueEntries({
   Order,
   Reservation,
@@ -34,6 +35,11 @@ const loadRevenueEntries = (options = {}) => getRevenueEntries({
   Product,
   ...options
 });
+
+const isTransientInventoryWriteConflict = (error) =>
+  error.code === 112
+  || error.codeName === 'WriteConflict'
+  || error.hasErrorLabel?.('TransientTransactionError');
 
 const getRevenueByPeriod = async (unit, fromDate) => {
   const entries = await loadRevenueEntries({ startDate: fromDate });
@@ -226,7 +232,7 @@ const getProjectedRevenue = async (req, res) => {
 // Get All Transactions
 const getBusinessRecords = async (req, res) => {
   try {
-    const { recordType, status, startDate, endDate, mechanicId, type, search } = req.query;
+    const { recordType, status, startDate, endDate, mechanicId, type, itemView = 'all', search } = req.query;
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
     await expireReservations();
@@ -245,11 +251,17 @@ const getBusinessRecords = async (req, res) => {
     const reservationStatus = reservationStatuses.find(
       (value) => value.toLowerCase() === statusLower
     );
+    const cancelledOrExpiredFilter = statusLower === 'cancelled/expired';
+    const reservationStatusFilter = cancelledOrExpiredFilter
+      ? { $in: ['Cancelled', 'Expired'] }
+      : reservationStatus || (status ? '__no_matching_reservation_status__' : undefined);
     if (status) {
       query.status = reservationStatus
         ? statusLower === 'completed'
           ? { $in: ['Paid', 'completed'] }
           : '__no_matching_business_record_status__'
+        : cancelledOrExpiredFilter
+          ? '__no_matching_business_record_status__'
         : statusLower === 'paid'
           ? { $in: ['Paid', 'completed'] }
           : statusLower;
@@ -269,6 +281,9 @@ const getBusinessRecords = async (req, res) => {
     if (type && !typeMap[type]) {
       return res.status(400).json({ success: false, message: 'Type must be item or service' });
     }
+    if (type === 'item' && !['all', 'sales', 'reservations'].includes(itemView)) {
+      return res.status(400).json({ success: false, message: 'Item view must be all, sales, or reservations' });
+    }
     const searchPattern = search
       ? new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
       : null;
@@ -279,12 +294,12 @@ const getBusinessRecords = async (req, res) => {
     const itemQuery = { ...withSearch(['customer', 'itemName']), recordType: 'product' };
     const serviceQuery = { ...withSearch(['customer', 'itemName', 'mechanicName']), recordType: 'service' };
     const reservationQuery = { code: { $exists: true } };
-    if (reservationStatus) reservationQuery.status = reservationStatus;
-    else if (status) reservationQuery.status = '__no_matching_reservation_status__';
+    if (reservationStatusFilter) reservationQuery.status = reservationStatusFilter;
     if (searchPattern) {
       reservationQuery.$or = [
         { code: searchPattern },
         { customerName: searchPattern },
+        { customerPhone: searchPattern },
         { paymentReference: searchPattern },
         { 'items.name': searchPattern }
       ];
@@ -298,7 +313,7 @@ const getBusinessRecords = async (req, res) => {
         reservationQuery.createdAt.$lte = end;
       }
     }
-    const includeReservations = !type || type === 'item';
+    const includeReservations = !type || (type === 'item' && itemView !== 'sales');
     const reservationIds = await Reservation.distinct('_id', {
       code: { $exists: true },
       status: 'Completed'
@@ -310,8 +325,11 @@ const getBusinessRecords = async (req, res) => {
       ]
     };
     const itemBusinessRecordsQuery = { ...itemQuery, sourceId: { $nin: reservationIds } };
+    const emptyBusinessRecordQuery = { _id: { $exists: false } };
     const filteredQuery = type === 'item'
-      ? itemBusinessRecordsQuery
+      ? itemView === 'reservations'
+        ? emptyBusinessRecordQuery
+        : itemBusinessRecordsQuery
       : type === 'service'
         ? serviceQuery
         : allBusinessRecordsQuery;
@@ -346,10 +364,11 @@ const getBusinessRecords = async (req, res) => {
       ...(searchPattern ? { $or: [
         { code: searchPattern },
         { customerName: searchPattern },
+        { customerPhone: searchPattern },
         { paymentReference: searchPattern },
         { 'items.name': searchPattern }
       ] } : {}),
-      ...(status ? (reservationStatus ? { status: reservationStatus } : { status: '__no_matching_reservation_status__' }) : {}),
+      ...(reservationStatusFilter ? { status: reservationStatusFilter } : {}),
       ...(startDate || endDate ? { createdAt: {
         ...(startDate ? { $gte: new Date(startDate) } : {}),
         ...(endDate ? { $lte: (() => { const end = new Date(endDate); end.setHours(23, 59, 59, 999); return end; })() } : {})
@@ -359,9 +378,13 @@ const getBusinessRecords = async (req, res) => {
       ...reservationQuery,
       status: 'Payment Submitted'
     });
+    const matchingReservationCount = includeReservations ? reservationCount : 0;
+    const matchingCount = businessCount + matchingReservationCount;
     const counts = {
       all: allCountBase + allReservationCount,
-      items: itemCountBase + allReservationCount,
+      items: type === 'item'
+        ? matchingCount
+        : itemCountBase + allReservationCount,
       services: serviceCount,
       paymentSubmitted: paymentSubmittedCount
     };
@@ -426,6 +449,7 @@ const getBusinessRecords = async (req, res) => {
         customer: deletedCustomerIds.has(String(reservation.customerId))
           ? 'Deleted customer'
           : reservation.customerName || 'Unknown',
+        customerPhone: reservation.customerPhone || '',
         itemName: (reservation.items || []).map((item) => item.name).join(', '),
         amount: Number(reservation.total || 0),
         paid: Number(reservation.amountPaid || 0),
@@ -439,7 +463,6 @@ const getBusinessRecords = async (req, res) => {
       (left, right) => new Date(right.completedAt || right.createdAt) - new Date(left.completedAt || left.createdAt)
     );
     const pageRows = combinedRows.slice((page - 1) * limit, page * limit);
-    const matchingCount = businessCount + reservationCount;
     const totalAmount = (businessAmount[0]?.total || 0) + (reservationAmount[0]?.total || 0);
 
     res.json({
@@ -598,6 +621,16 @@ const deleteTransaction = async (req, res) => {
 };
 
 // Get All Inventory
+const serializeInventoryVariants = (variants = []) => variants.map((variant) => ({
+  ...variant.toObject(),
+  brand: variant.brand || '',
+  model: variant.model || '',
+  size: variant.size || '',
+  color: variant.color || '',
+  label: variant.label || '',
+  imageUrl: variant.imageUrl || ''
+}));
+
 const getAllInventory = async (req, res) => {
   try {
     const { page = 1, limit = 15 } = req.query;
@@ -616,6 +649,7 @@ const getAllInventory = async (req, res) => {
     );
     const inventoryWithAvailability = inventory.map((item) => ({
       ...item.toObject(),
+      variants: serializeInventoryVariants(item.variants || []),
       available: Number(item.quantity || 0) - Number(item.reservedQty || 0),
       hasActiveReservation: activeProductIds.has(item._id.toString())
     }));
@@ -648,7 +682,10 @@ const getInventoryItem = async (req, res) => {
 
     res.json({
       success: true,
-      data: item
+      data: {
+        ...item.toObject(),
+        variants: serializeInventoryVariants(item.variants || [])
+      }
     });
   } catch (error) {
     console.error('[getInventoryItem] error', error);
@@ -658,25 +695,15 @@ const getInventoryItem = async (req, res) => {
 
 // Add Inventory Item
 const addInventoryItem = async (req, res) => {
-  let uploadedImage;
+  let prepared;
   try {
-    const fieldErrors = validateProductInput(req.body);
-    if (Object.keys(fieldErrors).length) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please correct the highlighted fields.',
-        fieldErrors
-      });
-    }
-    if (req.file) uploadedImage = await uploadProductImage(req.file);
-    const item = new Product({
-      name: req.body.name,
-      price: req.body.price,
-      quantity: req.body.quantity,
-      category: req.body.category,
-      ...(uploadedImage || {})
+    prepared = await prepareProductMutation({
+      input: req.body,
+      productFile: req.file,
+      variantFiles: req.variantFiles,
+      Reservation
     });
-    await item.save();
+    const item = await Product.create(prepared.data);
 
     res.status(201).json({
       success: true,
@@ -684,74 +711,46 @@ const addInventoryItem = async (req, res) => {
       data: item
     });
   } catch (error) {
-    if (uploadedImage?.imagePublicId) {
-      await removeProductImageSafely(uploadedImage.imagePublicId, 'addInventoryItem.rollback');
+    for (const image of prepared?.uploadedImages || error.uploadedImages || []) {
+      await removeProductImageSafely(image.imagePublicId, 'addInventoryItem.rollback');
     }
     console.error('[addInventoryItem] error', error);
-    res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to add inventory item. Please try again.' });
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.message || 'Failed to add inventory item. Please try again.',
+      ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
+    });
   }
 };
 
 // Update Inventory Item
 const updateInventoryItem = async (req, res) => {
-  let uploadedImage;
+  let session;
+  let stagedImages;
+  let prepared;
   try {
-    const fieldErrors = validateProductInput(req.body);
-    if (Object.keys(fieldErrors).length) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please correct the highlighted fields.',
-        fieldErrors
+    stagedImages = await uploadProductMutationImages({
+      input: req.body,
+      productFile: req.file,
+      variantFiles: req.variantFiles
+    });
+    session = await mongoose.startSession();
+    let item;
+    await session.withTransaction(async () => {
+      const currentItem = await Product.findById(req.params.id).session(session);
+      if (!currentItem) throw Object.assign(new Error('Item not found'), { status: 404 });
+      prepared = await prepareProductMutation({
+        input: req.body,
+        currentProduct: currentItem,
+        Reservation,
+        session,
+        preparedImages: stagedImages
       });
-    }
-    const currentItem = await Product.findById(req.params.id);
-    if (!currentItem) {
-      return res.status(404).json({ success: false, message: 'Item not found' });
-    }
-    if (Number(req.body.quantity) < Number(currentItem.reservedQty || 0)) {
-      return res.status(400).json({
-        success: false,
-        message: `Stock cannot be lower than the ${currentItem.reservedQty} units currently reserved.`
-      });
-    }
-    if (req.file) uploadedImage = await uploadProductImage(req.file);
-    const oldImagePublicId = currentItem.imagePublicId
-      || getProductImagePublicId(currentItem.imageUrl || currentItem.image);
-    const imageUpdate = uploadedImage
-      ? { ...uploadedImage, image: uploadedImage.imageUrl }
-      : isRemoveImageRequested(req.body.removeImage)
-        ? { image: null, imageUrl: null, imagePublicId: null }
-        : {};
-    const item = await Product.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        $or: [
-          { reservedQty: { $lte: Number(req.body.quantity) } },
-          { reservedQty: { $exists: false } }
-        ]
-      },
-      {
-        name: req.body.name.trim(),
-        price: Number(req.body.price),
-        quantity: Number(req.body.quantity),
-        category: req.body.category.trim(),
-        ...imageUpdate
-      },
-      { new: true, runValidators: true }
-    );
-
-    if (!item) {
-      if (uploadedImage?.imagePublicId) {
-        await removeProductImageSafely(uploadedImage.imagePublicId, 'updateInventoryItem.rollback');
-      }
-      return res.status(409).json({
-        success: false,
-        message: 'Stock changed while saving. It cannot be set below the quantity currently reserved.'
-      });
-    }
-
-    if ((uploadedImage || isRemoveImageRequested(req.body.removeImage)) && oldImagePublicId) {
-      await removeProductImageSafely(oldImagePublicId, 'updateInventoryItem');
+      currentItem.set(prepared.data);
+      item = await currentItem.save({ session });
+    });
+    for (const publicId of prepared.obsoleteImagePublicIds) {
+      await removeProductImageSafely(publicId, 'updateInventoryItem');
     }
 
     res.json({
@@ -760,11 +759,20 @@ const updateInventoryItem = async (req, res) => {
       data: item
     });
   } catch (error) {
-    if (uploadedImage?.imagePublicId) {
-      await removeProductImageSafely(uploadedImage.imagePublicId, 'updateInventoryItem.rollback');
+    for (const image of prepared?.uploadedImages || stagedImages?.uploadedImages || error.uploadedImages || []) {
+      await removeProductImageSafely(image.imagePublicId, 'updateInventoryItem.rollback');
     }
     console.error('[updateInventoryItem] error', error);
-    res.status(error.status || 500).json({ success: false, message: error.message || 'Failed to update inventory item. Please try again.' });
+    const isConflict = isTransientInventoryWriteConflict(error);
+    res.status(isConflict ? 409 : error.status || 500).json({
+      success: false,
+      message: isConflict
+        ? 'This item changed while saving. Reload and try again.'
+        : error.message || 'Failed to update inventory item. Please try again.',
+      ...(error.fieldErrors ? { fieldErrors: error.fieldErrors } : {})
+    });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
@@ -791,6 +799,12 @@ const deleteInventoryItem = async (req, res) => {
         item.imagePublicId || getProductImagePublicId(item.imageUrl || item.image),
         'deleteInventoryItem'
       );
+      for (const variant of item.variants || []) {
+        await removeProductImageSafely(
+          variant.imagePublicId || getProductImagePublicId(variant.imageUrl),
+          'deleteInventoryItem.variant'
+        );
+      }
     }
     res.json({
       success: true,
@@ -908,7 +922,7 @@ const getMechanicsReport = async (req, res) => {
                   $sum: {
                     $cond: [
                       { $eq: ['$status', 'completed'] },
-                      { $ifNull: ['$laborFee', 0] },
+                      { $ifNull: ['$mechanicFeeTotal', { $ifNull: ['$laborFee', 0] }] },
                       0
                     ]
                   }

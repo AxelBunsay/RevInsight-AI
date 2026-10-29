@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { api } from '../../services/api';
+import { hasCustomerFooterDetails } from './customerFooterSettings';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import NotificationContent from '../../components/NotificationContent';
 import '../styles/shared.css';
 import '../styles/customer-flow.css';
 
@@ -81,7 +83,7 @@ export function CustomerHeader() {
     || currentPath.startsWith('/customer/order-confirmation');
 
   return <header className="customer-header">
-    <Link className="customer-brand" to="/customer/shop"><span className="customer-brand__mark" aria-hidden="true">🔧</span><span className="customer-brand__copy"><strong>Manoy&apos;s Motorcycle</strong><small>Parts, Accessories &amp; Services</small></span></Link>
+    <Link className="customer-brand" to="/customer/shop"><span className="customer-brand__mark" aria-hidden="true">🔧</span><span className="customer-brand__copy"><strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
     <button type="button" className="customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => setIsMenuOpen((open) => !open)}>
       <span /><span /><span />
     </button>
@@ -99,12 +101,12 @@ export function CustomerHeader() {
           {unreadNotificationCount > 0 && <span className="customer-notification-count">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}
         </button>
         {isNotificationsOpen && <section className="customer-notification-popover" aria-label="Notifications">
-          <strong>Notifications</strong>
+          <strong className="customer-notification-popover-header">Notifications</strong>
           {notificationError && <p role="alert">{notificationError}</p>}
           {notifications.length
             ? <ul>{notifications.map((notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
               <Link to={`/customer/reservations/${notification.recordId}`} state={{ showPayment: notification.type === 'payment_rejected' }} onClick={() => openCustomerNotification(notification)}>
-                {notification.message}<small>{new Date(notification.createdAt).toLocaleString('en-PH')}</small>
+                <NotificationContent message={notification.message} timestamp={notification.createdAt} />
               </Link>
             </li>)}</ul>
             : !notificationError && <p>No notifications yet.</p>}
@@ -133,9 +135,11 @@ function CustomerFooter() {
     return () => { isMounted = false; };
   }, []);
 
+  const noPickupDetails = settings && !hasCustomerFooterDetails(settings);
+
   return <footer className="customer-site-footer">
     <strong>Manoy&apos;s Motorcycle</strong>
-    {error
+    {error || noPickupDetails
       ? <p className="customer-site-footer-message">Pickup details are temporarily unavailable.</p>
       : <div className="customer-site-footer-details">
         {settings?.pickupAddress && <span>Pickup: {settings.pickupAddress}</span>}
@@ -164,7 +168,7 @@ export function CustomerPage({ title, description, children, includeHeader = tru
     <main className={`customer-page ${title === 'Motorcycle Shop' ? 'shop-page' : ''} ${title === 'Motorcycle Services' ? 'services-page' : ''} ${title === 'My Purchases' || title === 'My Reservations' ? 'orders-page reservations-page' : ''} ${title === 'Profile' || title === 'Account' ? 'profile-page' : ''}`}>
       {includeHeader && <CustomerHeader />}
       <section className="customer-heading">
-        <p className="customer-eyebrow">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>
+        {title !== 'Account' && <p className="customer-eyebrow">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}
         <h1>{title}</h1>
         <p>{description}</p>
       </section>

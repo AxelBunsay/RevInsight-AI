@@ -1,3 +1,12 @@
+import { formatServiceName, serviceUnitSummary } from '../utils/servicePricing';
+import { getServicePaymentSummary } from '../utils/servicePayment';
+import ServicePriceBreakdown from '../components/ServicePriceBreakdown';
+
+const serviceUnitDetails = (job) => job.pricePerUnit
+  ? serviceUnitSummary(job.units || 1, job.unitLabel)
+  : '';
+const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const statusLabels = {
   pending: 'Available to accept', assigned: 'Assigned to you',
   'awaiting-response': 'Awaiting your response', confirmed: 'Awaiting your response',
@@ -20,7 +29,7 @@ export function JobTable({ jobs, onSelect }) {
     <tbody>{jobs.map((job) => <tr key={job._id || job.id}>
       <td><button className="mechanic-job-id" type="button" onClick={() => onSelect(job)}>{job.jobId || job._id || job.id}</button><span className={`mechanic-priority${job.priority?.toLowerCase() === 'high' ? ' high' : ''}`}>{job.priority || 'Normal'}</span></td>
       <td><strong>{job.customerName || job.customer?.name || 'Customer'}</strong><span>{job.plate || job.plateNumber || job.vehiclePlate || '—'}</span></td>
-      <td>{job.vehicle || job.vehicleModel || job.vehicleName || 'Motorcycle'}<span>{job.serviceType || job.service || 'Service'}</span></td>
+      <td>{job.vehicle || job.vehicleModel || job.vehicleName || 'Motorcycle'}<span>{formatServiceName(job.serviceType || job.service || 'Service', job.units, job.unitLabel)}</span>{job.pricePerUnit && <small>{serviceUnitDetails(job)}</small>}<ServicePriceBreakdown servicePriceTotal={job.servicePriceTotal} mechanicFeeTotal={job.mechanicFeeTotal} estimatedPrice={job.estimatedPrice} /></td>
       <td><StatusBadge status={job.status || 'confirmed'} /></td>
       <td><span className={job.overdue && job.status !== 'completed' ? 'mechanic-due overdue' : 'mechanic-due'}>{job.overdue && job.status !== 'completed' ? 'Overdue · ' : ''}{job.dueTime || '—'}</span><span>{job.dueDate ? new Date(`${job.dueDate}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span></td>
       <td><button className="mechanic-table-action" type="button" onClick={() => onSelect(job)}>View</button></td>
@@ -31,12 +40,15 @@ export function JobTable({ jobs, onSelect }) {
 export function JobDialog({ job, onClose, actions, onAction, busy, error = '' }) {
   if (!job) return null;
   const labels = { accept: 'Accept job', decline: 'Decline', start: 'Start work', 'waiting-parts': 'Wait for parts', 'quality-check': 'Send to quality check', complete: 'Mark complete' };
+  const paymentSummary = getServicePaymentSummary(job);
+  const balanceDue = Math.max(0, paymentSummary.totalAmount - paymentSummary.amountPaid);
   return <div className="mechanic-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="mechanic-dialog job-dialog" role="dialog" aria-modal="true" aria-labelledby="job-dialog-title">
       <button className="mechanic-dialog-close" type="button" onClick={onClose} aria-label="Close job details">×</button>
-      <span className="mechanic-eyebrow">{job.jobId || job._id}</span><h2 id="job-dialog-title">{job.serviceType || job.service || 'Service job'}</h2>
+      <span className="mechanic-eyebrow">{job.jobId || job._id}</span><h2 id="job-dialog-title">{formatServiceName(job.serviceType || job.service || 'Service job', job.units, job.unitLabel)}</h2>
       <p>{job.description || 'Review the job details and update its status when work progresses.'}</p>
-      <dl className="mechanic-job-details"><div><dt>Customer</dt><dd>{job.customerName || job.customer?.name || 'Customer'}</dd></div><div><dt>Vehicle</dt><dd>{job.vehicle || job.vehicleModel || 'Motorcycle'} · {job.plate || job.plateNumber || '—'}</dd></div><div><dt>Status</dt><dd><StatusBadge status={job.status || 'confirmed'} /></dd></div><div><dt>Priority</dt><dd>{job.priority || 'Normal'}</dd></div></dl>
+      <dl className="mechanic-job-details"><div><dt>Customer</dt><dd>{job.customerName || job.customer?.name || 'Customer'}</dd></div><div><dt>Vehicle</dt><dd>{job.vehicle || job.vehicleModel || 'Motorcycle'} · {job.plate || job.plateNumber || '—'}</dd></div>{job.pricePerUnit && <div><dt>Quantity</dt><dd>{serviceUnitDetails(job)}</dd></div>}<div><dt>Price breakdown</dt><dd><ServicePriceBreakdown servicePriceTotal={job.servicePriceTotal} mechanicFeeTotal={job.mechanicFeeTotal} estimatedPrice={job.estimatedPrice} /></dd></div><div><dt>Status</dt><dd><StatusBadge status={job.status || 'confirmed'} /></dd></div><div><dt>Priority</dt><dd>{job.priority || 'Normal'}</dd></div></dl>
+      {actions.includes('complete') && balanceDue > 0 && <p className="mechanic-alert">Collect balance of {money(balanceDue)} at the shop.</p>}
       {error && <p className="mechanic-alert" role="alert">{error}</p>}
       <div className="mechanic-dialog-actions job-dialog-actions">{actions.map((action) => <button className={action === 'decline' ? 'button-secondary danger' : 'button-primary'} type="button" key={action} disabled={busy} onClick={() => onAction(job, action)}>{labels[action] || action}</button>)}<button className="button-secondary" type="button" onClick={onClose}>Close</button></div>
     </section>

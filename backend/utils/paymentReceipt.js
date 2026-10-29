@@ -104,7 +104,7 @@ async function removeReceipt(publicId) {
 
 async function removePublicImage(publicId) {
   if (!publicId) return;
-  await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
+  return cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
 }
 
 module.exports = {

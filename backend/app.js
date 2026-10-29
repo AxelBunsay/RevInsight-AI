@@ -19,6 +19,7 @@ const customerServiceRoutes = require('./routes/customerServices');
 const mechanicPartsRoutes = require('./routes/mechanicParts');
 const reservationRoutes = require('./routes/reservations');
 const notificationRoutes = require('./routes/notifications');
+const paymentSettings = require('./controllers/paymentSettingsController');
 
 const app = express();
 
@@ -100,6 +101,7 @@ app.use('/api/reservations', reservationRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/service-requests', serviceRequestRoutes);
 app.use('/api/mechanic', mechanicPartsRoutes);
+app.get('/api/payment-settings', paymentSettings.getPaymentSettings);
 
 app.use((req, res, next) => {
   if (req.path.startsWith('/api')) {

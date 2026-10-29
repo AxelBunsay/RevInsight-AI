@@ -1,6 +1,6 @@
 # Test Inventory
 
-The complete backend run contained **18 test files and 96 passing tests**, including the 4 integration files and 29 integration cases below. The frontend verification contained **2 files and 7 passing tests**. There were no failed or skipped tests. Parameterized test names below describe each generated case.
+The latest complete backend run contained **22 test files and 158 passing tests**. The latest frontend run contained **17 test files and 49 passing tests**. There were no failed or skipped tests. Parameterized test names below describe each generated case.
 The frontend `api.test.js` cases are split across the Payments and Security sections, so that file is listed twice by feature.
 
 ## Authentication
@@ -22,10 +22,13 @@ The frontend `api.test.js` cases are split across the Payments and Security sect
 
 ## Services
 
-- `backend/tests/integration/services.test.js` — `uses the configured service price and mechanic fee instead of client-supplied values`; `rejects a second booking when the selected slot is at capacity`; `rejects a closed day and a time that has already passed`; `does not allow an unpaid booking to start or complete`; `mechanic accept, start, and complete creates one revenue record with the configured labor fee`; `does not allow admin completion or reopening a completed booking`; `removes the service revenue record when an admin cancels the booking`; `expires an unpaid booking and makes its slot available again`; `limits each customer to three active unpaid bookings`.
+- `backend/tests/integration/services.test.js` — `uses the configured service price and mechanic fee instead of client-supplied values`; `creates zero-percent bookings without an upfront payment deadline`; `does not request a refund decision when cancelling a zero-payment booking`; `accepts a zero service setting and rejects values above 100`; `uses the existing item percentage for legacy settings without a service percentage`; `rounds a 50-percent down payment and keeps the booking snapshot immutable`; `stores the server-computed down payment on submissions and ignores a client amount`; `treats a legacy confirmed booking without payment snapshots as fully paid upfront`; `counts a %s-percent down payment as one full-total service revenue at completion` (50% and 100%); plus service pricing, slot, lifecycle, cancellation, and expiry tests.
 
 - `backend/tests/serviceBookingHardening.test.js` — `blocks unpaid $nextStatus transitions` (assigned → in-progress and in-progress → completed); `blocks admin completion and reopening completed bookings`; `deletes a service BusinessRecord when the admin cancels a booking`; `requires an admin refund decision before cancelling a confirmed service booking`; `does not create service revenue for a completed booking without confirmed payment`; `expires an unpaid pending booking past its deadline`; `rejects a fourth active unpaid booking for a customer`.
 - `backend/tests/serviceSchema.test.js` — `stores category and durationMinutes as top-level fields with legacy defaults`; `retains the mechanic fee cannot exceed service price validator`; `validates the configured category and duration values`.
+- `frontend/src/components/ServicePaymentBreakdown.test.jsx` — saved payment split display and legacy full-payment fallback.
+- `frontend/src/Customer/react/ReservationPaymentForm.test.jsx` — service GCash modal uses the saved down payment as the amount to pay.
+- `frontend/src/Mechanic/MechanicJobTable.test.jsx` — completion dialog shows the remaining balance to collect.
 
 ## Revenue
 

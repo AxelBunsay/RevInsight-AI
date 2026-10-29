@@ -3,6 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
+import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
+import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
+import { getServiceBookingStatus } from '../../utils/servicePayment';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
@@ -51,18 +55,10 @@ function itemReservationDeadline(reservation) {
 }
 
 function ServiceBookingCard({ booking, prototype = false }) {
-  const serviceName = prototype ? booking.name : booking.serviceType;
+  const serviceName = prototype ? booking.name : formatServiceName(booking.serviceType || 'Service booking', booking.units, booking.unitLabel);
   const bookingId = prototype ? booking.id : booking._id;
   const date = prototype ? booking.bookingDate : booking.scheduledDate;
-  const status = prototype
-    ? booking.status
-    : booking.paymentStatus === 'Payment Submitted'
-      ? booking.paymentStatus
-      : booking.paymentStatus === 'Payment Pending' && booking.paymentRejectionReason
-        ? 'Payment Pending'
-      : booking.paymentStatus === 'Confirmed' && booking.status === 'pending'
-        ? 'Confirmed'
-        : booking.status;
+  const status = prototype ? booking.status : getServiceBookingStatus(booking);
   const dateLabel = date
     ? (prototype
       ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${date}T00:00:00Z`))
@@ -76,12 +72,19 @@ function ServiceBookingCard({ booking, prototype = false }) {
       <div>
         <span className="customer-cart-item-kind">SERVICE BOOKING · {bookingId}</span>
         <h2>{serviceName}</h2>
-        <p>{dateLabel}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
+        <p>{!prototype && booking.pricePerUnit ? `${serviceUnitSummary(booking.units || 1, booking.unitLabel)} · ` : ''}{dateLabel}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
       </div>
       <span className={`customer-status-pill ${statusClass(status)}`}>{status}</span>
     </div>
     <div className="customer-reservation-card-bottom">
-      <strong>{money(prototype ? booking.price : booking.estimatedPrice)}</strong>
+      {prototype
+        ? <strong>{money(booking.price)}</strong>
+        : <ServicePriceBreakdown
+          servicePriceTotal={booking.servicePriceTotal}
+          mechanicFeeTotal={booking.mechanicFeeTotal}
+          estimatedPrice={booking.estimatedPrice}
+        />}
+      {!prototype && <ServicePaymentBreakdown booking={booking} />}
       {prototype
         ? <Link to={`/customer/reservations/${bookingId}`}>View booking <span aria-hidden="true">→</span></Link>
         : <><span>{booking.description}</span><Link to={`/customer/reservations/${booking._id}`}>View booking <span aria-hidden="true">→</span></Link></>}

@@ -6,8 +6,10 @@ const require = createRequire(import.meta.url);
 const {
   app,
   BusinessRecord,
+  Order,
   Product,
   Reservation,
+  ServiceRequest,
   startReplicaSet,
   stopReplicaSet,
   clearCollections,
@@ -16,6 +18,7 @@ const {
   signCustomer,
   signAdmin
 } = require('./helpers');
+const { getRevenueEntries } = require('../../utils/revenue');
 
 const png = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pWQAAAAASUVORK5CYII=',
@@ -28,12 +31,23 @@ let customerToken;
 let secondCustomerToken;
 let adminToken;
 
-async function makeReservation(token, productId, qty = 1) {
+async function makeReservation(token, productId, qty = 1, itemFields = {}) {
   return api
     .post('/api/reservations')
     .set('Authorization', `Bearer ${token}`)
-    .send({ items: [{ productId: String(productId), qty }] });
+    .send({ items: [{ productId: String(productId), qty, ...itemFields }] });
 }
+
+async function makeMultiReservation(token, items) {
+  return api.post('/api/reservations')
+    .set('Authorization', 'Bearer ' + token)
+    .send({ items });
+}
+
+const adminPost = (path) => api.post(path).set('Authorization', 'Bearer ' + adminToken);
+const adminPut = (path) => api.put(path).set('Authorization', 'Bearer ' + adminToken);
+const adminGet = (path) => api.get(path).set('Authorization', 'Bearer ' + adminToken);
+const customerGet = (path) => api.get(path).set('Authorization', 'Bearer ' + customerToken);
 
 async function submitPayment(token, reservationId, reference) {
   return api
@@ -55,6 +69,27 @@ async function confirmReservation(reservationId) {
   return api
     .post(`/api/admin/reservations/${reservationId}/confirm`)
     .set('Authorization', `Bearer ${adminToken}`);
+}
+
+async function createVariantProduct(variants) {
+  return Product.create({
+    name: 'Integration Variant Part',
+    price: 100,
+    quantity: 0,
+    category: 'Electrical',
+    variants
+  });
+}
+
+async function createConfirmedVariantReservation(product, variant, reference = '1234567890') {
+  const created = await makeReservation(customerToken, product._id, 1, {
+    variantId: String(variant._id)
+  });
+  expect(created.status).toBe(201);
+  const submitted = await submitPayment(customerToken, created.body.reservation._id, reference);
+  expect(submitted.status).toBe(200);
+  expect((await confirmReservation(created.body.reservation._id)).status).toBe(200);
+  return created.body.reservation;
 }
 
 describe('reservation business flow integration', () => {
@@ -93,6 +128,420 @@ describe('reservation business flow integration', () => {
     const saved = await Reservation.findById(response.body.reservation._id).lean();
     expect(saved.total).toBe(2000);
     expect(saved.downPaymentAmount).toBe(600);
+  });
+
+  it('reserves only the selected variant and uses its server price', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', model: 'TMX 125', price: 250, stock: 3 },
+      { brand: 'Yamaha', model: 'YTX 125', price: 400, stock: 4 }
+    ]);
+    const [variantA, variantB] = product.variants;
+    const created = await makeReservation(customerToken, product._id, 1, {
+      variantId: String(variantA._id),
+      price: 0
+    });
+
+    expect(created.status).toBe(201);
+    expect(created.body.reservation).toMatchObject({
+      total: 250,
+      items: [{
+        variantId: String(variantA._id),
+        variantLabel: 'Honda TMX 125',
+        name: 'Integration Variant Part - Honda TMX 125',
+        unitPrice: 250
+      }]
+    });
+    const submitted = await submitPayment(customerToken, created.body.reservation._id, '1234567890');
+    expect(submitted.status).toBe(200);
+    expect((await confirmReservation(created.body.reservation._id)).status).toBe(200);
+
+    const savedProduct = await Product.findById(product._id);
+    expect(savedProduct.variants.id(variantA._id).reservedQty).toBe(1);
+    expect(savedProduct.variants.id(variantB._id).reservedQty).toBe(0);
+    expect(savedProduct).toMatchObject({ quantity: 7, reservedQty: 1 });
+  });
+
+  it('rejects a reservation for an out-of-stock variant with 409', async () => {
+    const product = await createVariantProduct([
+      { size: '70/90-17', price: 500, stock: 0 }
+    ]);
+    const response = await makeReservation(customerToken, product._id, 1, {
+      variantId: String(product.variants[0]._id)
+    });
+
+    expect(response.status).toBe(409);
+  });
+
+  it('requires a variant ID when reserving a product with variants', async () => {
+    const product = await createVariantProduct([
+      { color: 'Black', price: 300, stock: 2 }
+    ]);
+    const response = await makeReservation(customerToken, product._id);
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Choose a variant');
+  });
+
+  it('continues to reserve products without variants using server price and stock', async () => {
+    const response = await makeReservation(customerToken, fixtures.product._id, 1, { price: 1 });
+
+    expect(response.status).toBe(201);
+    expect(response.body.reservation).toMatchObject({
+      total: 1000,
+      items: [{ unitPrice: 1000, name: 'Integration Brake Pad' }]
+    });
+  });
+
+  it('returns available variant stock and filters by case-insensitive fitment', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', model: 'TMX 125', price: 250, stock: 3 },
+      { size: '1 L', price: 90, stock: 2 }
+    ]);
+    product.variants[0].reservedQty = 1;
+    await product.save();
+
+    const response = await api.get('/api/products?brand=honda&model=tmx%20125');
+
+    expect(response.status).toBe(200);
+    expect(response.body.products).toHaveLength(1);
+    expect(response.body.products[0].variants[0]).toMatchObject({
+      brand: 'Honda',
+      model: 'TMX 125',
+      label: 'Honda TMX 125',
+      price: 250,
+      stock: 2,
+      availableStock: 2
+    });
+    expect(response.body.products[0].variants[0]).not.toHaveProperty('reservedQty');
+  });
+
+  it('normalizes and rejects product categories through both inventory controllers', async () => {
+    const inventoryCreate = await adminPost('/api/dashboard/inventory').send({
+      name: 'Mixed Case Inventory',
+      price: 100,
+      quantity: 2,
+      category: 'bRAkEs'
+    });
+    const productCreate = await adminPost('/api/products').send({
+      name: 'Mixed Case Product',
+      price: 200,
+      quantity: 3,
+      category: 'oIl & fLuIdS'
+    });
+
+    expect(inventoryCreate.status).toBe(201);
+    expect(inventoryCreate.body.data.category).toBe('Brakes');
+    expect(productCreate.status).toBe(201);
+    expect(productCreate.body.product.category).toBe('Oil & Fluids');
+
+    const inventoryUpdate = await adminPut(`/api/dashboard/inventory/${inventoryCreate.body.data._id}`).send({
+      name: 'Mixed Case Inventory',
+      price: 100,
+      quantity: 2,
+      category: 'sEaT wOrKs'
+    });
+    const productUpdate = await adminPut(`/api/products/${productCreate.body.product._id}`).send({
+      name: 'Mixed Case Product',
+      price: 200,
+      quantity: 3,
+      category: 'tIrEs & wHeElS'
+    });
+
+    expect(inventoryUpdate.status).toBe(200);
+    expect(inventoryUpdate.body.data.category).toBe('Seat Works');
+    expect(productUpdate.status).toBe(200);
+    expect(productUpdate.body.product.category).toBe('Tires & Wheels');
+
+    const rejectedResponses = await Promise.all([
+      adminPost('/api/dashboard/inventory').send({
+        name: 'Unknown Inventory Category',
+        price: 100,
+        quantity: 1,
+        category: 'Parts'
+      }),
+      adminPost('/api/products').send({
+        name: 'Unknown Product Category',
+        price: 100,
+        quantity: 1,
+        category: 'Accessories'
+      }),
+      adminPut(`/api/dashboard/inventory/${inventoryCreate.body.data._id}`).send({
+        name: 'Mixed Case Inventory',
+        price: 100,
+        quantity: 2,
+        category: 'Parts'
+      }),
+      adminPut(`/api/products/${productCreate.body.product._id}`).send({
+        name: 'Mixed Case Product',
+        price: 200,
+        quantity: 3,
+        category: 'Accessories'
+      })
+    ]);
+
+    rejectedResponses.forEach((response) => {
+      expect(response.status).toBe(400);
+      expect(response.body.fieldErrors.category).toContain('Choose a category from:');
+    });
+  });
+
+  it('creates inventory variants with computed labels and ignores client labels and reserved stock', async () => {
+    const response = await adminPost('/api/products').send({
+      name: 'New Variant Product',
+      category: 'Tires & Wheels',
+      variants: [
+        {
+          brand: 'Honda',
+          model: 'TMX 125',
+          price: 1,
+          stock: 4,
+          reservedQty: 3,
+          label: 'Client supplied label'
+        }
+      ]
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.product).toMatchObject({
+      price: 1,
+      quantity: 4,
+      variants: [{
+        brand: 'Honda',
+        model: 'TMX 125',
+        label: 'Honda TMX 125',
+        stock: 4,
+      }]
+    });
+    const savedProduct = await Product.findById(response.body.product._id);
+    expect(savedProduct.reservedQty).toBe(0);
+    expect(savedProduct.variants[0].reservedQty).toBe(0);
+  });
+
+  it('uploads variant photos through the existing Cloudinary product-image handling', async () => {
+    const response = await adminPost('/api/products')
+      .field('name', 'Variant Image Product')
+      .field('category', 'Accessory')
+      .field('variants', JSON.stringify([{ color: 'Red', price: 50, stock: 1 }]))
+      .attach('variantImage_0', png, { filename: 'variant.png', contentType: 'image/png' });
+
+    expect(response.status).toBe(201);
+    expect(response.body.product.variants[0]).toMatchObject({
+      imageUrl: 'https://cloudinary.invalid/receipt-1.png'
+    });
+    const product = await Product.findById(response.body.product._id);
+    expect(product.variants[0].imagePublicId).toBe('integration/receipt-1');
+  });
+
+  it('updates variant inventory through the admin inventory endpoint', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', model: 'TMX 125', price: 250, stock: 3 }
+    ]);
+    const variant = product.variants[0];
+    const response = await adminPut(`/api/dashboard/inventory/${product._id}`).send({
+      name: product.name,
+      category: product.category,
+      price: 9999,
+      quantity: 999,
+      variants: [{
+        _id: String(variant._id),
+        brand: 'Yamaha',
+        model: 'YTX 125',
+        price: 400,
+        stock: 5,
+        reservedQty: 4,
+        label: 'Untrusted label'
+      }]
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      price: 400,
+      quantity: 5,
+      reservedQty: 0,
+      variants: [{
+        brand: 'Yamaha',
+        model: 'YTX 125',
+        price: 400,
+        stock: 5,
+        reservedQty: 0,
+        label: 'Yamaha YTX 125'
+      }]
+    });
+  });
+
+  it('returns variants from the admin inventory list and detail endpoints', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', size: '1 L', price: 250, stock: 3 }
+    ]);
+
+    const [list, detail] = await Promise.all([
+      adminGet('/api/dashboard/inventory'),
+      adminGet(`/api/dashboard/inventory/${product._id}`)
+    ]);
+
+    for (const response of [list, detail]) {
+      expect(response.status).toBe(200);
+      const item = response === list
+        ? response.body.data.find((entry) => entry._id === String(product._id))
+        : response.body.data;
+      expect(item.variants[0]).toMatchObject({
+        brand: 'Honda',
+        model: '',
+        size: '1 L',
+        color: '',
+        label: 'Honda - 1 L',
+        price: 250,
+        stock: 3,
+        reservedQty: 0,
+        imageUrl: ''
+      });
+    }
+  });
+
+  it('rejects reducing a variant stock below its reserved quantity', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', model: 'TMX 125', price: 250, stock: 3 }
+    ]);
+    const variant = product.variants[0];
+    await createConfirmedVariantReservation(product, variant);
+
+    const response = await adminPut(`/api/dashboard/inventory/${product._id}`).send({
+      name: product.name,
+      category: product.category,
+      price: 250,
+      quantity: 0,
+      variants: [{
+        _id: String(variant._id),
+        brand: 'Honda',
+        model: 'TMX 125',
+        price: 250,
+        stock: 0
+      }]
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body.message).toContain('reserved units');
+  });
+
+  it('decrements only the selected variant stock when pickup is completed', async () => {
+    const product = await createVariantProduct([
+      { brand: 'Honda', model: 'TMX 125', price: 250, stock: 3 },
+      { brand: 'Yamaha', model: 'YTX 125', price: 400, stock: 4 }
+    ]);
+    const [variantA, variantB] = product.variants;
+    const reservation = await createConfirmedVariantReservation(product, variantA);
+
+    const response = await adminPost(`/api/admin/reservations/${reservation._id}/complete`);
+
+    expect(response.status).toBe(200);
+    const savedProduct = await Product.findById(product._id);
+    expect(savedProduct.variants.id(variantA._id).toObject()).toMatchObject({ stock: 2, reservedQty: 0 });
+    expect(savedProduct.variants.id(variantB._id).toObject()).toMatchObject({ stock: 4, reservedQty: 0 });
+    expect(await BusinessRecord.findOne({ sourceId: reservation._id })).toMatchObject({
+      category: 'Electrical',
+      itemName: 'Integration Variant Part - Honda TMX 125'
+    });
+  });
+
+  it('records completed reservation sales by category and remains idempotent', async () => {
+    const electrical = await Product.create({
+      name: 'Integration Electrical Part',
+      price: 500,
+      quantity: 2,
+      category: 'Electrical'
+    });
+    const created = await makeMultiReservation(customerToken, [
+      { productId: String(fixtures.product._id), qty: 1 },
+      { productId: String(electrical._id), qty: 1 }
+    ]);
+    expect(created.status).toBe(201);
+    const submitted = await submitPayment(customerToken, created.body.reservation._id, '1234567890');
+    expect(submitted.status).toBe(200);
+    expect((await confirmReservation(created.body.reservation._id)).status).toBe(200);
+
+    const completed = await adminPost(`/api/admin/reservations/${created.body.reservation._id}/complete`);
+    expect(completed.status).toBe(200);
+    const records = await BusinessRecord.find({ sourceId: created.body.reservation._id }).sort({ category: 1 }).lean();
+    expect(records.map(({ category, amount }) => ({ category, amount }))).toEqual([
+      { category: 'Brakes', amount: 1000 },
+      { category: 'Electrical', amount: 500 }
+    ]);
+    expect(records.reduce((sum, record) => sum + record.amount, 0)).toBe(completed.body.reservation.total);
+
+    const transactions = await adminGet('/api/dashboard/business-records?type=item&limit=10');
+    expect(transactions.status).toBe(200);
+    expect(transactions.body.data.filter((record) => record.isReservation)).toHaveLength(1);
+    expect(transactions.body.pagination.totalRecords).toBe(1);
+    expect(transactions.body.counts).toMatchObject({ all: 1, items: 1 });
+    expect(transactions.body.totalAmount).toBe(completed.body.reservation.total);
+
+    const repeated = await adminPost(`/api/admin/reservations/${created.body.reservation._id}/complete`);
+    expect(repeated.status).toBe(409);
+    expect(await BusinessRecord.countDocuments({ sourceId: created.body.reservation._id })).toBe(2);
+
+    const entries = await getRevenueEntries({
+      Order,
+      Reservation,
+      ServiceRequest,
+      Product
+    });
+    const reservationEntries = entries.filter((entry) => entry.recordId === String(created.body.reservation._id));
+    expect(reservationEntries.reduce((sum, entry) => sum + entry.revenue, 0)).toBe(completed.body.reservation.total);
+  });
+
+  it('releases the selected variant hold when a confirmed reservation is cancelled', async () => {
+    const product = await createVariantProduct([
+      { size: '1 L', price: 90, stock: 5 },
+      { color: 'Black', price: 300, stock: 2 }
+    ]);
+    const [variantA, variantB] = product.variants;
+    const reservation = await createConfirmedVariantReservation(product, variantA);
+
+    const response = await adminPost(`/api/admin/reservations/${reservation._id}/cancel`)
+      .send({ reason: 'Customer changed their mind.', refundDecision: 'refunded' });
+
+    expect(response.status).toBe(200);
+    const savedProduct = await Product.findById(product._id);
+    expect(savedProduct.variants.id(variantA._id).reservedQty).toBe(0);
+    expect(savedProduct.variants.id(variantB._id).reservedQty).toBe(0);
+  });
+
+  it('releases the selected variant hold when its reservation expires', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-26T09:00:00+08:00'));
+    const product = await createVariantProduct([
+      { size: '1 L', price: 90, stock: 5 },
+      { color: 'Black', price: 300, stock: 2 }
+    ]);
+    const [variantA] = product.variants;
+    const reservation = await createConfirmedVariantReservation(product, variantA);
+
+    vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000 + 1);
+    const response = await customerGet('/api/reservations');
+
+    expect(response.status).toBe(200);
+    expect((await Reservation.findById(reservation._id)).status).toBe('Expired');
+    const savedProduct = await Product.findById(product._id);
+    expect(savedProduct.variants.id(variantA._id).reservedQty).toBe(0);
+    expect(savedProduct.variants.id(variantA._id).stock).toBe(5);
+  });
+
+  it('does not hold variant stock when a submitted payment is rejected', async () => {
+    const product = await createVariantProduct([
+      { color: 'Red', price: 100, stock: 2 }
+    ]);
+    const variant = product.variants[0];
+    const created = await makeReservation(customerToken, product._id, 1, {
+      variantId: String(variant._id)
+    });
+    const submitted = await submitPayment(customerToken, created.body.reservation._id, '1234567890');
+    expect(submitted.status).toBe(200);
+
+    const response = await adminPost(`/api/admin/reservations/${created.body.reservation._id}/reject`)
+      .send({ reason: 'Receipt details are not legible.' });
+
+    expect(response.status).toBe(200);
+    expect((await Product.findById(product._id)).variants[0].reservedQty).toBe(0);
   });
 
   it('prevents a second customer from reserving more than remaining stock', async () => {
@@ -243,5 +692,83 @@ describe('reservation business flow integration', () => {
 
     expect(response.status).toBe(404);
     expect(response.body.message).toBe('Reservation not found.');
+  });
+
+  const reservationSettingsPayload = (overrides = {}) => ({
+    downPaymentPercent: 30,
+    pendingPaymentHours: 24,
+    holdDays: 3,
+    paymentInstructions: {
+      methodName: 'GCash',
+      accountName: 'Integration Shop',
+      accountNumber: '09170000000'
+    },
+    pickupAddress: '',
+    pickupHours: '',
+    contactNumber: '0900 000 0000',
+    ...overrides
+  });
+
+  it('rejects pickup addresses over 150 characters with a field-specific error', async () => {
+    const response = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ pickupAddress: 'A'.repeat(151) }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.fieldErrors.pickupAddress).toBe('Pickup address must be 150 characters or fewer.');
+    expect(response.body.message).toBe('Pickup address must be 150 characters or fewer.');
+  });
+
+  it('rejects pickup hours over 80 characters with a field-specific error', async () => {
+    const response = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ pickupHours: 'H'.repeat(81) }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.fieldErrors.pickupHours).toBe('Pickup hours must be 80 characters or fewer.');
+    expect(response.body.message).toBe('Pickup hours must be 80 characters or fewer.');
+  });
+
+  it('rejects shop contact numbers over 40 characters and disallowed characters', async () => {
+    const tooLong = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ contactNumber: '1'.repeat(41) }));
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.body.fieldErrors.contactNumber).toBe('Shop contact number must be 40 characters or fewer.');
+
+    const invalid = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({ contactNumber: '0917-ABC-1234' }));
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.fieldErrors.contactNumber)
+      .toBe('Shop contact number may contain only digits, spaces, +, -, and parentheses.');
+  });
+
+  it('saves and returns the pickup address, hours and shop contact number', async () => {
+    const pickupAddress = 'Unit 4, 44 Long Road, Barangay San Isidro, Quezon City';
+    const response = await adminPut('/api/admin/reservations/settings')
+      .send(reservationSettingsPayload({
+        pickupAddress,
+        pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
+        contactNumber: '+63 (917) 123-4567'
+      }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.settings).toMatchObject({
+      pickupAddress,
+      pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
+      contactNumber: '+63 (917) 123-4567'
+    });
+
+    const customerSettings = await api.get('/api/reservations/shop-settings');
+    expect(customerSettings.status).toBe(200);
+    expect(customerSettings.body.settings).toMatchObject({
+      pickupAddress,
+      pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
+      contactNumber: '+63 (917) 123-4567'
+    });
+  });
+
+  it('includes the saved shop contact number when loading the admin reservation settings form', async () => {
+    const response = await adminGet('/api/admin/reservations/settings');
+
+    expect(response.status).toBe(200);
+    expect(response.body.settings.contactNumber).toBe(fixtures.settings.contactNumber);
   });
 });

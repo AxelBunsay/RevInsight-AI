@@ -1,8 +1,18 @@
 const mongoose = require('mongoose');
 
+const gcashPaymentSettingsSchema = new mongoose.Schema({
+  gcashQrUrl: { type: String, default: '' },
+  gcashQrPublicId: { type: String, default: '' },
+  gcashAccountName: { type: String, default: '' },
+  gcashAccountNumber: { type: String, default: '' },
+  paymentInstructions: { type: String, default: '', maxlength: 300 },
+  updatedAt: { type: Date, default: null }
+}, { _id: false });
+
 const reservationSettingsSchema = new mongoose.Schema({
   key: { type: String, required: true, unique: true, default: 'reservation' },
   downPaymentPercent: { type: Number, default: 30, min: 1, max: 100 },
+  serviceDownPaymentPercent: { type: Number, min: 0, max: 100 },
   pendingPaymentHours: { type: Number, default: 24, min: 1, max: 720 },
   holdDays: { type: Number, default: 3, min: 1, max: 30 },
   paymentInstructions: {
@@ -12,8 +22,9 @@ const reservationSettingsSchema = new mongoose.Schema({
     qrImageUrl: { type: String, default: '' },
     qrImagePublicId: { type: String, default: '' }
   },
-  pickupAddress: { type: String, default: '' },
-  pickupHours: { type: String, default: '' },
+  gcashPaymentSettings: { type: gcashPaymentSettingsSchema, default: () => ({}) },
+  pickupAddress: { type: String, default: '', maxlength: 150 },
+  pickupHours: { type: String, default: '', maxlength: 80 },
   contactNumber: { type: String, default: '0900 000 0000', maxlength: 40 },
   openDays: { type: [String], default: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
   openTime: { type: String, default: '09:00' },
@@ -29,6 +40,7 @@ reservationSettingsSchema.statics.getDefaults = function getDefaults() {
       $setOnInsert: {
         key: 'reservation',
         downPaymentPercent: 30,
+        serviceDownPaymentPercent: 30,
         pendingPaymentHours: 24,
         holdDays: 3,
         openDays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
@@ -39,7 +51,12 @@ reservationSettingsSchema.statics.getDefaults = function getDefaults() {
       }
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  ).then((settings) => {
+    if (settings.serviceDownPaymentPercent === undefined || settings.serviceDownPaymentPercent === null) {
+      settings.serviceDownPaymentPercent = settings.downPaymentPercent ?? 30;
+    }
+    return settings;
+  });
 };
 
 module.exports = mongoose.model('ReservationSettings', reservationSettingsSchema);

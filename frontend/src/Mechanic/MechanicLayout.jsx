@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { getMechanicNotifications, logoutMechanic, markMechanicNotificationsRead } from './mechanicService';
+import NotificationContent from '../components/NotificationContent';
 import './mechanic-ui.css';
+import './mechanic-notifications.css';
 
 const links = [
   { to: '/mechanic/dashboard', label: 'Dashboard', icon: '▥' },
@@ -52,8 +54,8 @@ export default function MechanicLayout({ title, children }) {
                 <span aria-hidden="true">🔔</span>{unreadCount > 0 && <span className="mechanic-notification-count">{unreadCount}</span>}
               </button>
               {showNotifications && <section className="mechanic-notification-popover" aria-label="Notifications">
-                {notifications.length ? notifications.map((item) => <article className={`mechanic-notification${item.read ? '' : ' unread'}`} key={item.id}><p>{item.text}</p><time>{item.time}</time></article>) : <p className="mechanic-notification-empty">You’re all caught up.</p>}
-                {!!unreadCount && <button type="button" onClick={async () => setNotifications(await markMechanicNotificationsRead())}>Mark all as read</button>}
+                <header className="mechanic-notification-popover-header"><strong>Notifications</strong>{!!unreadCount && <button type="button" onClick={async () => setNotifications(await markMechanicNotificationsRead())}>Mark all as read</button>}</header>
+                <div className="mechanic-notification-list">{notifications.length ? notifications.map((item) => <article className={`mechanic-notification${item.read ? '' : ' unread'}`} key={item.id}><NotificationContent message={item.text} timestamp={item.time} /></article>) : <p className="mechanic-notification-empty">No notifications yet.</p>}</div>
               </section>}
             </div>
             <Link className="mechanic-user-link" to="/mechanic/profile" aria-label={`Profile: ${name}`}><span>{name.charAt(0).toUpperCase()}</span></Link>

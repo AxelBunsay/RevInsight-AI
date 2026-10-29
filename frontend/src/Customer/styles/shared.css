@@ -1,3 +1,9 @@
+.customer-page.shop-page,
+.customer-page.services-page,
+.customer-page.profile-page {
+  --customer-wide-content-padding: clamp(16px, 3vw, 44px);
+}
+
 .customer-page {
   min-height: 100vh;
   max-height: none;

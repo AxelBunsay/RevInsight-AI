@@ -28,7 +28,7 @@ const summarizeMechanicJobs = (jobs) => {
     scheduledJobs: jobs.filter((job) => ['assigned', 'confirmed', 'accepted'].includes(job.status)).length,
     inProgressJobs: jobs.filter((job) => job.status === 'in-progress').length,
     completedJobs: completed.length,
-    totalEarnings: completed.reduce((total, job) => total + Number(job.laborFee || 0), 0),
+    totalEarnings: completed.reduce((total, job) => total + Number(job.mechanicFeeTotal ?? job.laborFee ?? 0), 0),
     paidJobs: completed.length
   };
 };

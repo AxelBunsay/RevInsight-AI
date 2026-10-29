@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
+import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
+import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import { CustomerPage } from './CustomerLayout';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
@@ -8,6 +10,9 @@ import '../styles/customer-flow.css';
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
 const statusClass = (status) => `status-${String(status || '').toLowerCase().replaceAll(' ', '-')}`;
 const formatDate = (value) => value ? new Date(value).toLocaleString('en-PH') : '';
+const reservationItemName = (item) => item.variantLabel && !String(item.name || '').includes(item.variantLabel)
+  ? `${item.name || item.productName || 'Product'} - ${item.variantLabel}`
+  : item.name || item.productName || 'Product';
 
 function ItemReservationCard({ reservation }) {
   const keyDate = reservation.status === 'Pending Down Payment'
@@ -26,7 +31,7 @@ function ItemReservationCard({ reservation }) {
     <div className="customer-reservation-card-top">
       <div>
         <span className="customer-cart-item-kind">RESERVATION · {reservation.code}</span>
-        <div className="customer-reservation-item-list">{reservation.items.map((item) => <span className="customer-reservation-item-row" key={item.productId}><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><strong>{item.name} × {item.qty}</strong></span>)}</div>
+        <div className="customer-reservation-item-list">{reservation.items.map((item) => <span className="customer-reservation-item-row" key={item.variantId || item.productId}><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><strong>{reservationItemName(item)} × {item.qty}</strong></span>)}</div>
         <p>{keyDate}</p>
       </div>
       <span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span>
@@ -48,12 +53,16 @@ function ServiceReservationCard({ reservation }) {
       <div>
         <span className="customer-cart-item-kind">SERVICE · {reservation.id}</span>
         <h2>{reservation.name}</h2>
-        <p>{reservation.bookingDate} at {reservation.timeSlot} · {reservation.vehicle}</p>
+        <p>{reservation.pricePerUnit ? `${serviceUnitSummary(reservation.units, reservation.unitLabel)} · ` : ''}{reservation.bookingDate} at {reservation.timeSlot} · {reservation.vehicle}</p>
       </div>
       <span className="customer-status-pill">{reservation.status}</span>
     </div>
     <div className="customer-reservation-card-bottom">
-      <strong>{money(reservation.price)}</strong>
+      <ServicePriceBreakdown
+        servicePriceTotal={reservation.servicePriceTotal}
+        mechanicFeeTotal={reservation.mechanicFeeTotal}
+        estimatedPrice={reservation.price}
+      />
       <Link to={`/customer/reservations/${reservation.id}`}>View booking <span aria-hidden="true">→</span></Link>
     </div>
   </article>;
@@ -79,11 +88,16 @@ export default function Reservations() {
         if (bookingResult.status === 'fulfilled') {
           setServiceBookings((bookingResult.value.requests || []).map((booking) => ({
             id: booking._id,
-            name: booking.serviceType || 'Service booking',
+            name: formatServiceName(booking.serviceType || 'Service booking', booking.units, booking.unitLabel),
             bookingDate: booking.scheduledDate ? new Date(booking.scheduledDate).toLocaleDateString('en-PH', { timeZone: 'Asia/Manila' }) : 'Date to be confirmed',
             timeSlot: [booking.startTime, booking.endTime].filter(Boolean).join(' - '),
             vehicle: booking.vehicle || '',
             price: booking.estimatedPrice,
+            servicePriceTotal: booking.servicePriceTotal,
+            mechanicFeeTotal: booking.mechanicFeeTotal,
+            units: booking.units || 1,
+            unitLabel: booking.unitLabel || 'unit',
+            pricePerUnit: booking.pricePerUnit === true,
             status: booking.paymentStatus === 'Payment Submitted'
               ? booking.paymentStatus
               : booking.paymentStatus === 'Payment Pending' && booking.paymentRejectionReason

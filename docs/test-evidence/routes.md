@@ -11,6 +11,8 @@ Required role reflects the route middleware. `Public` means no authentication mi
 | GET | `/api/admin/notifications` | Admin |
 | POST | `/api/admin/notifications/:id/read` | Admin |
 | POST | `/api/admin/notifications/read-all` | Admin |
+| GET | `/api/admin/payment-settings` | Admin |
+| PUT | `/api/admin/payment-settings` | Admin |
 | GET | `/api/admin/reservations` | Admin |
 | POST | `/api/admin/reservations/:id/cancel` | Admin |
 | POST | `/api/admin/reservations/:id/complete` | Admin |
@@ -28,6 +30,7 @@ Required role reflects the route middleware. `Public` means no authentication mi
 | POST | `/api/admin/service-requests/:id/paid-at-shop` | Admin |
 | POST | `/api/admin/service-requests/:id/reject-payment` | Admin |
 | GET | `/api/admin/services` | Public |
+| GET | `/api/payment-settings` | Public |
 | POST | `/api/admin/services` | Admin |
 | DELETE | `/api/admin/services/:id` | Admin |
 | GET | `/api/admin/services/:id` | Public |

@@ -1,7 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { adminApi as api } from "../services/adminApi";
+import { formatServiceName, serviceUnitSummary } from "../../utils/servicePricing";
+import ServicePriceBreakdown from "../../components/ServicePriceBreakdown";
+import { getServicePaymentSummary, getServiceBookingStatus } from "../../utils/servicePayment";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
+import TransactionsPageActions from "./TransactionsPageActions";
+import { getItemsPageData, getItemsRequest, itemFilterOptions } from "./itemsTransactionView";
+
+const reservationItemName = (item) => item.variantLabel && !String(item.name || "").includes(item.variantLabel)
+  ? `${item.name || item.productName || "Product"} - ${item.variantLabel}`
+  : item.name || item.productName || "Product";
 
 function formatBusinessRecord(record) {
   return {
@@ -13,9 +22,11 @@ function formatBusinessRecord(record) {
       "en-PH",
     ),
     items: record.isReservation && Array.isArray(record.items)
-      ? record.items.map((item) => `${item.name} × ${item.qty}`).join(", ")
+      ? record.items.map((item) => `${reservationItemName(item)} × ${item.qty}`).join(", ")
       : record.itemName || "N/A",
-    reservationItems: record.isReservation && Array.isArray(record.items) ? record.items : [],
+    reservationItems: record.isReservation && Array.isArray(record.items)
+      ? record.items.map((item) => ({ ...item, displayName: reservationItemName(item) }))
+      : [],
     amount: Number(record.amount || 0),
     status: record.status || "completed",
     mechanic:
@@ -30,11 +41,21 @@ function formatBusinessRecord(record) {
 
 const defaultReservationSettings = {
   downPaymentPercent: 30,
+  serviceDownPaymentPercent: 30,
   pendingPaymentHours: 24,
   holdDays: 3,
   paymentInstructions: { methodName: "", accountName: "", accountNumber: "", qrImageUrl: "", qrImagePublicId: "" },
   pickupAddress: "",
   pickupHours: "",
+  contactNumber: "",
+};
+
+const defaultGcashSettings = {
+  gcashQrUrl: "",
+  gcashQrPublicId: "",
+  gcashAccountName: "",
+  gcashAccountNumber: "",
+  paymentInstructions: "",
 };
 
 const reservationStatuses = [
@@ -69,8 +90,8 @@ function formatReservationRecord(reservation) {
     customer: isDeletedCustomer ? "Deleted customer" : customerName || reservation.customerName || "Unknown",
     customerPhone: isDeletedCustomer ? "" : (customer && typeof customer === "object" ? customer.phoneNumber : "") || reservation.customerPhone || "",
     date: new Date(reservation.createdAt).toLocaleString("en-PH"),
-    items: (reservation.items || []).map((item) => `${item.name} × ${item.qty}`).join(", ") || "N/A",
-    reservationItems: reservation.items || [],
+    items: (reservation.items || []).map((item) => `${reservationItemName(item)} × ${item.qty}`).join(", ") || "N/A",
+    reservationItems: (reservation.items || []).map((item) => ({ ...item, displayName: reservationItemName(item) })),
     amount: Number(reservation.total || 0),
     paid: Number(reservation.amountPaid || 0),
     balance: Number(reservation.balanceDue || 0),
@@ -81,15 +102,8 @@ function formatReservationRecord(reservation) {
 function formatServiceRequestRecord(request) {
   const customer = request.user || {};
   const customerName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim();
-  const status = request.paymentStatus === "Payment Submitted"
-    ? "Payment Submitted"
-    : request.paymentStatus === "Payment Pending" && request.paymentRejectionReason
-      ? "Payment Pending"
-      : request.paymentStatus === "Confirmed" && request.status === "pending"
-        ? "Confirmed"
-        : request.paymentStatus === "Paid at shop" && request.status === "pending"
-          ? "Paid at shop"
-        : request.status || "pending";
+  const paymentSummary = getServicePaymentSummary(request);
+  const status = getServiceBookingStatus(request);
   return {
     ...request,
     id: request.code || request._id,
@@ -100,8 +114,14 @@ function formatServiceRequestRecord(request) {
     date: request.scheduledDate
       ? new Date(request.scheduledDate).toLocaleDateString("en-PH")
       : new Date(request.createdAt).toLocaleDateString("en-PH"),
-    items: request.serviceType || "Service booking",
-    amount: Number(request.estimatedPrice || 0),
+    items: formatServiceName(request.serviceType || "Service booking", request.units, request.unitLabel),
+    amount: paymentSummary.totalAmount,
+    totalAmount: paymentSummary.totalAmount,
+    paid: paymentSummary.amountPaid,
+    balance: Math.max(0, paymentSummary.totalAmount - paymentSummary.amountPaid),
+    downPaymentAmount: paymentSummary.downPaymentAmount,
+    downPaymentPercent: paymentSummary.downPaymentPercent,
+    amountPaid: paymentSummary.amountPaid,
     status,
     bookingStatus: request.status || "pending",
     mechanic: request.mechanic?.firstName
@@ -110,7 +130,6 @@ function formatServiceRequestRecord(request) {
     paymentStatus: request.paymentStatus || "Payment Pending",
     refundDecision: request.refundDecision || null,
     paymentReference: request.paymentReference || "",
-    downPaymentAmount: Number(request.estimatedPrice || 0)
   };
 }
 
@@ -145,9 +164,15 @@ function Transactions() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState(defaultReservationSettings);
   const [settingsError, setSettingsError] = useState("");
+  const [settingsFieldErrors, setSettingsFieldErrors] = useState({});
   const [settingsToast, setSettingsToast] = useState("");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [isUploadingQr, setIsUploadingQr] = useState(false);
+  const [gcashSettings, setGcashSettings] = useState(defaultGcashSettings);
+  const [gcashQrFile, setGcashQrFile] = useState(null);
+  const [gcashQrPreview, setGcashQrPreview] = useState("");
+  const [gcashError, setGcashError] = useState("");
+  const [gcashToast, setGcashToast] = useState("");
+  const [isSavingGcash, setIsSavingGcash] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const beginReservationAction = useCallback(async (transaction, action) => {
     if (action === "review") {
@@ -170,6 +195,10 @@ function Transactions() {
     setBalanceReceived(false);
   }, []);
 
+  useEffect(() => () => {
+    if (gcashQrPreview.startsWith("blob:")) URL.revokeObjectURL(gcashQrPreview);
+  }, [gcashQrPreview]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -177,21 +206,20 @@ function Transactions() {
       if (!background) setIsLoading(true);
       try {
         if (activeTab === "items") {
-          const [reservationResponse, summaryResponse] = await Promise.all([
-            api.getReservations({
-              status: statusFilter === "All" ? "" : statusFilter,
-              search: search.trim(),
-            }),
-            api.getTransactions({ page: 1, limit: 1, type: "item" }),
-          ]);
+          const response = await api.getTransactions(getItemsRequest({
+            page,
+            limit: 10,
+            statusFilter,
+            search
+          }));
           if (!isMounted) return;
-          const reservations = (reservationResponse.reservations || []).map(formatReservationRecord);
-          const pages = Math.max(1, Math.ceil(reservations.length / 10));
-          setTransactions(reservations.slice((page - 1) * 10, page * 10));
+          const { rows, totalRecords, totalAmount: amount, totalPages: pages } = getItemsPageData(response, formatBusinessRecord);
+          setTransactions(rows);
           setError("");
-          setRecordCount(reservations.length);
-          setCounts({ ...(summaryResponse.counts || {}), items: reservations.length });
-          setPaymentSubmittedCount(Number(summaryResponse.counts?.paymentSubmitted || 0));
+          setRecordCount(totalRecords);
+          setCounts((current) => ({ ...current, ...(response.counts || {}), items: totalRecords }));
+          setPaymentSubmittedCount(Number(response.counts?.paymentSubmitted || 0));
+          setTotalAmount(amount);
           setTotalPages(pages);
           if (page > pages) setPage(pages);
         } else if (activeTab === "services") {
@@ -321,7 +349,7 @@ function Transactions() {
     { id: "services", label: "Services", count: counts.services },
   ];
   const statusOptions = activeTab === "items"
-    ? reservationStatuses
+    ? itemFilterOptions
     : activeTab === "services"
       ? transactionStatuses
       : [...reservationStatuses, ...transactionStatuses.filter((status) => !reservationStatuses.includes(status))];
@@ -352,7 +380,7 @@ function Transactions() {
       ? "Search by customer, service or mechanic..."
       : "Search by customer, item, mechanic...";
   const emptyMessage = activeTab === "items"
-    ? "No reservations match these filters."
+    ? "No item transactions match these filters."
     : activeTab === "services"
       ? "No service transactions yet."
       : "No transactions yet.";
@@ -426,64 +454,111 @@ function Transactions() {
   const openSettings = async () => {
     setSettingsError("");
     setSettingsToast("");
+    setSettingsFieldErrors({});
+    setGcashError("");
+    setGcashToast("");
     setSettingsOpen(true);
     try {
-      const response = await api.getReservationSettings();
+      const [response, paymentResponse] = await Promise.all([
+        api.getReservationSettings(),
+        api.getPaymentSettings(),
+      ]);
       setSettings({
         ...defaultReservationSettings,
         ...response.settings,
+        serviceDownPaymentPercent: response.settings?.serviceDownPaymentPercent ?? response.settings?.downPaymentPercent ?? defaultReservationSettings.serviceDownPaymentPercent,
         paymentInstructions: {
           ...defaultReservationSettings.paymentInstructions,
           ...response.settings?.paymentInstructions,
         },
       });
+      setGcashSettings({ ...defaultGcashSettings, ...paymentResponse.settings });
+      setGcashQrFile(null);
+      setGcashQrPreview(paymentResponse.settings?.gcashQrUrl || "");
     } catch (settingsLoadError) {
       setSettingsError(settingsLoadError.message || "Reservation settings could not be loaded.");
     }
   };
 
-  const updatePaymentInstruction = (field, value) => {
-    setSettings((current) => ({
-      ...current,
-      paymentInstructions: { ...current.paymentInstructions, [field]: value },
-    }));
-  };
-
-  const uploadGcashQr = async (event) => {
+  const selectGcashQr = (event) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!["image/jpeg", "image/png"].includes(file.type) || file.size > 2 * 1024 * 1024) {
-      setSettingsError("Choose a PNG or JPG QR image no larger than 2 MB.");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      setGcashError("Choose a PNG, JPG or WEBP QR image no larger than 2 MB.");
       return;
     }
-    setSettingsError("");
-    setIsUploadingQr(true);
+    setGcashError("");
+    setGcashToast("");
+    if (gcashQrPreview.startsWith("blob:")) URL.revokeObjectURL(gcashQrPreview);
+    setGcashQrFile(file);
+    setGcashQrPreview(URL.createObjectURL(file));
+  };
+
+  const saveGcashSettings = async () => {
+    setGcashError("");
+    setGcashToast("");
+    const accountName = gcashSettings.gcashAccountName.trim();
+    const accountNumber = gcashSettings.gcashAccountNumber.trim();
+    const normalizedNumber = accountNumber.replace(/[ +]/g, "");
+    if (accountName.length < 2 || accountName.length > 80) {
+      setGcashError("Account name must be 2 to 80 characters.");
+      return;
+    }
+    if (!/^\+?[\d ]+$/.test(accountNumber) || !/^\d{10,13}$/.test(normalizedNumber)) {
+      setGcashError("Account number must contain 10 to 13 digits, with optional spaces or a leading +.");
+      return;
+    }
+    if (/<[^>]*>/.test(accountName) || /<[^>]*>/.test(gcashSettings.paymentInstructions)) {
+      setGcashError("Payment text must not contain HTML tags.");
+      return;
+    }
+    if (gcashSettings.paymentInstructions.trim().length > 300) {
+      setGcashError("Payment instructions must be 300 characters or fewer.");
+      return;
+    }
+
+    setIsSavingGcash(true);
     try {
-      const response = await api.uploadGcashQr(file);
+      const response = await api.updatePaymentSettings({
+        ...gcashSettings,
+        gcashAccountName: accountName,
+        gcashAccountNumber: accountNumber,
+        paymentInstructions: gcashSettings.paymentInstructions.trim(),
+      }, gcashQrFile);
+      setGcashSettings({ ...defaultGcashSettings, ...response.settings });
+      setGcashQrFile(null);
+      if (gcashQrPreview.startsWith("blob:")) URL.revokeObjectURL(gcashQrPreview);
+      setGcashQrPreview(response.settings?.gcashQrUrl || "");
       setSettings((current) => ({
         ...current,
         paymentInstructions: {
           ...current.paymentInstructions,
-          qrImageUrl: response.qrImageUrl
-        }
+          methodName: current.paymentInstructions.methodName || "GCash",
+          accountName: response.settings.gcashAccountName,
+          accountNumber: response.settings.gcashAccountNumber,
+          qrImageUrl: response.settings.gcashQrUrl,
+        },
       }));
-    } catch (uploadError) {
-      setSettingsError(uploadError.message || "GCash QR image could not be uploaded.");
+      setGcashToast("GCash payment settings saved.");
+    } catch (saveError) {
+      setGcashError(saveError.message || "GCash payment settings could not be saved.");
     } finally {
-      setIsUploadingQr(false);
+      setIsSavingGcash(false);
     }
   };
 
   const saveSettings = async (event) => {
     event.preventDefault();
     setSettingsError("");
+    setSettingsFieldErrors({});
     setIsSavingSettings(true);
     try {
       const response = await api.updateReservationSettings(settings);
       setSettings({
         ...defaultReservationSettings,
         ...response.settings,
+        serviceDownPaymentPercent: response.settings?.serviceDownPaymentPercent ?? response.settings?.downPaymentPercent ?? defaultReservationSettings.serviceDownPaymentPercent,
         paymentInstructions: {
           ...defaultReservationSettings.paymentInstructions,
           ...response.settings?.paymentInstructions,
@@ -493,9 +568,20 @@ function Transactions() {
       setSettingsToast("Reservation settings saved.");
     } catch (settingsSaveError) {
       setSettingsError(settingsSaveError.message || "Reservation settings could not be saved.");
+      setSettingsFieldErrors(settingsSaveError.fieldErrors || {});
     } finally {
       setIsSavingSettings(false);
     }
+  };
+
+  const updateReservationSetting = (field, value) => {
+    setSettings((current) => ({ ...current, [field]: value }));
+    setSettingsFieldErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
   };
 
   const exportTransactions = async () => {
@@ -504,11 +590,23 @@ function Transactions() {
     try {
       let allRows;
       if (activeTab === "items") {
-        const response = await api.getReservations({
-          status: statusFilter === "All" ? "" : statusFilter,
-          search: search.trim(),
-        });
-        allRows = response.reservations || [];
+        const firstPage = await api.getTransactions(getItemsRequest({
+          page: 1,
+          limit: 100,
+          statusFilter,
+          search
+        }));
+        allRows = [...(firstPage.data || [])];
+        const pages = Number(firstPage.pagination?.totalPages || 1);
+        for (let nextPage = 2; nextPage <= pages; nextPage += 1) {
+          const response = await api.getTransactions(getItemsRequest({
+            page: nextPage,
+            limit: 100,
+            statusFilter,
+            search
+          }));
+          allRows.push(...(response.data || []));
+        }
       } else {
         const type = activeTab === "services" ? "service" : "";
         const firstPage = await api.getTransactions({
@@ -532,19 +630,17 @@ function Transactions() {
         }
       }
       const headers = activeTab === "services"
-        ? ["Record ID", "Date", "Customer", "Service", "Mechanic", "Amount", "Status"]
+        ? ["Record ID", "Date", "Customer", "Service", "Mechanic", "Total", "Down payment paid", "Balance to collect", "Status"]
         : activeTab === "items"
-          ? ["Reservation ID", "Date", "Customer", "Item(s)", "Total", "Paid", "Balance", "Status"]
+          ? ["Record/Reservation ID", "Date", "Customer", "Item(s)", "Total", "Paid", "Balance", "Payment reference", "Status"]
           : ["Record ID", "Date", "Type", "Customer", "Item / Service", "Amount", "Paid", "Balance", "Status", "Mechanic"];
       const exportRows = allRows.map((row) => {
-        const transaction = activeTab === "items"
-          ? formatReservationRecord(row)
-          : formatBusinessRecord(row);
+        const transaction = formatBusinessRecord(row);
         if (activeTab === "services") {
-          return [transaction.id, transaction.date, transaction.customer, transaction.items, transaction.mechanic, transaction.amount, transaction.status];
+          return [transaction.id, transaction.date, transaction.customer, transaction.items, transaction.mechanic, transaction.amount, transaction.paid, transaction.balance, transaction.status];
         }
         if (activeTab === "items") {
-          return [transaction.code || transaction.id, transaction.date, transaction.customer, transaction.items, transaction.amount, transaction.paid, transaction.balance, transaction.status];
+          return [transaction.code || transaction.id, transaction.date, transaction.customer, transaction.items, transaction.amount, transaction.paid, transaction.balance, transaction.paymentReference || "", transaction.status];
         }
         return [transaction.id, transaction.date, transaction.recordLabel, transaction.customer, transaction.items, transaction.amount, transaction.recordType === "product" ? transaction.paid : "", transaction.recordType === "product" ? transaction.balance : "", transaction.status, transaction.mechanic];
       });
@@ -622,30 +718,22 @@ function Transactions() {
                 </button>
               ))}
             </div>
-            <div className="transactions-page-actions">
-              {activeTab === "items" && (
-                <button className="btn-small" type="button" onClick={openSettings}>
-                  Reservation settings
-                </button>
-              )}
-              <button className="btn-small" type="button" disabled={isExporting} onClick={exportTransactions}>
-                {isExporting ? "Exporting..." : "Export"}
-              </button>
-            </div>
+            <TransactionsPageActions
+              activeTab={activeTab}
+              onOpenSettings={openSettings}
+              onExport={exportTransactions}
+              isExporting={isExporting}
+            />
           </div>
           <div className="transactions-header">
             <div className="transactions-info">
-              {activeTab === "items"
-                ? `${recordCount} shown · latest 200 matching reservations`
-                : <>
-                    Total: ₱
-                    {Number(totalAmount).toLocaleString("en-PH", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                    {" · "}
-                    {recordCount} records
-                  </>}
+              Total: ₱
+              {Number(totalAmount).toLocaleString("en-PH", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+              {" · "}
+              {recordCount} records
             </div>
           </div>
           <div className="search-filter">
@@ -665,32 +753,36 @@ function Transactions() {
               }}
             >
               <option value="All">All</option>
-              {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+              {statusOptions.map((status) => typeof status === "string"
+                ? <option key={status} value={status}>{status}</option>
+                : <option key={status.value} value={status.value}>{status.label}</option>)}
             </select>
           </div>
           <div id="transactions-panel" role="tabpanel" aria-labelledby={`transactions-tab-${activeTab}`}>
+            <div className="transactions-table-scroll">
             <table className="transactions-table">
               <thead>
                 <tr>
-                  <th>{activeTab === "items" ? "RESERVATION ID" : "RECORD ID"}</th>
-                  <th>DATE</th>
-                  {activeTab === "all" && <th>TYPE</th>}
-                  <th>CUSTOMER</th>
-                  <th>{activeTab === "items" ? "ITEM(S)" : activeTab === "services" ? "SERVICE" : "ITEM / SERVICE"}</th>
-                  {activeTab === "services" && <th>MECHANIC</th>}
-                  <th>{activeTab === "items" ? "TOTAL" : "AMOUNT"}</th>
-                  {activeTab !== "services" && <><th>PAID</th><th>BALANCE</th></>}
-                  {activeTab === "items" && <th>PAYMENT</th>}
-                  <th>STATUS</th>
-                  {activeTab === "all" && <th>MECHANIC</th>}
-                  <th>ACTION</th>
+                  <th className="transaction-col-id">{activeTab === "items" ? "RECORD / RESERVATION ID" : "RECORD ID"}</th>
+                  <th className="transaction-col-date">DATE</th>
+                  {activeTab === "all" && <th className="transaction-col-type">TYPE</th>}
+                  <th className="transaction-col-customer">CUSTOMER</th>
+                  <th className="transaction-col-items">{activeTab === "items" ? "ITEM(S)" : activeTab === "services" ? "SERVICE" : "ITEM / SERVICE"}</th>
+                  {activeTab === "services" && <th className="transaction-col-mechanic">MECHANIC</th>}
+                  <th className="transaction-col-total">{activeTab === "items" ? "TOTAL" : "AMOUNT"}</th>
+                  <th className="transaction-col-paid">{activeTab === "services" ? "DOWN PAYMENT PAID" : "PAID"}</th>
+                  <th className="transaction-col-balance">{activeTab === "services" ? "BALANCE TO COLLECT" : "BALANCE"}</th>
+                  {activeTab === "items" && <th className="transaction-col-payment">PAYMENT</th>}
+                  <th className="transaction-col-status">STATUS</th>
+                  {activeTab === "all" && <th className="transaction-col-mechanic">MECHANIC</th>}
+                  <th className="transaction-col-action">ACTION</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   Array.from({ length: 5 }, (_, index) => (
                     <tr className="transactions-skeleton-row" key={`skeleton-${index}`} aria-hidden="true">
-                      <td colSpan={activeTab === "all" ? 11 : activeTab === "items" ? 10 : 8}>
+                      <td colSpan={activeTab === "all" ? 11 : activeTab === "items" ? 10 : 10}>
                         <span className="transactions-skeleton" />
                       </td>
                     </tr>
@@ -703,67 +795,78 @@ function Transactions() {
                   </tr>
                 ) : transactions.map((transaction) => (
                   <tr key={transaction.id}>
-                    <td>{transaction.id}</td>
-                    <td>{transaction.date}</td>
+                    <td className="transaction-col-id">{transaction.id}</td>
+                    <td className="transaction-col-date">{transaction.date}</td>
                     {activeTab === "all" && (
-                      <td>
+                      <td className="transaction-col-type">
                         <span className={`transaction-type-badge ${transaction.recordType === "service" ? "is-service" : "is-item"}`}>
                           {transaction.recordLabel}
                         </span>
                       </td>
                     )}
-                    <td className={activeTab === "items" ? "transaction-reservation-cell" : undefined}>
+                    <td className={`transaction-col-customer${activeTab === "items" ? " transaction-reservation-cell" : ""}`}>
                       <strong>{transaction.customer}</strong>
                       {activeTab === "items" && transaction.customerPhone && <small className="transaction-reservation-detail">{transaction.customerPhone}</small>}
                     </td>
-                    <td className={activeTab === "items" ? "transaction-reservation-cell" : undefined}>
+                    <td className={`transaction-col-items${activeTab === "items" ? " transaction-reservation-cell" : ""}`}>
                       {activeTab === "items" && transaction.reservationItems.length
                         ? transaction.reservationItems.map((item) => (
-                            <span className="transaction-reservation-item" key={item.productId || item.name}>
+                            <span className="transaction-reservation-item" key={item.variantId || item.productId || item.name}>
                               {item.imageUrl && <img src={item.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />}
-                              {item.name} × {item.qty} · {formatMoney(item.lineTotal)}
+                              {item.displayName || reservationItemName(item)} × {item.qty} · {formatMoney(item.lineTotal)}
                             </span>
                           ))
                         : transaction.items}
+                      {activeTab === "services" && transaction.isServiceRequest && transaction.pricePerUnit && (
+                        <small className="transaction-reservation-detail">
+                          {serviceUnitSummary(transaction.units || 1, transaction.unitLabel)} · {formatMoney(transaction.amount)} total
+                        </small>
+                      )}
                     </td>
-                    {activeTab === "services" && <td>{transaction.mechanic}</td>}
-                    <td className="price-text">
-                      {formatMoney(transaction.amount)}
+                    {activeTab === "services" && <td className="transaction-col-mechanic">{transaction.mechanic}</td>}
+                    <td className="price-text transaction-col-total">
+                      {activeTab === "services" && transaction.isServiceRequest ? null : formatMoney(transaction.amount)}
+                      {activeTab === "services" && transaction.isServiceRequest && (
+                        <ServicePriceBreakdown
+                          servicePriceTotal={transaction.servicePriceTotal}
+                          mechanicFeeTotal={transaction.mechanicFeeTotal}
+                          estimatedPrice={transaction.estimatedPrice}
+                        />
+                      )}
                     </td>
-                    {activeTab !== "services" && (
-                      <>
-                        <td>{transaction.recordType === "service" ? "—" : formatMoney(transaction.paid)}</td>
-                        <td>{transaction.recordType === "service" ? "—" : formatMoney(transaction.balance)}</td>
-                      </>
-                    )}
+                    <td className="transaction-col-paid">{activeTab === "all" && transaction.recordType === "service" ? "—" : formatMoney(transaction.paid)}</td>
+                    <td className="transaction-col-balance">{activeTab === "all" && transaction.recordType === "service" ? "—" : formatMoney(transaction.balance)}</td>
                     {activeTab === "items" && (
-                      <td className="transaction-reservation-cell">
+                      <td className="transaction-col-payment transaction-reservation-cell">
                         {transaction.paymentMethod && <strong>{transaction.paymentMethod}</strong>}
                         {transaction.paymentReference && <small className="transaction-reservation-detail">Ref {transaction.paymentReference}</small>}
                         {!transaction.paymentMethod && !transaction.paymentReference && "—"}
                       </td>
                     )}
-                    <td>
+                    <td className="transaction-col-status">
                       <span className={`status-badge status-${transaction.status.toLowerCase().replaceAll(" ", "-")}`}>
                         {transaction.status}
                       </span>
                       {activeTab === "services" && transaction.isServiceRequest && (
-                        <small className="transaction-reservation-detail">Payment: {transaction.paymentStatus}</small>
+                        <>
+                          <small className="transaction-reservation-detail">Payment: {transaction.paymentStatus}</small>
+                          {transaction.paymentReference && <small className="transaction-reservation-detail">Ref {transaction.paymentReference}</small>}
+                        </>
                       )}
                       {transaction.status === "Payment Submitted" && <small className="transaction-needs-review">Needs review</small>}
                       {activeTab === "items" && transaction.reservedUntil && <small className="transaction-reservation-detail">Hold until {new Date(transaction.reservedUntil).toLocaleString("en-PH")}</small>}
                       {activeTab === "items" && transaction.rejectionReason && <small className="transaction-reservation-detail">Last rejection: {transaction.rejectionReason}</small>}
                       {transaction.refundDecision && <small className="transaction-reservation-detail">Refund decision: {transaction.refundDecision}</small>}
                     </td>
-                    {activeTab === "all" && <td>{transaction.mechanic}</td>}
-                    <td className="transaction-actions">
+                    {activeTab === "all" && <td className="transaction-col-mechanic">{transaction.mechanic}</td>}
+                    <td className="transaction-actions transaction-col-action">
                       {transaction.isServiceRequest && ["pending", "assigned", "confirmed", "accepted", "in-progress"].includes(transaction.bookingStatus) ? (
                         <>
                           {transaction.paymentStatus === "Payment Submitted" && (
                             <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
                           )}
-                          {transaction.paymentStatus === "Payment Pending" && (
-                            <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : "Mark paid at shop"}</button>
+                          {["Payment Pending", "Confirmed"].includes(transaction.paymentStatus) && transaction.balance > 0 && (
+                            <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : transaction.paid > 0 ? "Mark balance paid at shop" : "Mark paid at shop"}</button>
                           )}
                           <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel-service")}>Cancel booking</button>
                           {["assigned", "confirmed"].includes(transaction.bookingStatus) && (
@@ -797,6 +900,7 @@ function Transactions() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
           <div
             className="pagination-container"
@@ -825,46 +929,119 @@ function Transactions() {
         </div>
       </section>
       {settingsOpen && (
-        <AdminDialog title="Reservation settings" onClose={() => setSettingsOpen(false)}>
+        <AdminDialog title="Payment & reservation settings" onClose={() => setSettingsOpen(false)}>
           <form className="admin-dialog-form reservation-settings-form" onSubmit={saveSettings}>
             {settingsError && <p className="admin-dialog-error" role="alert">{settingsError}</p>}
             <label>
               Down payment percent
-              <input type="number" min="10" max="100" step="1" required value={settings.downPaymentPercent} onChange={(event) => setSettings({ ...settings, downPaymentPercent: Number(event.target.value) })} />
+              <input type="number" min="10" max="100" step="1" required aria-invalid={Boolean(settingsFieldErrors.downPaymentPercent)} value={settings.downPaymentPercent} onChange={(event) => updateReservationSetting("downPaymentPercent", Number(event.target.value))} />
+              {settingsFieldErrors.downPaymentPercent && <small className="inventory-field-error" role="alert">{settingsFieldErrors.downPaymentPercent}</small>}
+            </label>
+            <label>
+              Service down payment (%)
+              <input type="number" min="0" max="100" step="1" required aria-invalid={Boolean(settingsFieldErrors.serviceDownPaymentPercent)} value={settings.serviceDownPaymentPercent} onChange={(event) => updateReservationSetting("serviceDownPaymentPercent", Number(event.target.value))} />
+              {settingsFieldErrors.serviceDownPaymentPercent && <small className="inventory-field-error" role="alert">{settingsFieldErrors.serviceDownPaymentPercent}</small>}
             </label>
             <label>
               Payment deadline (hours)
-              <input type="number" min="1" max="720" step="1" required value={settings.pendingPaymentHours} onChange={(event) => setSettings({ ...settings, pendingPaymentHours: Number(event.target.value) })} />
+              <input type="number" min="1" max="720" step="1" required aria-invalid={Boolean(settingsFieldErrors.pendingPaymentHours)} value={settings.pendingPaymentHours} onChange={(event) => updateReservationSetting("pendingPaymentHours", Number(event.target.value))} />
+              {settingsFieldErrors.pendingPaymentHours && <small className="inventory-field-error" role="alert">{settingsFieldErrors.pendingPaymentHours}</small>}
             </label>
             <label>
               Pickup hold (days)
-              <input type="number" min="1" max="30" step="1" required value={settings.holdDays} onChange={(event) => setSettings({ ...settings, holdDays: Number(event.target.value) })} />
+              <input type="number" min="1" max="30" step="1" required aria-invalid={Boolean(settingsFieldErrors.holdDays)} value={settings.holdDays} onChange={(event) => updateReservationSetting("holdDays", Number(event.target.value))} />
+              {settingsFieldErrors.holdDays && <small className="inventory-field-error" role="alert">{settingsFieldErrors.holdDays}</small>}
             </label>
-            <label>
-              Payment method name
-              <input maxLength="120" value={settings.paymentInstructions.methodName} onChange={(event) => updatePaymentInstruction("methodName", event.target.value)} />
-            </label>
-            <label>
-              Account name
-              <input maxLength="120" value={settings.paymentInstructions.accountName} onChange={(event) => updatePaymentInstruction("accountName", event.target.value)} />
-            </label>
-            <label>
-              Account number
-              <input maxLength="120" value={settings.paymentInstructions.accountNumber} onChange={(event) => updatePaymentInstruction("accountNumber", event.target.value)} />
-            </label>
-            <label>
-              GCash QR code
-              <input type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" disabled={isUploadingQr} onChange={uploadGcashQr} />
-              {isUploadingQr && <small>Uploading QR image...</small>}
-              {settings.paymentInstructions.qrImageUrl && <img className="reservation-gcash-qr-preview" src={settings.paymentInstructions.qrImageUrl} alt="Configured GCash QR code" />}
-            </label>
+            <section className="gcash-admin-settings-card reservation-settings-wide" aria-labelledby="gcash-settings-heading">
+              <div className="reservation-admin-section-heading">
+                <div>
+                  <h2 id="gcash-settings-heading">GCash payment</h2>
+                  <p>These details and the QR code are shown to customers during payment.</p>
+                </div>
+              </div>
+              {gcashError && <p className="admin-dialog-error" role="alert">{gcashError}</p>}
+              {gcashToast && <p className="reservation-admin-toast" role="status">{gcashToast}</p>}
+              <div className="gcash-admin-settings-grid">
+                <div className="gcash-admin-fields">
+                  <label>
+                    Account name
+                    <input
+                      required
+                      minLength="2"
+                      maxLength="80"
+                      value={gcashSettings.gcashAccountName}
+                      onChange={(event) => setGcashSettings({ ...gcashSettings, gcashAccountName: event.target.value })}
+                    />
+                  </label>
+                  <label>
+                    Account number
+                    <input
+                      required
+                      minLength="10"
+                      maxLength="20"
+                      value={gcashSettings.gcashAccountNumber}
+                      onChange={(event) => setGcashSettings({ ...gcashSettings, gcashAccountNumber: event.target.value })}
+                    />
+                  </label>
+                  <label className="gcash-admin-instructions">
+                    Optional payment instructions
+                    <textarea
+                      maxLength="300"
+                      value={gcashSettings.paymentInstructions}
+                      onChange={(event) => setGcashSettings({ ...gcashSettings, paymentInstructions: event.target.value })}
+                    />
+                  </label>
+                  <div className="gcash-admin-image-picker">
+                    <input
+                      className="gcash-admin-file-input"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                      onChange={selectGcashQr}
+                      aria-label="Choose GCash QR image"
+                    />
+                    <button className="btn-small" type="button" onClick={(event) => event.currentTarget.previousElementSibling.click()}>
+                      Choose image
+                    </button>
+                    <small>PNG, JPG or WEBP; up to 2 MB. Select a new image to replace the current QR.</small>
+                  </div>
+                  <button className="btn-primary" type="button" onClick={saveGcashSettings} disabled={isSavingGcash}>
+                    {isSavingGcash ? "Saving GCash settings..." : "Save GCash settings"}
+                  </button>
+                </div>
+                <div className="gcash-admin-preview" aria-live="polite">
+                  <strong>This is what customers will see</strong>
+                  {gcashQrPreview
+                    ? <img src={gcashQrPreview} alt="GCash payment QR preview" />
+                    : <p>No QR uploaded yet</p>}
+                  <span>{gcashSettings.gcashAccountName || "Account name"}</span>
+                  <span>{gcashSettings.gcashAccountNumber || "Account number"}</span>
+                  {gcashSettings.paymentInstructions && <small>{gcashSettings.paymentInstructions}</small>}
+                </div>
+              </div>
+            </section>
             <label>
               Pickup address
-              <textarea maxLength="500" value={settings.pickupAddress} onChange={(event) => setSettings({ ...settings, pickupAddress: event.target.value })} />
+              <textarea maxLength="150" aria-invalid={Boolean(settingsFieldErrors.pickupAddress)} value={settings.pickupAddress} onChange={(event) => updateReservationSetting("pickupAddress", event.target.value)} />
+              {settingsFieldErrors.pickupAddress && <small className="inventory-field-error" role="alert">{settingsFieldErrors.pickupAddress}</small>}
             </label>
             <label>
               Pickup hours
-              <input maxLength="200" value={settings.pickupHours} onChange={(event) => setSettings({ ...settings, pickupHours: event.target.value })} />
+              <input maxLength="80" aria-invalid={Boolean(settingsFieldErrors.pickupHours)} value={settings.pickupHours} onChange={(event) => updateReservationSetting("pickupHours", event.target.value)} />
+              {settingsFieldErrors.pickupHours && <small className="inventory-field-error" role="alert">{settingsFieldErrors.pickupHours}</small>}
+            </label>
+            <label>
+              Shop contact number
+              <input
+                type="text"
+                inputMode="tel"
+                autoComplete="tel"
+                maxLength="40"
+                pattern="[0-9+() -]*"
+                aria-invalid={Boolean(settingsFieldErrors.contactNumber)}
+                value={settings.contactNumber}
+                onChange={(event) => updateReservationSetting("contactNumber", event.target.value)}
+              />
+              {settingsFieldErrors.contactNumber && <small className="inventory-field-error" role="alert">{settingsFieldErrors.contactNumber}</small>}
             </label>
             <div className="admin-dialog-actions">
               <button className="btn-small" type="button" onClick={() => setSettingsOpen(false)}>Cancel</button>
@@ -893,7 +1070,7 @@ function Transactions() {
                 <p><strong>Date and time:</strong> {reservationAction.transaction.isServiceRequest
                   ? `${reservationAction.transaction.date}${reservationAction.transaction.startTime ? ` · ${reservationAction.transaction.startTime} - ${reservationAction.transaction.endTime}` : ""}`
                   : reservationAction.transaction.date}</p>
-                <p><strong>Amount due:</strong> {formatMoney(reservationAction.transaction.downPaymentAmount || reservationAction.transaction.amount)}</p>
+                <p><strong>{reservationAction.transaction.isServiceRequest ? "Down payment expected:" : "Amount due:"}</strong> {formatMoney(reservationAction.transaction.isServiceRequest ? reservationAction.transaction.downPaymentAmount : reservationAction.transaction.downPaymentAmount || reservationAction.transaction.amount)}</p>
                 <p><strong>Reference number:</strong> {reservationAction.transaction.paymentReference || "Not provided"}</p>
                 {reservationAction.transaction.isServiceRequest && (
                   <>
@@ -905,7 +1082,7 @@ function Transactions() {
                 )}
                 {(reservationAction.transaction.paymentSubmissions || []).map((submission, index) => submission.receiptUrl && (
                   <div key={`${submission.paymentProofPublicId || submission.receiptUrl || "receipt"}-${index}`}>
-                    <strong>Receipt {index + 1} · {submission.status}{submission.rejectionReason ? ` · ${submission.rejectionReason}` : ""}:</strong>
+                    <strong>Receipt {index + 1} · {submission.status}{submission.amount !== undefined ? ` · ${formatMoney(submission.amount)}` : ""}{submission.rejectionReason ? ` · ${submission.rejectionReason}` : ""}:</strong>
                     <a href={submission.receiptUrl} target="_blank" rel="noreferrer">
                       <img className="reservation-payment-proof" src={submission.receiptUrl} alt={`Customer payment receipt ${index + 1}`} />
                     </a>
@@ -990,7 +1167,7 @@ function Transactions() {
                     <textarea minLength="3" maxLength="300" required value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
                   </label>
                 )}
-                {["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && (
+                {reservationAction.transaction.paid > 0 && ["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && (
                   <fieldset className="reservation-refund-choice">
                     <legend>Service payment decision</legend>
                     <label><input type="radio" name="service-refund-decision" value="refunded" checked={refundDecision === "refunded"} onChange={(event) => setRefundDecision(event.target.value)} /> Refund</label>
@@ -1003,7 +1180,7 @@ function Transactions() {
                     className="btn-small btn-delete"
                     type="submit"
                     disabled={isPerformingReservationAction
-                      || (["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && !refundDecision)
+                      || (reservationAction.transaction.paid > 0 && ["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && !refundDecision)
                       || (reservationAction.transaction.bookingStatus === "in-progress" && reservationAction.action === "cancel-service" && actionReason.trim().length < 3)}
                   >
                     {isPerformingReservationAction ? "Saving..." : "Confirm"}
@@ -1068,6 +1245,15 @@ function Transactions() {
                   0,
               ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
             </p>
+            {selectedTransaction.isServiceRequest && (
+              <>
+                <p><strong>Down payment ({selectedTransaction.downPaymentPercent}%):</strong> {formatMoney(selectedTransaction.downPaymentAmount)}</p>
+                <p><strong>Down payment paid:</strong> {formatMoney(selectedTransaction.paid)}</p>
+                <p><strong>Balance to collect:</strong> {formatMoney(selectedTransaction.balance)}</p>
+                {selectedTransaction.balance > 0 && <p><strong>At service completion:</strong> Collect balance of {formatMoney(selectedTransaction.balance)} at the shop.</p>}
+                <p><strong>Payment reference:</strong> {selectedTransaction.paymentReference || "Not provided"}</p>
+              </>
+            )}
             <p>
               <strong>Items:</strong>{" "}
               {Array.isArray(selectedTransaction.items)

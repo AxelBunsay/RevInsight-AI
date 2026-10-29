@@ -48,10 +48,21 @@ const customerReservationPayload = (reservation) => {
 async function releaseReservedStock(reservation, session) {
   for (const item of reservation.items) {
     const product = await Product.findById(item.productId).session(session);
-    if (!product || Number(product.reservedQty || 0) < item.qty) {
+    if (!product) {
       throw Object.assign(new Error(`Unable to release reserved stock for ${item.name}. Contact support.`), { status: 409 });
     }
-    product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+    if (item.variantId) {
+      const variant = product.variants?.id(item.variantId);
+      if (!variant || Number(variant.reservedQty || 0) < item.qty) {
+        throw Object.assign(new Error(`Unable to release reserved stock for ${item.name}. Contact support.`), { status: 409 });
+      }
+      variant.reservedQty = Number(variant.reservedQty || 0) - item.qty;
+    } else {
+      if (product.variants?.length || Number(product.reservedQty || 0) < item.qty) {
+        throw Object.assign(new Error(`Unable to release reserved stock for ${item.name}. Contact support.`), { status: 409 });
+      }
+      product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+    }
     await product.save({ session });
   }
 }
@@ -146,10 +157,14 @@ const createReservation = async (req, res) => {
       if (!mongoose.Types.ObjectId.isValid(item.productId)) {
         return res.status(400).json({ success: false, message: 'Each item must have a valid product ID.' });
       }
-      if (itemIds.has(String(item.productId))) {
-        return res.status(400).json({ success: false, message: 'Remove duplicate products before creating a reservation.' });
+      if (item.variantId !== undefined && item.variantId !== null && !mongoose.Types.ObjectId.isValid(item.variantId)) {
+        return res.status(400).json({ success: false, message: 'Each variant ID must be valid.' });
       }
-      itemIds.add(String(item.productId));
+      const itemKey = `${item.productId}:${item.variantId || ''}`;
+      if (itemIds.has(itemKey)) {
+        return res.status(400).json({ success: false, message: 'Remove duplicate products or variants before creating a reservation.' });
+      }
+      itemIds.add(itemKey);
       if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > 99999) {
         return res.status(400).json({ success: false, message: 'Item quantities must be whole numbers from 1 to 99,999.' });
       }
@@ -165,15 +180,31 @@ const createReservation = async (req, res) => {
     for (const requested of requestedItems) {
       const product = await Product.findOne({ _id: requested.productId, isActive: { $ne: false } });
       if (!product) return res.status(404).json({ success: false, message: 'A selected product is no longer available.' });
-      const available = Math.max(0, product.quantity - Number(product.reservedQty || 0));
-      if (available < requested.qty) {
-        return res.status(409).json({ success: false, message: `Only ${available} of ${product.name} are currently available.` });
+      let variant;
+      if (product.variants?.length) {
+        if (!requested.variantId) {
+          return res.status(400).json({ success: false, message: `Choose a variant for ${product.name}.` });
+        }
+        variant = product.variants?.id(requested.variantId);
+        if (!variant) return res.status(400).json({ success: false, message: `The selected variant for ${product.name} is no longer available.` });
+      } else if (requested.variantId) {
+        return res.status(400).json({ success: false, message: `${product.name} does not have selectable variants.` });
       }
-      const unitPrice = money(product.price);
+      const available = variant
+        ? Math.max(0, Number(variant.stock || 0) - Number(variant.reservedQty || 0))
+        : Math.max(0, product.quantity - Number(product.reservedQty || 0));
+      if (available < requested.qty) {
+        const itemName = variant ? `${product.name} - ${variant.label}` : product.name;
+        return res.status(409).json({ success: false, message: `Only ${available} of ${itemName} are currently available.` });
+      }
+      const unitPrice = money(variant ? variant.price : product.price);
+      const variantLabel = variant?.label || '';
       items.push({
         productId: product._id,
-        name: product.name,
-        imageUrl: product.imageUrl || product.image || '',
+        ...(variant ? { variantId: variant._id, variantLabel } : {}),
+        name: variantLabel ? `${product.name} - ${variantLabel}` : product.name,
+        category: product.category,
+        imageUrl: variant?.imageUrl || product.imageUrl || product.image || '',
         unitPrice,
         qty: requested.qty,
         lineTotal: money(unitPrice * requested.qty)
@@ -495,10 +526,21 @@ const confirmReservation = async (req, res) => {
       }
       for (const item of reservation.items) {
         const product = await Product.findOne({ _id: item.productId, isActive: { $ne: false } }).session(session);
-        if (!product || product.quantity - Number(product.reservedQty || 0) < item.qty) {
+        if (!product) {
           throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
         }
-        product.reservedQty = Number(product.reservedQty || 0) + item.qty;
+        if (item.variantId) {
+          const variant = product.variants?.id(item.variantId);
+          if (!variant || Number(variant.stock || 0) - Number(variant.reservedQty || 0) < item.qty) {
+            throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
+          }
+          variant.reservedQty = Number(variant.reservedQty || 0) + item.qty;
+        } else {
+          if (product.variants?.length || product.quantity - Number(product.reservedQty || 0) < item.qty) {
+            throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
+          }
+          product.reservedQty = Number(product.reservedQty || 0) + item.qty;
+        }
         await product.save({ session });
       }
       const settings = await getSettings();
@@ -592,11 +634,23 @@ const completeReservation = async (req, res) => {
       if (!canTransitionReservationStatus(reservation.status, 'Completed')) throw Object.assign(new Error('Only reserved items can be completed.'), { status: 409 });
       for (const item of reservation.items) {
         const product = await Product.findById(item.productId).session(session);
-        if (!product || Number(product.reservedQty || 0) < item.qty || product.quantity < item.qty) {
+        if (!product) {
           throw Object.assign(new Error(`Stock for ${item.name} is inconsistent. Resolve inventory before completing pickup.`), { status: 409 });
         }
-        product.quantity -= item.qty;
-        product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+        if (item.variantId) {
+          const variant = product.variants?.id(item.variantId);
+          if (!variant || Number(variant.reservedQty || 0) < item.qty || Number(variant.stock || 0) < item.qty) {
+            throw Object.assign(new Error(`Stock for ${item.name} is inconsistent. Resolve inventory before completing pickup.`), { status: 409 });
+          }
+          variant.stock -= item.qty;
+          variant.reservedQty = Number(variant.reservedQty || 0) - item.qty;
+        } else {
+          if (product.variants?.length || Number(product.reservedQty || 0) < item.qty || product.quantity < item.qty) {
+            throw Object.assign(new Error(`Stock for ${item.name} is inconsistent. Resolve inventory before completing pickup.`), { status: 409 });
+          }
+          product.quantity -= item.qty;
+          product.reservedQty = Number(product.reservedQty || 0) - item.qty;
+        }
         await product.save({ session });
       }
       reservation.status = 'Completed';
@@ -604,22 +658,33 @@ const completeReservation = async (req, res) => {
       reservation.balanceDue = 0;
       reservation.completedAt = new Date();
       result = await reservation.save({ session });
-      await BusinessRecord.findOneAndUpdate(
-        { recordType: 'product', sourceId: reservation._id },
-        {
-          recordType: 'product',
-          sourceId: reservation._id,
-          customer: reservation.customerName,
-          customerPhone: reservation.customerPhone,
-          itemName: reservation.items.map((item) => item.name).join(', '),
-          category: 'Product Sales',
-          amount: reservation.total,
-          status: 'completed',
-          completedAt: reservation.completedAt,
-          notes: `${reservation.items.length} reserved product item${reservation.items.length === 1 ? '' : 's'} collected`
-        },
-        { upsert: true, new: true, setDefaultsOnInsert: true, session }
-      );
+      const categories = new Map();
+      for (const item of reservation.items) {
+        const category = String(item.category || '').trim() || 'Product Sales';
+        const current = categories.get(category) || { amount: 0, names: [] };
+        current.amount = money(current.amount + Number(item.lineTotal || 0));
+        current.names.push(item.name);
+        categories.set(category, current);
+      }
+      for (const [category, values] of categories) {
+        await BusinessRecord.findOneAndUpdate(
+          { recordType: 'product', sourceId: reservation._id, categoryKey: category },
+          {
+            recordType: 'product',
+            sourceId: reservation._id,
+            categoryKey: category,
+            customer: reservation.customerName,
+            customerPhone: reservation.customerPhone,
+            itemName: values.names.join(', '),
+            category,
+            amount: values.amount,
+            status: 'completed',
+            completedAt: reservation.completedAt,
+            notes: `${values.names.length} reserved product item${values.names.length === 1 ? '' : 's'} collected`
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true, session }
+        );
+      }
     });
     res.json({ success: true, reservation: result });
   } catch (error) {
@@ -695,6 +760,7 @@ const getPublicSettings = async (req, res) => {
       success: true,
       settings: {
         downPaymentPercent: settings.downPaymentPercent,
+        serviceDownPaymentPercent: settings.serviceDownPaymentPercent ?? settings.downPaymentPercent,
         pendingPaymentHours: settings.pendingPaymentHours,
         holdDays: settings.holdDays,
         paymentInstructions: {
@@ -704,7 +770,8 @@ const getPublicSettings = async (req, res) => {
           qrImageUrl: settings.paymentInstructions.qrImageUrl
         },
         pickupAddress: settings.pickupAddress,
-        pickupHours: settings.pickupHours
+        pickupHours: settings.pickupHours,
+        contactNumber: settings.contactNumber
       }
     });
   } catch (error) {
@@ -749,6 +816,7 @@ const getShopSettings = async (req, res) => {
       success: true,
       settings: {
         downPaymentPercent: settings.downPaymentPercent,
+        serviceDownPaymentPercent: settings.serviceDownPaymentPercent ?? settings.downPaymentPercent,
         pickupAddress: settings.pickupAddress,
         pickupHours: settings.pickupHours,
         contactNumber: settings.contactNumber
@@ -824,22 +892,45 @@ const updateBookingSchedule = async (req, res) => {
 const updateSettings = async (req, res) => {
   try {
     const { downPaymentPercent, pendingPaymentHours, holdDays, paymentInstructions, pickupAddress, pickupHours, contactNumber } = req.body || {};
-    const errors = [];
-    if (!Number.isInteger(downPaymentPercent) || downPaymentPercent < 10 || downPaymentPercent > 100) errors.push('Down payment percent must be a whole number from 10 to 100.');
-    if (!Number.isInteger(pendingPaymentHours) || pendingPaymentHours < 1 || pendingPaymentHours > 720) errors.push('Pending payment hours must be a whole number from 1 to 720.');
-    if (!Number.isInteger(holdDays) || holdDays < 1 || holdDays > 30) errors.push('Hold days must be a whole number from 1 to 30.');
-    if (!paymentInstructions || typeof paymentInstructions !== 'object') errors.push('Payment instructions are required.');
+    const currentSettings = await getSettings();
+    const serviceDownPaymentPercent = Object.prototype.hasOwnProperty.call(req.body || {}, 'serviceDownPaymentPercent')
+      ? req.body.serviceDownPaymentPercent
+      : currentSettings.serviceDownPaymentPercent ?? currentSettings.downPaymentPercent;
+    const fieldErrors = {};
+    if (!Number.isInteger(downPaymentPercent) || downPaymentPercent < 10 || downPaymentPercent > 100) fieldErrors.downPaymentPercent = 'Down payment percent must be a whole number from 10 to 100.';
+    if (!Number.isInteger(serviceDownPaymentPercent) || serviceDownPaymentPercent < 0 || serviceDownPaymentPercent > 100) fieldErrors.serviceDownPaymentPercent = 'Service down payment percent must be a whole number from 0 to 100.';
+    if (!Number.isInteger(pendingPaymentHours) || pendingPaymentHours < 1 || pendingPaymentHours > 720) fieldErrors.pendingPaymentHours = 'Payment deadline must be a whole number from 1 to 720 hours.';
+    if (!Number.isInteger(holdDays) || holdDays < 1 || holdDays > 30) fieldErrors.holdDays = 'Pickup hold days must be a whole number from 1 to 30.';
+    if (!paymentInstructions || typeof paymentInstructions !== 'object') fieldErrors.paymentInstructions = 'GCash payment details are required.';
     else {
-      for (const field of ['methodName', 'accountName', 'accountNumber']) {
-        if (typeof paymentInstructions[field] !== 'string' || paymentInstructions[field].length > 120) errors.push(`Payment ${field} must be 120 characters or fewer.`);
+      for (const [field, label] of [['methodName', 'Payment method name'], ['accountName', 'GCash account name'], ['accountNumber', 'GCash account number']]) {
+        if (typeof paymentInstructions[field] !== 'string' || paymentInstructions[field].length > 120) {
+          fieldErrors[`paymentInstructions.${field}`] = `${label} must be 120 characters or fewer.`;
+        }
       }
     }
-    if (typeof pickupAddress !== 'string' || pickupAddress.length > 500) errors.push('Pickup address must be 500 characters or fewer.');
-    if (typeof pickupHours !== 'string' || pickupHours.length > 200) errors.push('Pickup hours must be 200 characters or fewer.');
-    if (typeof contactNumber !== 'string' || contactNumber.length > 40) errors.push('Contact number must be 40 characters or fewer.');
-    if (errors.length) return res.status(400).json({ success: false, message: errors.join(' ') });
+    const savedPickupAddress = typeof pickupAddress === 'string' ? pickupAddress.trim() : '';
+    const savedPickupHours = typeof pickupHours === 'string' ? pickupHours.trim() : '';
+    const savedContactNumber = typeof contactNumber === 'string' ? contactNumber.trim() : '';
+    if (typeof pickupAddress !== 'string' || savedPickupAddress.length > 150) {
+      fieldErrors.pickupAddress = 'Pickup address must be 150 characters or fewer.';
+    }
+    if (typeof pickupHours !== 'string' || savedPickupHours.length > 80) {
+      fieldErrors.pickupHours = 'Pickup hours must be 80 characters or fewer.';
+    }
+    if (typeof contactNumber !== 'string' || savedContactNumber.length > 40 || !/^[\d+() -]*$/.test(savedContactNumber)) {
+      fieldErrors.contactNumber = savedContactNumber.length > 40
+        ? 'Shop contact number must be 40 characters or fewer.'
+        : 'Shop contact number may contain only digits, spaces, +, -, and parentheses.';
+    }
+    if (Object.keys(fieldErrors).length) {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(fieldErrors).join(' '),
+        fieldErrors
+      });
+    }
 
-    const currentSettings = await getSettings();
     const savedPaymentInstructions = {
       ...paymentInstructions,
       qrImageUrl: currentSettings.paymentInstructions.qrImageUrl || '',
@@ -847,7 +938,16 @@ const updateSettings = async (req, res) => {
     };
     const settings = await ReservationSettings.findOneAndUpdate(
       { key: 'reservation' },
-      { $set: { downPaymentPercent, pendingPaymentHours, holdDays, paymentInstructions: savedPaymentInstructions, pickupAddress, pickupHours, contactNumber } },
+      { $set: {
+        downPaymentPercent,
+        serviceDownPaymentPercent,
+        pendingPaymentHours,
+        holdDays,
+        paymentInstructions: savedPaymentInstructions,
+        pickupAddress: savedPickupAddress,
+        pickupHours: savedPickupHours,
+        contactNumber: savedContactNumber
+      } },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
     );
     res.json({ success: true, settings });

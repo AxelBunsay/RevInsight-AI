@@ -43,6 +43,30 @@ const serviceSchema = new mongoose.Schema({
       message: 'Mechanic fee cannot be greater than the service price.'
     }
   },
+  pricePerUnit: {
+    type: Boolean,
+    default: false
+  },
+  unitLabel: {
+    type: String,
+    trim: true,
+    maxlength: 40,
+    default: ''
+  },
+  maxUnits: {
+    type: Number,
+    min: 1,
+    max: 10,
+    default: 2,
+    validate: {
+      validator: Number.isInteger,
+      message: 'Maximum units must be a whole number from 1 to 10.'
+    }
+  },
+  scaleDuration: {
+    type: Boolean,
+    default: true
+  },
   isActive: {
     type: Boolean,
     default: true

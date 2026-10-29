@@ -58,7 +58,8 @@ describe('shared revenue helpers', () => {
     });
     expect(groupRevenueByCategory(entries)).toEqual([
       { _id: 'Services', revenue: 200, percentage: 0 },
-      { _id: 'Parts', revenue: 160, percentage: 0 },
+      { _id: 'Parts', revenue: 100, percentage: 0 },
+      { _id: 'Historical category', revenue: 60, percentage: 0 },
       { _id: 'Fluids', revenue: 20, percentage: 0 }
     ]);
     expect(groupRevenueContributors(entries)).toContainEqual({
@@ -67,7 +68,31 @@ describe('shared revenue helpers', () => {
       contributorType: 'Labor service'
     });
     expect(entries.find((entry) => entry.source === 'service').revenue).toBe(200);
-    expect(entries.find((entry) => entry.source === 'reservation').category).toBe('Parts');
+    expect(entries.find((entry) => entry.source === 'reservation').category).toBe('Historical category');
+  });
+
+  it('groups completed reservation revenue by each item category without changing its total', () => {
+    const entries = normalizeRevenueSources({
+      reservations: [{
+        _id: 'reservation-categories',
+        completedAt: new Date('2026-03-01T04:00:00.000Z'),
+        total: 150,
+        items: [
+          { productId: 'brake-pad', name: 'Brake pad', category: 'Brakes', lineTotal: 100, qty: 1 },
+          { productId: 'spark-plug', name: 'Spark plug', category: 'Electrical', lineTotal: 50, qty: 1 }
+        ]
+      }],
+      productCategories: {
+        'brake-pad': 'Changed category',
+        'spark-plug': 'Changed category'
+      }
+    });
+
+    expect(groupRevenueByCategory(entries)).toEqual([
+      { _id: 'Brakes', revenue: 100, percentage: 0 },
+      { _id: 'Electrical', revenue: 50, percentage: 0 }
+    ]);
+    expect(entries.reduce((sum, entry) => sum + entry.revenue, 0)).toBe(150);
   });
 
   it('groups dates and quarters in Asia/Manila for sales around local midnight', () => {

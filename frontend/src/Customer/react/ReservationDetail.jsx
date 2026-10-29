@@ -4,12 +4,19 @@ import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
+import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
+import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
+import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
+import { getServiceBookingStatus, getServicePaymentSummary } from '../../utils/servicePayment';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const statusClass = (status) => `status-${String(status || '').toLowerCase().replaceAll(' ', '-')}`;
 const formatDate = (value) => value ? new Date(value).toLocaleString('en-PH') : 'Not yet';
+const reservationItemName = (item) => item.variantLabel && !String(item.name || '').includes(item.variantLabel)
+  ? `${item.name || item.productName || 'Product'} - ${item.variantLabel}`
+  : item.name || item.productName || 'Product';
 
 function countdownUntil(value) {
   const remaining = Math.max(0, new Date(value).getTime() - Date.now());
@@ -126,25 +133,20 @@ export default function ReservationDetail() {
   </CustomerPage>;
 
   if (serviceBooking) {
-    const paymentPending = (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending';
-    const serviceStatus = serviceBooking.paymentStatus === 'Payment Submitted'
-      ? 'Payment Submitted'
-      : serviceBooking.paymentStatus === 'Payment Pending' && serviceBooking.paymentRejectionReason
-        ? 'Payment Pending'
-      : serviceBooking.paymentStatus === 'Confirmed' && serviceBooking.status === 'pending'
-        ? 'Confirmed'
-        : serviceBooking.status;
+    const paymentPending = (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending'
+      && !['cancelled', 'declined', 'completed'].includes(serviceBooking.status);
+    const serviceStatus = getServiceBookingStatus(serviceBooking);
     return <CustomerPage title="Booking details" description="Review your service booking and payment status.">
       <div className="customer-flow-page">
         <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/profile">Account</Link><span>/</span><span>{serviceBooking.code || serviceBooking._id}</span></nav>
         {error && <p className="customer-error" role="alert">{error}</p>}
         {message && <p className="customer-success" role="status">{message}</p>}
         <section className="customer-reservation-detail-card">
-          <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{serviceBooking.serviceType}</h1><p>{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
-          <div className="customer-reservation-detail-meta"><div><span>Amount due</span><strong>{money(serviceBooking.estimatedPrice)}</strong></div><div><span>Payment</span><strong>{serviceBooking.paymentStatus || 'Payment Pending'}</strong></div><div><span>Reference</span><strong>{serviceBooking.code || serviceBooking._id}</strong></div></div>
+          <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{formatServiceName(serviceBooking.serviceType, serviceBooking.units, serviceBooking.unitLabel)}</h1><p>{serviceBooking.pricePerUnit ? `${serviceUnitSummary(serviceBooking.units || 1, serviceBooking.unitLabel)} · ` : ''}{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
+          <div className="customer-reservation-detail-meta"><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /><div><span>Payment</span><strong>{serviceStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
           {serviceBooking.paymentRejectionReason && <p className="customer-error" role="alert">Payment needs attention: {serviceBooking.paymentRejectionReason}</p>}
           {paymentPending && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
-          {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={serviceBooking.estimatedPrice} settings={settings} onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
+          {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={getServicePaymentSummary(serviceBooking).downPaymentAmount} settings={settings} showServiceBreakdown onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
           <Link className="customer-secondary-button" to="/customer/profile">Back to Account</Link>
         </section>
       </div>
@@ -177,8 +179,8 @@ export default function ReservationDetail() {
       {error && <p className="customer-error" role="alert">{error}</p>}
       {message && <p className="customer-success" role="status">{message}</p>}
       <section className="customer-reservation-detail-card">
-        <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">ITEM RESERVATION · {reservation.code}</p><h1>{reservation.items.map((item) => item.name).join(', ')}</h1><p>Created {formatDate(reservation.createdAt)}</p></div><span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span></div>
-        <div className="customer-review-lines">{reservation.items.map((item) => <div key={item.productId}><span className="customer-reservation-item-row"><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><span><strong>{item.name}</strong><small>{money(item.unitPrice)} each × {item.qty}</small></span></span><strong>{money(item.lineTotal)}</strong></div>)}</div>
+        <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">ITEM RESERVATION · {reservation.code}</p><h1>{reservation.items.map(reservationItemName).join(', ')}</h1><p>Created {formatDate(reservation.createdAt)}</p></div><span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span></div>
+        <div className="customer-review-lines">{reservation.items.map((item) => <div key={item.variantId || item.productId}><span className="customer-reservation-item-row"><ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" fallback={<span className="customer-inline-product-placeholder" aria-hidden="true">▣</span>} /><span><strong>{reservationItemName(item)}</strong><small>{money(item.unitPrice)} each × {item.qty}</small></span></span><strong>{money(item.lineTotal)}</strong></div>)}</div>
         <div className="customer-reservation-detail-meta customer-reservation-money">
           <div><span>Total</span><strong>{money(reservation.total)}</strong></div>
           <div><span>Down payment</span><strong>{money(reservation.downPaymentAmount)}</strong></div>

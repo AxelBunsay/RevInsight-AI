@@ -37,6 +37,10 @@ const publicServicePayload = (service) => {
     mechanicFee: value.mechanicFee ?? 0,
     category: value.category || 'General',
     durationMinutes: Number(value.durationMinutes) || 60,
+    pricePerUnit: value.pricePerUnit === true,
+    unitLabel: value.unitLabel || '',
+    maxUnits: Number(value.maxUnits) || 2,
+    scaleDuration: value.scaleDuration !== false,
     code: `SVC-${id.slice(-4).toUpperCase()}`
   };
 };
@@ -107,7 +111,11 @@ const createService = async (req, res) => {
       price: Number(req.body.price),
       mechanicFee: Number(req.body.mechanicFee),
       category: (req.body.category || 'General').trim(),
-      durationMinutes: Number(req.body.durationMinutes ?? 60)
+      durationMinutes: Number(req.body.durationMinutes ?? 60),
+      pricePerUnit: req.body.pricePerUnit ?? false,
+      unitLabel: (req.body.unitLabel || '').trim(),
+      maxUnits: Number(req.body.maxUnits ?? 2),
+      scaleDuration: req.body.scaleDuration ?? true
     });
     res.status(201).json({ message: 'Service created successfully', service });
   } catch (error) {
@@ -137,6 +145,10 @@ const updateService = async (req, res) => {
     service.mechanicFee = Number(req.body.mechanicFee ?? service.mechanicFee);
     service.category = (req.body.category ?? service.category ?? 'General').trim();
     service.durationMinutes = Number(req.body.durationMinutes ?? service.durationMinutes ?? 60);
+    service.pricePerUnit = req.body.pricePerUnit ?? service.pricePerUnit ?? false;
+    service.unitLabel = (req.body.unitLabel ?? service.unitLabel ?? '').trim();
+    service.maxUnits = Number(req.body.maxUnits ?? service.maxUnits ?? 2);
+    service.scaleDuration = req.body.scaleDuration ?? service.scaleDuration ?? true;
     await service.save();
     res.status(200).json({ message: 'Service updated successfully', service });
   } catch (error) {

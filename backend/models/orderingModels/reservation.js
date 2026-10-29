@@ -6,7 +6,10 @@ const reservationItemSchema = new mongoose.Schema({
     ref: 'Product',
     required: true
   },
+  variantId: { type: mongoose.Schema.Types.ObjectId, default: null },
+  variantLabel: { type: String, default: '' },
   name: { type: String, required: true },
+  category: { type: String, default: '' },
   imageUrl: { type: String, default: '' },
   unitPrice: { type: Number, required: true, min: 0 },
   qty: { type: Number, required: true, min: 1 },

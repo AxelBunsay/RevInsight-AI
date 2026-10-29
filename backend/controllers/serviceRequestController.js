@@ -14,10 +14,19 @@ const {
   removeReceipt
 } = require("../utils/paymentReceipt");
 const { createPaymentDecisionNotification } = require("../utils/paymentNotifications");
+const { getServicePaymentSummary } = require("../utils/servicePayment");
 const EXPIRY_BATCH_SIZE = 200;
 const MAX_EXPIRY_ROUNDS = 20;
 const PAID_SERVICE_STATUSES = ["Confirmed", "Paid at shop"];
 const UNPAID_BOOKING_EXPIRY_STATUSES = ["pending", "assigned", "confirmed", "accepted"];
+const hasServicePaymentToResolve = (request) => {
+  const hasSnapshot = request.downPaymentPercent !== undefined
+    && request.downPaymentAmount !== undefined
+    && request.balanceDue !== undefined;
+  return hasSnapshot
+    ? getServicePaymentSummary(request).amountPaid > 0
+    : PAID_SERVICE_STATUSES.includes(request.paymentStatus);
+};
 
 // Mechanic accepts a pending job, sets start time, and confirms
 const mechanicAcceptJob = async (req, res) => {
@@ -95,14 +104,16 @@ const syncCompletedServiceBusinessRecord = async (serviceRequest, session = null
     sourceId: serviceRequest._id,
     customer: customerName,
     customerPhone: user?.phoneNumber || "",
-    itemName: serviceRequest.serviceType,
+    itemName: serviceRequest.pricePerUnit && Number(serviceRequest.units) > 1
+      ? `${serviceRequest.serviceType} x${serviceRequest.units} ${serviceRequest.unitLabel || "unit"}${String(serviceRequest.unitLabel || "").endsWith("s") ? "" : "s"}`
+      : serviceRequest.serviceType,
     category: "Service Booking",
     mechanicId: serviceRequest.mechanicId || serviceRequest.mechanic || null,
     mechanicName: mechanic
       ? `${mechanic.firstName || ""} ${mechanic.lastName || ""}`.trim()
       : "",
     amount: Number(serviceRequest.estimatedPrice) || 0,
-    laborFee: Number(serviceRequest.laborFee) || 0,
+    laborFee: Number(serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
     status: serviceRequest.status,
     completedAt:
       serviceRequest.completedAt ||
@@ -163,7 +174,8 @@ const transitionServiceRequestStatus = async ({
       if (!serviceStatusTransitions[request.status]?.includes(status)) {
         throw Object.assign(new Error(`Cannot change status from ${request.status} to ${status}`), { status: 400 });
       }
-      if (status === "declined" && PAID_SERVICE_STATUSES.includes(request.paymentStatus)) {
+      if (status === "declined" && PAID_SERVICE_STATUSES.includes(request.paymentStatus)
+        && hasServicePaymentToResolve(request)) {
         throw Object.assign(new Error("An admin must record the refund decision before this paid booking can be declined."), { status: 409 });
       }
       if (startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) {
@@ -330,6 +342,9 @@ const submitServicePayment = async (req, res) => {
     if (["cancelled", "declined", "completed"].includes(request.status)) {
       return res.status(409).json({ message: "Payment cannot be submitted for a closed booking." });
     }
+    if (getServicePaymentSummary(request).downPaymentAmount <= 0) {
+      return res.status(409).json({ message: "No upfront payment is required for this booking." });
+    }
     const submissionTime = new Date();
     const paymentDeadline = request.paymentDueAt
       || new Date(new Date(request.createdAt || submissionTime).getTime() + settings.pendingPaymentHours * 60 * 60 * 1000);
@@ -376,6 +391,7 @@ const submitServicePayment = async (req, res) => {
         paymentProofPublicId: uploadedReceipt.publicId,
         format: uploadedReceipt.format || 'jpg',
         submittedAt,
+        amount: getServicePaymentSummary(current).downPaymentAmount,
         status: "Payment Submitted"
       });
       updatedRequest = await current.save({ session });
@@ -383,7 +399,7 @@ const submitServicePayment = async (req, res) => {
       await Notification.create([{
         audience: "admin",
         type: "payment_submitted",
-        message: `New payment submitted: ${current.code} · ${customerName} · ₱${Number(current.estimatedPrice || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        message: `New payment submitted: ${current.code} · ${customerName} · ₱${getServicePaymentSummary(current).downPaymentAmount.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         recordId: current._id,
         recordType: "service"
       }], { session });
@@ -432,6 +448,7 @@ const reviewServicePayment = async (req, res) => {
       const latestSubmission = serviceRequest.paymentSubmissions[serviceRequest.paymentSubmissions.length - 1];
       if (confirmed) {
         serviceRequest.paymentStatus = "Confirmed";
+        serviceRequest.amountPaid = getServicePaymentSummary(serviceRequest).downPaymentAmount;
         serviceRequest.paymentConfirmedAt = reviewedAt;
         serviceRequest.paymentConfirmedBy = req.admin.id;
         if (latestSubmission) latestSubmission.status = "Confirmed";
@@ -482,25 +499,22 @@ const markServicePaidAtShop = async (req, res) => {
     session = await mongoose.startSession();
     let serviceRequest;
     await session.withTransaction(async () => {
-      serviceRequest = await ServiceRequest.findOneAndUpdate(
+      serviceRequest = await ServiceRequest.findOne(
         {
           _id: req.params.id,
-          paymentStatus: "Payment Pending",
+          paymentStatus: { $in: ["Payment Pending", "Confirmed"] },
           status: { $nin: ["completed", "declined", "cancelled"] }
-        },
-        {
-          $set: {
-            paymentStatus: "Paid at shop",
-            paymentMethod: "Paid at shop",
-            paymentConfirmedAt: new Date(),
-            paymentConfirmedBy: req.admin.id
-          }
-        },
-        { new: true, runValidators: true, session }
-      );
+        }
+      ).session(session);
       if (!serviceRequest) {
-        throw Object.assign(new Error("Only an active booking awaiting payment can be marked paid at the shop."), { status: 409 });
+        throw Object.assign(new Error("Only an active booking awaiting payment or balance collection can be marked paid at the shop."), { status: 409 });
       }
+      serviceRequest.paymentStatus = "Paid at shop";
+      serviceRequest.paymentMethod = "Paid at shop";
+      serviceRequest.amountPaid = getServicePaymentSummary(serviceRequest).totalAmount;
+      serviceRequest.paymentConfirmedAt = new Date();
+      serviceRequest.paymentConfirmedBy = req.admin.id;
+      await serviceRequest.save({ session });
       await createPaymentDecisionNotification({
         customerId: serviceRequest.customerId || serviceRequest.user,
         recordId: serviceRequest._id,
@@ -747,14 +761,18 @@ const updateBookingStatus = async (req, res) => {
         && (cancelReason.length < 3 || cancelReason.length > 300)) {
         throw Object.assign(new Error("Provide a cancellation reason between 3 and 300 characters."), { status: 400 });
       }
+      const hasPaymentToResolve = hasServicePaymentToResolve(serviceRequest);
       if (["cancelled", "declined"].includes(status)
-        && PAID_SERVICE_STATUSES.includes(serviceRequest.paymentStatus)) {
+        && PAID_SERVICE_STATUSES.includes(serviceRequest.paymentStatus) && hasPaymentToResolve) {
         if (!["refunded", "forfeited"].includes(refundDecision)) {
           throw Object.assign(new Error("Choose whether the service payment was refunded or forfeited."), { status: 400 });
         }
         serviceRequest.refundDecision = refundDecision;
         serviceRequest.refundDecisionBy = req.admin?.id || req.user?.userId || req.user?.id;
         serviceRequest.refundDecisionAt = new Date();
+      }
+      if (["cancelled", "declined"].includes(status) && refundDecision && !hasPaymentToResolve) {
+        throw Object.assign(new Error("Refund decisions only apply after a service payment has been confirmed."), { status: 400 });
       }
       serviceRequest.status = status;
       if (cancelReason) serviceRequest.cancelReason = cancelReason;

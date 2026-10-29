@@ -240,6 +240,15 @@ export const adminApi = {
   getServices: () => request('/api/admin/services', { cache: 'no-store' }),
   getReservationSettings: () => request('/api/admin/reservations/settings'),
   updateReservationSettings: (settings) => request('/api/admin/reservations/settings', { method: 'PUT', body: JSON.stringify(settings) }),
+  getPaymentSettings: () => request('/api/admin/payment-settings', { cache: 'no-store' }),
+  updatePaymentSettings: (settings, qrFile) => {
+    const body = new FormData();
+    body.append('gcashAccountName', settings.gcashAccountName);
+    body.append('gcashAccountNumber', settings.gcashAccountNumber);
+    body.append('paymentInstructions', settings.paymentInstructions || '');
+    if (qrFile) body.append('qr', qrFile);
+    return request('/api/admin/payment-settings', { method: 'PUT', body });
+  },
   uploadGcashQr: (file) => {
     const body = new FormData();
     body.append('qr', file);

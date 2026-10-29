@@ -258,14 +258,24 @@
   box-sizing: border-box;
 }
 
+.customer-page.shop-page .customer-header {
+  width: 100%;
+  max-width: none;
+  padding: 10px var(--customer-wide-content-padding);
+  box-sizing: border-box;
+}
+
 .shop-page > * {
   max-width: 100%;
 }
 
 .shop-content {
-  width: min(100%, 1180px);
+  width: 100%;
+  max-width: none;
   flex: 1;
-  margin: 0 auto;
+  margin: 0;
+  padding: 0 var(--customer-wide-content-padding);
+  box-sizing: border-box;
 }
 
 .shop-page .customer-heading {
@@ -397,7 +407,7 @@
 }
 
 .shop-category-directory {
-  width: min(100%, 1180px);
+  width: 100%;
   margin: 0 auto 18px;
   background: #ffffff;
   border: 1px solid #eadfd6;
@@ -479,7 +489,7 @@
 }
 
 .shop-products-heading {
-  width: min(100%, 1180px);
+  width: 100%;
   margin: 0 auto 10px;
   padding: 14px 0;
   background: transparent;
@@ -537,6 +547,42 @@
   font-size: 11px;
 }
 
+.shop-page .shop-motorcycle-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #e8e3df;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #49372f;
+  font-size: 11px;
+}
+
+.shop-page .shop-motorcycle-filter select {
+  min-width: 150px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #e4e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #49372f;
+  font-size: 11px;
+}
+
+.shop-page .shop-motorcycle-filter button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid #e4e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #626973;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .shop-page .cart-link {
   height: 34px;
   padding: 9px 14px;
@@ -567,7 +613,7 @@
 
 .shop-page .product-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   grid-auto-rows: 1fr;
   align-items: stretch;
   gap: 16px;
@@ -653,6 +699,27 @@
   font-size: 10px;
   line-height: 1.4;
   text-overflow: ellipsis;
+}
+
+.shop-page .product-variant-select {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  color: #65564c;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.shop-page .product-variant-select select {
+  min-width: 0;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid #e4e0dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #49372f;
+  font-size: 10px;
 }
 
 .shop-page .product-price {
@@ -861,15 +928,9 @@
 
 }
 
-@media (max-width: 1023px) {
-  .shop-page .product-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 620px) {
   .shop-page {
-    padding: 0 12px;
+    padding: 0;
   }
 
   .shop-how-it-works {
@@ -923,7 +984,7 @@
   }
 
   .shop-page .product-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 10px;
   }
 
@@ -941,5 +1002,24 @@
     left: 10px;
     justify-content: space-between;
   }
+}
 
+@media (max-width: 767px) {
+  .customer-page.shop-page .customer-header {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .shop-how-it-works {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .shop-page .shop-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .shop-page .product-grid {
+    grid-template-columns: 1fr;
+  }
 }
