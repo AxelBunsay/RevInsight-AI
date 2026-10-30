@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
-import { CustomerAuthShell } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import {
   customerActionReturnPath,
@@ -47,16 +46,16 @@ export function CustomerLogin() {
     }
   };
 
-  return <CustomerAuthShell activeTab="login">
+  return <>
     <div className="customer-auth-heading"><h2>Welcome back!</h2><p>Sign in to your customer account</p></div>
     {signInMessage && <p className="customer-auth-action-message" role="status">{signInMessage}</p>}
     <form className="customer-auth-form" onSubmit={submitLogin}>
       {error && <p className="customer-error" role="alert">{error}</p>}
       <label>Email Address<input type="email" required placeholder="you@email.com" value={credentials.email} onChange={(event) => setCredentials({ ...credentials, email: event.target.value })} /></label>
       <label>Password<input type="password" required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
-      <button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
+      <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
     </form>
-  </CustomerAuthShell>;
+  </>;
 }
 
 export function CustomerRegister() {
@@ -123,7 +122,7 @@ export function CustomerRegister() {
   };
 
   if (step === 'register') {
-    return <CustomerAuthShell activeTab="register">
+    return <>
       <div className="customer-auth-heading"><h2>Create your account</h2><p>Register to shop parts and book services</p></div>
       {customerActionSignInMessage(pendingAction) && <p className="customer-auth-action-message" role="status">{customerActionSignInMessage(pendingAction)}</p>}
       {error && <p className="customer-error" role="alert">{error}</p>}
@@ -133,21 +132,21 @@ export function CustomerRegister() {
         <label>Email<input type="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></label>
         <label>Phone Number<input type="tel" required value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} placeholder="+63 9xx xxx xxxx" /></label>
         <label>Password<input type="password" required minLength="6" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} /></label>
-        <button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Sending OTP...' : 'Send OTP'}</button>
+        <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Sending OTP...' : 'Send OTP'}</button>
       </form>
-    </CustomerAuthShell>;
+    </>;
   }
 
-  return <CustomerAuthShell activeTab="register">
+  return <>
     <div className="customer-auth-heading"><h2>Verify your email</h2><p>Enter the 6-digit OTP sent to your email</p></div>
     {customerActionSignInMessage(pendingAction) && <p className="customer-auth-action-message" role="status">{customerActionSignInMessage(pendingAction)}</p>}
     {error && <p className="customer-error" role="alert">{error}</p>}
     {message && <p className="customer-success" role="status">{message}</p>}
     <form className="customer-auth-form" onSubmit={handleVerify}>
       <label>OTP Code<input type="text" required maxLength="6" value={otp} onChange={(e) => setOtp(e.target.value)} placeholder="123456" style={{ letterSpacing: '0.5em', textAlign: 'center' }} /></label>
-      <button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Verifying...' : 'Verify & Continue'}</button>
+      <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Verifying...' : 'Verify & Continue'}</button>
     </form>
     <p className="customer-link">Didn&apos;t receive the code? <button type="button" onClick={handleResend} disabled={isSubmitting}>Resend OTP</button></p>
     <p className="customer-link"><Link to="/customer/login">Back to Login</Link></p>
-  </CustomerAuthShell>;
+  </>;
 }
