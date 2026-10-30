@@ -8,8 +8,23 @@ import { useCustomerPrototype } from './useCustomerPrototype';
 import NotificationDropdown from '../../components/NotificationDropdown';
 import NotificationContent from '../../components/NotificationContent';
 import { clearNotificationList } from '../../utils/notificationActions';
+import useDocumentTitle from '../../utils/useDocumentTitle';
 import '../styles/shared.css';
 import '../styles/customer-flow.css';
+
+function getCustomerDocumentTitle(title) {
+  const titlesByHeading = {
+    'Motorcycle Shop': "Shop | Manoy's Motorcycle",
+    'Motorcycle Services': "Services | Manoy's Motorcycle",
+    Cart: "Cart | Manoy's Motorcycle",
+    'My purchases': "My purchases | Manoy's Motorcycle",
+    'My Purchases': "My purchases | Manoy's Motorcycle",
+    'My Reservations': "My purchases | Manoy's Motorcycle",
+    Account: "Account | Manoy's Motorcycle",
+    Profile: "Account | Manoy's Motorcycle"
+  };
+  return titlesByHeading[title] || `${title} | Manoy's Motorcycle`;
+}
 
 export function CustomerAccountMenu({ isOpen, onSelect, onSignOut, canSignOut = false }) {
   if (!isOpen) return null;
@@ -221,6 +236,7 @@ function CustomerFooter() {
 
 export function CustomerPage({ title, description, children, includeHeader = true, preserveScrollOnMount = false }) {
   const location = useLocation();
+  useDocumentTitle(getCustomerDocumentTitle(title));
 
   useEffect(() => {
     if (!preserveScrollOnMount) window.scrollTo(0, 0);
@@ -250,6 +266,10 @@ export function CustomerPage({ title, description, children, includeHeader = tru
 }
 
 export function CustomerAuthShell({ activeTab, children }) {
+  useDocumentTitle(activeTab === 'register'
+    ? "Register | Manoy's Motorcycle"
+    : "Sign in | Manoy's Motorcycle");
+
   return <main className="customer-auth-page">
     <section className="customer-auth-showcase">
       <Link className="customer-auth-brand" to="/customer/shop" aria-label="Go to Manoy's Motorcycle shop">

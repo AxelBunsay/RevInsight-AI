@@ -96,9 +96,28 @@
   margin: 0;
 }
 
-@media (max-width: 620px) {
+.mechanic-notification-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.mechanic-notification-actions > button {
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 9px;
+}
+
+@media (max-width: 639px) {
   .mechanic-header .mechanic-notification-wrap .mechanic-notification-popover {
-    right: 0;
-    width: min(360px, calc(100vw - 24px));
+    position: fixed;
+    top: 82px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    max-width: none;
+    max-height: 70vh;
   }
 }

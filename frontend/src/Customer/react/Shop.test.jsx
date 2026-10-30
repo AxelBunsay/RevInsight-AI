@@ -7,9 +7,12 @@ import { readFileSync } from 'node:fs';
 const shopStyles = readFileSync(new URL('../styles/shop.css', import.meta.url), 'utf8');
 const shopSource = readFileSync(new URL('./Shop.jsx', import.meta.url), 'utf8');
 const customerLayoutSource = readFileSync(new URL('./CustomerLayout.jsx', import.meta.url), 'utf8');
+const modalSource = readFileSync(new URL('./ProductDetailModal.jsx', import.meta.url), 'utf8');
+const modalHelpersSource = readFileSync(new URL('./productDetailModalHelpers.js', import.meta.url), 'utf8');
 
 const defaultProps = {
   product: { _id: 'part-123', name: 'Brake Cable', category: 'Cables' },
+  to: { pathname: '/customer/shop', search: '?product=part-123' },
   variants: [],
   selectedStock: 10,
   price: 100,
@@ -29,16 +32,21 @@ const renderCard = (props) => renderToStaticMarkup(
 );
 
 describe('shop product card', () => {
-  it('navigates to product details and saves the shop view when the card link is activated', () => {
+  it('opens the details modal from a single keyboard-accessible link and saves the shop view', () => {
     const onOpen = vi.fn();
     const card = ShopProductCard({ ...defaultProps, onOpen });
     expect(card.type).toBe(Link);
-    expect(card.props.to).toBe('/customer/products/part-123');
-    card.props.onClick();
+    expect(card.props.to).toEqual({ pathname: '/customer/shop', search: '?product=part-123' });
+    card.props.onClick({ currentTarget: { focus() {} } });
     expect(onOpen).toHaveBeenCalledOnce();
+    const preventDefault = vi.fn();
+    const click = vi.fn();
+    card.props.onKeyDown({ key: ' ', preventDefault, currentTarget: { click } });
+    expect(preventDefault).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
 
     const markup = renderCard({});
-    expect(markup).toContain('<a class="product-card" aria-label="Brake Cable, ₱100" href="/customer/products/part-123"');
+    expect(markup).toContain('<a class="product-card" aria-label="Brake Cable, ₱100" href="/customer/shop?product=part-123"');
     expect(markup).toContain('aria-label="Brake Cable, ₱100"');
     expect(markup).toContain('Brake Cable</h2>');
     expect(markup).not.toContain('<button');
@@ -61,7 +69,7 @@ describe('shop product card', () => {
       isOutOfStock: true,
       selectedStock: 0
     });
-    expect(markup).toContain('href="/customer/products/part-123"');
+    expect(markup).toContain('href="/customer/shop?product=part-123"');
     expect(markup).toContain('Out of stock');
     expect(markup).toContain('is-out-of-stock');
   });
@@ -77,5 +85,20 @@ describe('shop product card', () => {
     expect(shopSource).toContain('scrollY: window.scrollY');
     expect(shopSource).toContain('preserveScrollOnMount={Boolean(restoredShopView)}');
     expect(customerLayoutSource).toContain('if (!preserveScrollOnMount) window.scrollTo(0, 0);');
+  });
+
+  it('opens from the URL, closes through history or controls, and restores card focus and scroll', () => {
+    expect(shopSource).toContain('getProductModalId(location.search)');
+    expect(shopSource).toContain('<ProductDetailModal');
+    expect(shopSource).toContain("search: removeProductModalSearch(location.search)");
+    expect(modalHelpersSource).toContain("event.key === 'Escape'");
+    expect(modalHelpersSource).toContain('event.target !== event.currentTarget');
+    expect(modalHelpersSource).toContain("event.key !== 'Tab'");
+    expect(modalSource).toContain('body.style.position = \'fixed\'');
+    expect(modalSource).toContain('window.scrollTo(0, scrollY)');
+    expect(modalSource).toContain('openerElement?.focus()');
+    expect(modalSource).toContain('aria-modal="true"');
+    expect(modalSource).toContain('aria-labelledby="product-detail-title"');
+    expect(modalSource).toContain('Close product details');
   });
 });

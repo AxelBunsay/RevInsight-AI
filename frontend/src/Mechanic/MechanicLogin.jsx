@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { loginMechanic } from './mechanicService';
+import useDocumentTitle from '../utils/useDocumentTitle';
 
 export default function MechanicLogin() {
+  useDocumentTitle("Mechanic sign in | Manoy's");
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();

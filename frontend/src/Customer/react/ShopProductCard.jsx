@@ -4,6 +4,7 @@ import ProductImage from './ProductImage';
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
 
 export default function ShopProductCard({
+  to,
   product,
   variants,
   selectedStock,
@@ -16,9 +17,15 @@ export default function ShopProductCard({
 }) {
   return <Link
     className={`product-card${isOutOfStock ? ' is-out-of-stock' : ''}`}
-    to={`/customer/products/${product._id}`}
+    to={to || `/customer/products/${product._id}`}
     aria-label={`${product.name}, ${variants.length ? `From ${money(price)}` : money(price)}${isOutOfStock ? ', Out of stock' : ''}`}
     onClick={onOpen}
+    onKeyDown={(event) => {
+      if (event.key === ' ') {
+        event.preventDefault();
+        event.currentTarget.click();
+      }
+    }}
   >
     <div className="product-image">
       <ProductImage src={product.imageUrl || product.image} alt="" className="product-image-photo" fallback={<div className="product-image-placeholder" aria-hidden="true">

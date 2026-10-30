@@ -9,3 +9,74 @@
 .mechanic-login-page{display:grid;min-height:100vh;place-items:center;padding:36px 18px}.mechanic-login-wrap{width:min(100%,336px)}.mechanic-login-intro{display:grid;justify-items:center;gap:8px;margin-bottom:20px;text-align:center}.mechanic-login-mark{display:grid;width:52px;height:52px;margin-bottom:3px;place-items:center;border-radius:16px;background:#eeedff;color:#6653e8;font-size:23px}.mechanic-login-intro h1{margin:0;color:#111a2d;font-size:27px}.mechanic-login-intro p{margin:0;color:var(--muted);font-size:13px}.mechanic-login-card{display:grid;gap:13px;padding:16px;border:1px solid #e5e7f0;border-radius:13px;background:white;box-shadow:0 2px 5px #18223d0d}.mechanic-login-card .mechanic-field{gap:6px}.mechanic-login-card .mechanic-field input{min-height:38px}.mechanic-login-submit{width:100%;min-height:38px}.mechanic-demo-hint{margin:-1px 0 0;color:#697791;font-size:10px;line-height:1.6;text-align:center}.mechanic-demo-hint span{display:block}
 @media(max-width:900px){.mechanic-main{padding-right:17px;padding-left:17px}.mechanic-queue-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.mechanic-job-filters{grid-template-columns:1.4fr 1fr}}
 @media(max-width:620px){.mechanic-shell{display:block;padding-bottom:68px}.mechanic-sidebar{inset:auto 0 0;width:100%;height:64px;flex-direction:row;justify-content:space-between;padding:5px 8px}.mechanic-brand{display:none}.mechanic-navigation{display:flex;flex:1;justify-content:space-around;gap:4px;margin:0}.mechanic-nav-link{width:min(25%,84px);min-height:52px}.mechanic-logout{width:min(25%,70px);min-height:52px;margin:0}.mechanic-workspace{width:100%;min-height:calc(100vh - 64px);margin:0}.mechanic-header{min-height:70px;gap:10px;padding:10px 13px}.mechanic-heading h1{font-size:20px}.mechanic-eyebrow{font-size:9px}.mechanic-header-tools{gap:6px}.mechanic-header-tools>time{display:none}.mechanic-icon-button,.mechanic-user-link{width:36px;height:36px}.mechanic-main{gap:11px;padding:12px 10px 22px}.mechanic-dashboard-grid{grid-template-columns:1fr;gap:11px}.mechanic-queue-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 11px}.mechanic-panel-heading{padding:13px 12px 9px}.mechanic-workload-stats{gap:7px;padding:0 11px 11px}.mechanic-workload-stats>div{min-height:68px}.mechanic-job-filters{grid-template-columns:1fr 1fr;gap:9px;padding:12px 10px}.mechanic-job-filters .search-field{grid-column:1/-1}.mechanic-job-table{min-width:710px}.mechanic-profile-form{padding:12px}.mechanic-profile-grid{grid-template-columns:1fr}.mechanic-field.full-width{grid-column:auto}.mechanic-notification-popover{right:-50px}}
+
+html,body{width:100%;max-width:100%}
+.mechanic-shell{width:100%;max-width:100%;overflow-x:clip}
+.mechanic-workspace{min-width:0}
+.mechanic-main{width:100%;min-width:0}
+.mechanic-table-scroll{min-width:0}
+.mechanic-job-cards{display:none}
+.mechanic-job-card{display:grid;width:100%;min-width:0;gap:7px;padding:13px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);text-align:left;cursor:pointer}
+.mechanic-job-card:focus-visible{outline:3px solid #8f82f5;outline-offset:2px}
+.mechanic-job-card-top{display:flex;min-width:0;flex-wrap:wrap;align-items:center;gap:7px}
+.mechanic-job-card-top>strong{margin-right:auto;color:var(--violet);font-size:13px}
+.mechanic-job-card-top .mechanic-priority{min-height:24px;padding:3px 8px;border-radius:20px;background:#f2f3f8;font-size:10px}
+.mechanic-job-card-top .mechanic-priority.high{background:#fff0ef;color:#b42e2a}
+.mechanic-job-card-top .mechanic-status{white-space:normal}
+.mechanic-job-card-customer{font-size:14px;font-weight:700}
+.mechanic-job-card-vehicle,.mechanic-job-card-service{font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.mechanic-job-card-service{color:#4b5870}
+.mechanic-job-card-schedule{color:var(--muted);font-size:11px;line-height:1.4;overflow-wrap:anywhere}
+.mechanic-job-card-price{color:#303b52;font-size:11px;font-weight:600;line-height:1.5;overflow-wrap:anywhere}
+.mechanic-field input,.mechanic-field select,.availability-panel select{min-height:44px}
+.button-primary,.button-secondary{min-height:44px}
+.mechanic-dialog-close{width:44px;height:44px;top:7px;right:7px}
+.mechanic-dialog{max-height:calc(100dvh - 24px);overflow-y:auto}
+.job-dialog-actions>button{min-height:44px}
+
+@media(max-width:767px){
+  .mechanic-job-filters{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:12px}
+  .mechanic-job-filters .search-field,.mechanic-job-filters .created-date-field{grid-column:1/-1}
+  .mechanic-job-filters .mechanic-field{min-width:0}
+  .mechanic-job-filters .mechanic-field input,.mechanic-job-filters .mechanic-field select{min-height:44px}
+  .mechanic-table-scroll{display:none}
+  .mechanic-job-cards{display:grid;min-width:0;gap:10px;padding:0 12px 12px}
+  .mechanic-job-card{min-height:44px}
+  .mechanic-job-card .mechanic-status{font-size:9px}
+  .mechanic-profile-form{max-width:100%;min-width:0}
+  .mechanic-profile-grid{min-width:0}
+  .mechanic-dashboard-grid,.mechanic-queue-grid,.mechanic-workload-stats{min-width:0}
+  .mechanic-modal-backdrop{padding:12px}
+  .mechanic-dialog{width:min(100%,500px);max-height:calc(100dvh - 24px);padding:22px 14px 14px}
+  .mechanic-job-details{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .job-dialog-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .job-dialog-actions>button{min-width:0;padding:8px}
+}
+
+@media(max-width:620px){
+  .mechanic-shell{display:block;padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+  .mechanic-sidebar{inset:auto 0 0;width:100%;height:calc(64px + env(safe-area-inset-bottom));flex-direction:row;justify-content:initial;gap:0;padding:4px 8px calc(5px + env(safe-area-inset-bottom))}
+  .mechanic-brand{display:none}
+  .mechanic-navigation{display:flex;flex:3;width:auto;justify-content:initial;gap:0;margin:0}
+  .mechanic-nav-link,.mechanic-logout{width:auto;min-width:0;min-height:52px;flex:1;margin:0;font-size:12px}
+  .mechanic-nav-icon,.mechanic-logout>span:first-child{min-height:23px;font-size:20px}
+  .mechanic-workspace{width:100%;min-height:calc(100vh - 64px - env(safe-area-inset-bottom));margin:0}
+  .mechanic-header{min-height:70px;gap:8px;padding:10px 12px}
+  .mechanic-heading{min-width:0}
+  .mechanic-heading h1{font-size:20px}
+  .mechanic-eyebrow{font-size:9px}
+  .mechanic-header-tools{gap:5px}
+  .mechanic-header-tools>time{display:none}
+  .mechanic-icon-button,.mechanic-user-link{width:44px;height:44px;flex:0 0 44px}
+  .mechanic-main{gap:11px;padding:12px 10px 22px}
+  .mechanic-dashboard-grid{grid-template-columns:1fr;gap:11px}
+  .mechanic-queue-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0 11px}
+  .mechanic-panel-heading{padding:13px 12px 9px}
+  .mechanic-workload-stats{gap:7px;padding:0 11px 11px}
+  .mechanic-workload-stats>div{min-height:68px}
+  .mechanic-profile-form{padding:12px}
+  .mechanic-profile-grid{grid-template-columns:1fr}
+  .mechanic-field.full-width{grid-column:auto}
+  .mechanic-field input,.mechanic-field select,.mechanic-field textarea{font-size:16px}
+  .availability-panel select{width:calc(100% - 34px)}
+}
