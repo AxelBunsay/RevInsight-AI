@@ -5,6 +5,8 @@ import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { api } from '../../services/api';
 import ShopProductCard from './ShopProductCard';
+import ProductDetailModal from './ProductDetailModal';
+import { getProductModalId, getProductModalSearch, removeProductModalSearch } from './productDetailHelpers';
 import { clearCustomerAuthAction, readCustomerAuthAction } from './customerAuthAction';
 import '../styles/shop.css';
 
@@ -64,6 +66,7 @@ export default function Shop() {
   const location = useLocation();
   const navigate = useNavigate();
   const [restoredShopView] = useState(readShopViewState);
+  const [isShopViewRestored, setIsShopViewRestored] = useState(!restoredShopView);
   const [search, setSearch] = useState(() => restoredShopView?.search || '');
   const [category, setCategory] = useState(() => restoredShopView?.category || 'All');
   const [sort, setSort] = useState(() => restoredShopView?.sort || 'featured');
@@ -78,8 +81,12 @@ export default function Shop() {
   const [resumeError, setResumeError] = useState('');
   const { addCartItem } = useCustomerPrototype();
   const resumedActionRef = useRef('');
+  const productCardOpenerRef = useRef(null);
+  const locationReturnPath = `${location.pathname}${location.search}`;
+  const productModalId = getProductModalId(location.search);
 
-  const saveShopView = () => {
+  const saveShopView = (event) => {
+    if (event?.currentTarget) productCardOpenerRef.current = event.currentTarget;
     try {
       sessionStorage.setItem(SHOP_VIEW_STATE_KEY, JSON.stringify({
         search,
@@ -102,6 +109,7 @@ export default function Shop() {
       } catch {
         // The restored view is usable even if the snapshot cannot be cleared.
       }
+      setIsShopViewRestored(true);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [isLoading, restoredShopView]);
@@ -169,9 +177,9 @@ export default function Shop() {
   useEffect(() => {
     if (!location.state?.resumeAction) return undefined;
     const action = readCustomerAuthAction();
-    if (!action || action.type !== 'item' || action.returnPath !== location.pathname) {
+    if (!action || action.type !== 'item' || action.returnPath !== locationReturnPath) {
       clearCustomerAuthAction();
-      navigate(location.pathname, { replace: true, state: null });
+      navigate(locationReturnPath, { replace: true, state: null });
       return undefined;
     }
     const actionKey = `${action.createdAt}:${action.itemId}:${action.variantId || ''}`;
@@ -213,11 +221,19 @@ export default function Shop() {
     }).finally(() => {
       if (active) {
         clearCustomerAuthAction();
-        navigate(location.pathname, { replace: true, state: null });
+        navigate(locationReturnPath, { replace: true, state: null });
       }
     });
     return () => { active = false; };
-  }, [addCartItem, location.pathname, location.state, navigate]);
+  }, [addCartItem, locationReturnPath, location.state, navigate]);
+
+  const closeProductModal = useCallback(() => {
+    navigate({
+      pathname: location.pathname,
+      search: removeProductModalSearch(location.search),
+      hash: location.hash
+    }, { replace: true, state: location.state });
+  }, [location.hash, location.pathname, location.search, location.state, navigate]);
 
   const productCategories = useMemo(
     () => ['All', ...new Set(products.map((product) => product.category).filter(Boolean))],
@@ -360,6 +376,11 @@ export default function Shop() {
                   : availableStock === 0;
                 return <ShopProductCard
                   key={product._id}
+                  to={{
+                    pathname: location.pathname,
+                    search: getProductModalSearch(location.search, product._id),
+                    hash: location.hash
+                  }}
                   product={product}
                   variants={variants}
                   selectedStock={availableStock}
@@ -382,5 +403,10 @@ export default function Shop() {
       <Link to="/customer/cart">View cart</Link>
       <button type="button" aria-label="Dismiss notification" onClick={() => setShowAddedToast(false)}>×</button>
     </div>}
+    <ProductDetailModal
+      productId={isShopViewRestored ? productModalId : ''}
+      onClose={closeProductModal}
+      openerRef={productCardOpenerRef}
+    />
   </CustomerPage>;
 }
