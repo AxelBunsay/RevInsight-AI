@@ -21,8 +21,15 @@ export default function MechanicJobs() {
     return () => { active = false; };
   }, []);
 
+  const createdDates = useMemo(() => [...new Set(jobs
+    .map((job) => String(job.createdAt || '').slice(0, 10))
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)))]
+    .sort((left, right) => right.localeCompare(left)), [jobs]);
+
   const visibleJobs = useMemo(() => jobs.filter((job) => {
-    const searchFields = [job.jobId, job._id, job.customerName, job.plate, job.vehicle, job.serviceType].join(' ').toLowerCase();
+    const searchFields = [job.code, job.jobId, job.customerName, job.plate, job.vehicle, job.serviceType]
+      .join(' ')
+      .toLowerCase();
     return searchFields.includes(search.trim().toLowerCase())
       && (status === 'all' || job.status === status)
       && (priority === 'all' || (job.priority || 'normal').toLowerCase() === priority)
@@ -55,9 +62,9 @@ export default function MechanicJobs() {
         <label className="mechanic-field search-field"><span>Search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Job ID, customer, plate or vehicle" /></label>
         <label className="mechanic-field"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="pending">Pending</option><option value="assigned">Assigned</option><option value="awaiting-response">Awaiting response</option><option value="confirmed">Confirmed</option><option value="inspection">Inspection</option><option value="accepted">Accepted</option><option value="in-progress">In progress</option><option value="waiting-parts">Waiting for parts</option><option value="quality-check">Quality check</option><option value="completed">Completed</option><option value="declined">Declined</option></select></label>
         <label className="mechanic-field"><span>Priority</span><select value={priority} onChange={(event) => setPriority(event.target.value)}><option value="all">All priorities</option><option value="high">High</option><option value="normal">Normal</option></select></label>
-        <label className="mechanic-field"><span>Date created</span><input type="date" value={createdDate} onChange={(event) => setCreatedDate(event.target.value)} /></label>
+        <label className="mechanic-field created-date-field"><span>Date created</span><select value={createdDate} onChange={(event) => setCreatedDate(event.target.value)}><option value="">Any date</option>{createdDates.map((date) => <option value={date} key={date}>{new Date(`${date}T12:00:00`).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</option>)}</select></label>
       </div>
-      <div className="mechanic-jobs-result"><span>{visibleJobs.length} jobs</span>{(search || status !== 'all' || priority !== 'all' || createdDate) && <button type="button" onClick={() => { setSearch(''); setStatus('all'); setPriority('all'); setCreatedDate(''); }}>Clear filters</button>}</div>
+      <div className="mechanic-jobs-result"><span>{visibleJobs.length} {visibleJobs.length === 1 ? 'job' : 'jobs'}</span>{(search || status !== 'all' || priority !== 'all' || createdDate) && <button type="button" onClick={() => { setSearch(''); setStatus('all'); setPriority('all'); setCreatedDate(''); }}>Clear filters</button>}</div>
       <JobTable jobs={visibleJobs} onSelect={setSelectedJob} />
     </section>
     <JobDialog job={selectedJob} onClose={() => setSelectedJob(null)} actions={selectedJob ? getJobActions(selectedJob) : []} onAction={runAction} busy={busy} error={selectedJob ? error : ''} />

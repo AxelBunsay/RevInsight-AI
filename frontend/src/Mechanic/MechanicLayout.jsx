@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { getMechanicNotifications, logoutMechanic, markMechanicNotificationsRead } from './mechanicService';
 import NotificationContent from '../components/NotificationContent';
+import useDocumentTitle from '../utils/useDocumentTitle';
 import './mechanic-ui.css';
 import './mechanic-notifications.css';
 
@@ -14,6 +15,14 @@ const links = [
 export default function MechanicLayout({ title, children }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const pageName = title === 'Mechanic Jobs'
+    ? 'Jobs'
+    : title === 'Mechanic Dashboard'
+      ? 'Dashboard'
+      : title === 'Mechanic Profile'
+        ? 'Profile'
+        : title;
+  useDocumentTitle(`${pageName} | Mechanic | Manoy's`);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
@@ -54,7 +63,13 @@ export default function MechanicLayout({ title, children }) {
                 <span aria-hidden="true">🔔</span>{unreadCount > 0 && <span className="mechanic-notification-count">{unreadCount}</span>}
               </button>
               {showNotifications && <section className="mechanic-notification-popover" aria-label="Notifications">
-                <header className="mechanic-notification-popover-header"><strong>Notifications</strong>{!!unreadCount && <button type="button" onClick={async () => setNotifications(await markMechanicNotificationsRead())}>Mark all as read</button>}</header>
+                <header className="mechanic-notification-popover-header">
+                  <strong>Notifications</strong>
+                  <div className="mechanic-notification-actions">
+                    {!!unreadCount && <button type="button" onClick={async () => setNotifications(await markMechanicNotificationsRead())}>Mark all as read</button>}
+                    {!!notifications.length && <button type="button" onClick={() => setNotifications([])}>Clear all</button>}
+                  </div>
+                </header>
                 <div className="mechanic-notification-list">{notifications.length ? notifications.map((item) => <article className={`mechanic-notification${item.read ? '' : ' unread'}`} key={item.id}><NotificationContent message={item.text} timestamp={item.time} /></article>) : <p className="mechanic-notification-empty">No notifications yet.</p>}</div>
               </section>}
             </div>
