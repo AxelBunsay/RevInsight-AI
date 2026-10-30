@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { api } from '../../services/api';
 import { hasCustomerFooterDetails } from './customerFooterSettings';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
@@ -11,11 +11,15 @@ import { clearNotificationList } from '../../utils/notificationActions';
 import '../styles/shared.css';
 import '../styles/customer-flow.css';
 
-export function CustomerAccountMenu({ isOpen, onSelect }) {
+export function CustomerAccountMenu({ isOpen, onSelect, onSignOut, canSignOut = false }) {
   if (!isOpen) return null;
   return <div className="customer-account-menu" id="customer-account-menu" role="menu" aria-label="Account options">
     <Link role="menuitem" to="/customer/profile" onClick={onSelect}>My profile</Link>
     <Link role="menuitem" to="/my-purchases?tab=all" onClick={onSelect}>My purchases</Link>
+    {canSignOut && <>
+      <div className="customer-account-menu-divider" role="separator" />
+      <button type="button" className="customer-account-menu-signout" role="menuitem" onClick={() => { onSelect?.(); onSignOut?.(); }}>Sign out</button>
+    </>}
   </div>;
 }
 
@@ -137,7 +141,7 @@ export function CustomerHeader() {
   const isAccountPage = currentPath === '/customer/profile' || currentPath.startsWith('/my-purchases');
 
   return <header className="customer-header">
-    <Link className="customer-brand" to="/customer/shop"><span className="customer-brand__mark" aria-hidden="true">🔧</span><span className="customer-brand__copy"><strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
+    <Link className="customer-brand" to="/customer/shop"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="44" height="44" decoding="async" /><span className="customer-brand__copy"><strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
     <button type="button" className="customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => setIsMenuOpen((open) => !open)}>
       <span /><span /><span />
     </button>
@@ -153,6 +157,8 @@ export function CustomerHeader() {
         <CustomerAccountMenu
           isOpen={customerMenus.accountOpen}
           onSelect={() => { dispatchCustomerMenu({ type: 'close' }); setIsMenuOpen(false); }}
+          onSignOut={logout}
+          canSignOut={hasCustomerAccount}
         />
       </div>
       {hasCustomerAccount && <Link onClick={() => setIsMenuOpen(false)} className="customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
@@ -177,9 +183,7 @@ export function CustomerHeader() {
             </li>}
         />}
       </div>}
-      {hasCustomerAccount
-        ? <button type="button" className="customer-logout" onClick={logout}>Sign out</button>
-        : <Link onClick={() => setIsMenuOpen(false)} className={currentPath.startsWith('/customer/login') || currentPath.startsWith('/customer/register') ? 'active' : ''} aria-current={currentPath.startsWith('/customer/login') || currentPath.startsWith('/customer/register') ? 'page' : undefined} to="/customer/login">Sign in</Link>}
+      {!hasCustomerAccount && <Link onClick={() => setIsMenuOpen(false)} className={currentPath.startsWith('/customer/login') || currentPath.startsWith('/customer/register') ? 'active' : ''} aria-current={currentPath.startsWith('/customer/login') || currentPath.startsWith('/customer/register') ? 'page' : undefined} to="/customer/login">Sign in</Link>}
     </nav>
   </header>;
 }
@@ -215,19 +219,21 @@ function CustomerFooter() {
   </footer>;
 }
 
-export function CustomerPage({ title, description, children, includeHeader = true }) {
+export function CustomerPage({ title, description, children, includeHeader = true, preserveScrollOnMount = false }) {
   const location = useLocation();
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+    if (!preserveScrollOnMount) window.scrollTo(0, 0);
+  }, [location.pathname, preserveScrollOnMount]);
 
   useEffect(() => {
+    if (preserveScrollOnMount) return undefined;
     const resetScroll = () => window.scrollTo(0, 0);
     resetScroll();
     window.setTimeout(resetScroll, 0);
     window.setTimeout(resetScroll, 100);
-  }, []);
+    return undefined;
+  }, [preserveScrollOnMount]);
 
   return (
     <main className={`customer-page ${title === 'Motorcycle Shop' ? 'shop-page' : ''} ${title === 'Motorcycle Services' ? 'services-page' : ''} ${['My purchases', 'My Purchases', 'My Reservations'].includes(title) ? 'orders-page reservations-page' : ''} ${title === 'Profile' || title === 'Account' ? 'profile-page' : ''}`}>
@@ -246,12 +252,11 @@ export function CustomerPage({ title, description, children, includeHeader = tru
 export function CustomerAuthShell({ activeTab, children }) {
   return <main className="customer-auth-page">
     <section className="customer-auth-showcase">
-      <Link className="customer-auth-brand" to="/customer/shop">
-        <span className="customer-auth-logo" aria-hidden="true">🔧</span>
-        <span><strong>Manoy&apos;s Motorcycle</strong><small>Parts, Accessories &amp; Services</small></span>
+      <Link className="customer-auth-brand" to="/customer/shop" aria-label="Go to Manoy's Motorcycle shop">
+        <img className="customer-auth-logo" src="/logo.svg" alt="Manoy's Motorcycle logo" width="96" height="96" decoding="async" />
+        <span><strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span>
       </Link>
       <div className="customer-auth-copy">
-        <p className="customer-auth-eyebrow">MANOY&apos;S MOTORCYCLE PARTS &amp; ACCESSORIES</p>
         <h1>Everything your ride needs.</h1>
         <p>Browse genuine motorcycle parts and accessories. Fast, reliable, and trusted by riders.</p>
         <ul>
@@ -262,14 +267,21 @@ export function CustomerAuthShell({ activeTab, children }) {
       </div>
     </section>
     <section className="customer-auth-panel">
-      <Link className="customer-auth-back" to="/customer/shop">← Back to shop</Link>
       <div className="customer-auth-content">
-        <nav className="customer-auth-tabs" aria-label="Customer account">
-          <Link className={activeTab === 'login' ? 'active' : ''} to="/customer/login">Sign In</Link>
-          <Link className={activeTab === 'register' ? 'active' : ''} to="/customer/register">Register</Link>
+        <nav className={`customer-auth-tabs${activeTab === 'register' ? ' is-register' : ''}`} role="tablist" aria-label="Customer account">
+          <span className="customer-auth-tab-indicator" aria-hidden="true" />
+          <Link className={activeTab === 'login' ? 'active' : ''} role="tab" aria-selected={activeTab === 'login'} to="/customer/login">Sign In</Link>
+          <Link className={activeTab === 'register' ? 'active' : ''} role="tab" aria-selected={activeTab === 'register'} to="/customer/register">Register</Link>
         </nav>
-        {children}
+        <div key={activeTab} className="customer-auth-form-content">{children}</div>
       </div>
     </section>
   </main>;
+}
+
+export function CustomerAuthLayout() {
+  const { pathname } = useLocation();
+  const activeTab = pathname === '/customer/register' ? 'register' : 'login';
+
+  return <CustomerAuthShell activeTab={activeTab}><Outlet /></CustomerAuthShell>;
 }

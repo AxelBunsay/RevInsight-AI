@@ -1,12 +1,14 @@
 import { Link } from 'react-router-dom';
 import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
-import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
-import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
-import { getServiceBookingStatus } from '../../utils/servicePayment';
+import { getServiceBookingStatus, getServicePaymentSummary } from '../../utils/servicePayment';
 import ProductImage from './ProductImage';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
+const serviceMoney = (value) => `₱${Number(value || 0).toLocaleString('en-PH', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+})}`;
 const statusClass = (status) => `status-${String(status || '').toLowerCase().replaceAll(' ', '-')}`;
 const formatDate = (value) => value
   ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeZone: 'Asia/Manila' }).format(new Date(value))
@@ -72,7 +74,7 @@ export function ItemReservationCard({ reservation, showType = false }) {
       </div>
       <span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span>
     </div>
-    <div className="customer-reservation-card-finances">
+    <div className="customer-reservation-card-finances customer-purchase-card-finances">
       <span>Total <strong>{money(reservation.total)}</strong></span>
       <span>Paid <strong>{money(reservation.amountPaid)}</strong></span>
       <span>Balance <strong>{money(reservation.balanceDue)}</strong></span>
@@ -91,6 +93,16 @@ export function ServiceBookingCard({ booking, prototype = false, showType = fals
     ? booking.timeSlot
     : [booking.startTime, booking.endTime].filter(Boolean).join(' - ');
   const pathId = prototype ? booking.id : booking._id;
+  const payment = getServicePaymentSummary(booking);
+  const hasPaymentSnapshot = booking.downPaymentAmount !== undefined && booking.downPaymentAmount !== null
+    && booking.balanceDue !== undefined && booking.balanceDue !== null;
+  const total = prototype ? serviceTotal(booking, true) : payment.totalAmount;
+  const paid = hasPaymentSnapshot ? payment.amountPaid : total;
+  const balance = hasPaymentSnapshot ? payment.balanceDue : 0;
+  const mechanicFee = Number(booking.mechanicFeeTotal || 0);
+  const servicePrice = booking.servicePriceTotal === undefined
+    ? Number(total || 0) - mechanicFee
+    : Number(booking.servicePriceTotal);
 
   return <article className="customer-reservation-card">
     <div className="customer-reservation-card-top">
@@ -101,22 +113,20 @@ export function ServiceBookingCard({ booking, prototype = false, showType = fals
         </span>
         <h2>{serviceName(booking, prototype)}</h2>
         <p>{!prototype && booking.pricePerUnit ? `${serviceUnitSummary(booking.units || 1, booking.unitLabel)} · ` : ''}{formatDate(date)}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
+        {!prototype && booking.description && <p>{booking.description}</p>}
         {showType && !prototype && <small className="customer-purchase-date">Created {formatDate(booking.createdAt)}</small>}
       </div>
       <span className={`customer-status-pill ${statusClass(status)}`}>{status}</span>
     </div>
-    <div className="customer-reservation-card-bottom">
-      {prototype
-        ? <strong>{money(serviceTotal(booking, true))}</strong>
-        : <>
-          <ServicePriceBreakdown
-            servicePriceTotal={booking.servicePriceTotal}
-            mechanicFeeTotal={booking.mechanicFeeTotal}
-            estimatedPrice={booking.estimatedPrice}
-          />
-          <ServicePaymentBreakdown booking={booking} />
-        </>}
-      {!prototype && booking.description && <span>{booking.description}</span>}
+    <p className="customer-service-booking-price-line">
+      Service {serviceMoney(servicePrice)} + Mechanic fee {serviceMoney(mechanicFee)}
+    </p>
+    <div className="customer-reservation-card-finances customer-purchase-card-finances customer-service-booking-finances">
+      <span>Total <strong>{serviceMoney(total)}</strong></span>
+      <span>Paid <strong>{serviceMoney(paid)}</strong></span>
+      <span>Balance due <strong>{serviceMoney(balance)}</strong></span>
+    </div>
+    <div className="customer-reservation-card-bottom customer-service-booking-card-bottom">
       <Link to={`/customer/reservations/${pathId}`}>View booking <span aria-hidden="true">→</span></Link>
     </div>
   </article>;

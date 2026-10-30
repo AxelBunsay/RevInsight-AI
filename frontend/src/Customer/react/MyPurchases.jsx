@@ -47,7 +47,13 @@ export default function MyPurchases() {
   const [isLoading, setIsLoading] = useState(true);
   const [errors, setErrors] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
-  const [referenceQuery, setReferenceQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
 
   useEffect(() => {
     let isMounted = true;
@@ -101,14 +107,15 @@ export default function MyPurchases() {
   }, [itemReservations, prototypeBookings, serviceBookings]);
 
   const tabRecords = recordsForPurchaseTab(records, activeTab);
-  const visibleRecords = filterPurchaseRecords(tabRecords, statusFilter, referenceQuery);
+  const visibleRecords = filterPurchaseRecords(tabRecords, statusFilter, debouncedSearchQuery);
 
   const chooseTab = (tab) => {
     setSearchParams({ tab });
   };
   const clearFilters = () => {
     setStatusFilter('all');
-    setReferenceQuery('');
+    setSearchQuery('');
+    setDebouncedSearchQuery('');
   };
 
   const emptyCopy = activeTab === 'items'
@@ -142,19 +149,39 @@ export default function MyPurchases() {
           </select>
         </label>
         <label>
-          <span>Search reference</span>
-          <input
-            type="search"
-            value={referenceQuery}
-            onChange={(event) => setReferenceQuery(event.target.value)}
-            placeholder="RSV-0001 or SRV-0001"
-          />
+          <span>Search</span>
+          <span className="customer-purchases-search">
+            <input
+              type="text"
+              role="searchbox"
+              inputMode="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by name or reference"
+            />
+            {searchQuery && <button type="button" aria-label="Clear search" title="Clear search" onClick={() => {
+              setSearchQuery('');
+              setDebouncedSearchQuery('');
+            }}>×</button>}
+          </span>
         </label>
       </div>
+      {!isLoading && <p className="customer-purchases-result-count" aria-live="polite">
+        {visibleRecords.length} {visibleRecords.length === 1 ? 'result' : 'results'}
+      </p>}
       {isLoading
         ? <p className="customer-empty">Loading purchases and bookings...</p>
         : visibleRecords.length
           ? <PurchaseRecordList records={visibleRecords} showType={activeTab === 'all'} />
+          : debouncedSearchQuery
+            ? <section className="customer-empty-cart">
+              <span aria-hidden="true">⌕</span>
+              <h2>No purchases match your search</h2>
+              <button type="button" className="customer-secondary-button" onClick={() => {
+                setSearchQuery('');
+                setDebouncedSearchQuery('');
+              }}>Clear search</button>
+            </section>
           : tabRecords.length
             ? <section className="customer-empty-cart">
               <span aria-hidden="true">⌕</span>

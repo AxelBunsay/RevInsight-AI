@@ -31,6 +31,9 @@ describe('customer account responsive layout', () => {
   it('keeps profile and security inputs aligned and sizes their buttons consistently', () => {
     expect(accountStyles).toContain('grid-template-columns: repeat(4, minmax(0, 1fr));\n  align-items: start;');
     expect(accountStyles).toContain('grid-template-rows: auto 44px minmax(18px, auto);');
+    expect(accountStyles).toContain('.customer-account-email-field {\n  grid-template-rows: auto 44px;');
+    expect(profilePage).toContain(`className="customer-account-email-field">Email address<input type="email" readOnly title="Your email is your login and can't be changed here."`);
+    expect(profilePage).not.toContain('Contact the shop to change your email.');
     expect(accountStyles).toContain('height: 44px;\n  min-height: 44px;');
     expect(accountStyles).toContain('height: 40px;\n  padding: 0 20px;');
     expect(accountStyles).toContain('@media (min-width: 481px) and (max-width: 1199px)');

@@ -38,9 +38,33 @@ function isCancelledOrExpired(status) {
 }
 
 export function filterPurchaseRecords(records, statusFilter, query) {
-  const referenceQuery = String(query || '').trim().toLowerCase();
+  const searchTerms = String(query || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
   return records.filter((record) => {
-    if (referenceQuery && !String(record.reference || '').toLowerCase().includes(referenceQuery)) return false;
+    if (searchTerms.length) {
+      const value = record.value || {};
+      const items = (value.items || []).flatMap((item) => [
+        item.name,
+        item.productName,
+        item.variantLabel
+      ]);
+      const searchText = [
+        record.reference,
+        String(record.reference || '').replace(/[^a-z0-9]/gi, ''),
+        record.status,
+        value.status,
+        value.paymentStatus,
+        value.serviceType,
+        value.serviceName,
+        value.name,
+        value.unitLabel,
+        value.vehicle,
+        value.vehicleModel,
+        value.vehicleName,
+        value.motorcycle,
+        ...items
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!searchTerms.every((term) => searchText.includes(term))) return false;
+    }
     if (statusFilter === 'completed') return isCompleted(record.status);
     if (statusFilter === 'cancelled') return isCancelledOrExpired(record.status);
     if (statusFilter === 'active') return !isCompleted(record.status) && !isCancelledOrExpired(record.status);
