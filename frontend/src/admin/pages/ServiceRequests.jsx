@@ -150,7 +150,7 @@ function ServiceRequests() {
                         key={mechanic.id || mechanic._id}
                         value={mechanic.id || mechanic._id}
                       >
-                        {mechanic.firstName} {mechanic.lastName}
+                        {mechanic.firstName} {mechanic.lastName}{mechanic.username ? ` (@${mechanic.username})` : ""}
                       </option>
                     ))}
                   </select>

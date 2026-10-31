@@ -1,6 +1,9 @@
 .admin-root .admin-page-heading {
   margin-bottom: 18px;
 }
+.admin-root .admin-page-heading.admin-topbar-heading {
+  margin-bottom: 0;
+}
 .admin-root .admin-page-heading h1 {
   margin: 0;
   color: var(--ink);
@@ -1466,6 +1469,14 @@
   }
   .admin-root .admin-sales-summary__total > strong {
     font-size: 30px;
+  }
+
+  .admin-root .admin-stat-cell__value {
+    overflow: visible;
+    font-size: clamp(14px, 4.7vw, 23px);
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .admin-root .admin-period-toggle {
     max-width: 100%;

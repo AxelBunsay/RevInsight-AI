@@ -9,6 +9,8 @@ import NotificationDropdown from '../../components/NotificationDropdown';
 import NotificationContent from '../../components/NotificationContent';
 import { clearNotificationList } from '../../utils/notificationActions';
 import useDocumentTitle from '../../utils/useDocumentTitle';
+import { clearAuthSession, getAuthToken } from '../../auth/authSession';
+import { clearCustomerAuthAction } from './customerAuthAction';
 import '../styles/shared.css';
 import '../styles/customer-flow.css';
 
@@ -54,7 +56,7 @@ export function CustomerAccountMenuTrigger({ isActive, isExpanded, onClick }) {
 
 export function CustomerAuthGuard({ children }) {
   const location = useLocation();
-  const customerToken = localStorage.getItem('customerToken');
+  const customerToken = getAuthToken('customer');
   const hasCustomerAccount = Boolean(customerToken && customerToken !== 'prototype-guest');
 
   return hasCustomerAccount ? children : <Navigate to="/customer/login" replace state={{ from: location }} />;
@@ -74,7 +76,7 @@ export function CustomerHeader() {
   const notificationAreaRef = useRef(null);
   const [notificationError, setNotificationError] = useState('');
   const [isClearingNotifications, setIsClearingNotifications] = useState(false);
-  const customerToken = localStorage.getItem('customerToken');
+  const customerToken = getAuthToken('customer');
   const hasCustomerAccount = Boolean(customerToken && customerToken !== 'prototype-guest');
   const cartCount = cart.reduce((total, item) => total + Number(item.quantity || 1), 0);
 
@@ -143,7 +145,8 @@ export function CustomerHeader() {
   };
 
   const logout = () => {
-    localStorage.removeItem('customerToken');
+    clearAuthSession('customer');
+    clearCustomerAuthAction();
     clearCustomerData();
     window.location.href = '/customer/login';
   };

@@ -1,4 +1,5 @@
 import { api } from '../services/api';
+import { clearAuthSession } from '../auth/authSession';
 
 export const loginMechanic = (credentials) => api.loginMechanic(credentials);
 export const getMechanicProfile = () => api.getMechanicProfile();
@@ -27,5 +28,9 @@ export async function performJobAction(job, action) {
 }
 
 export function logoutMechanic() {
-  ['mechanicToken', 'mechanicUser', 'mechanicMode', 'mechanicDemoProfile', 'mechanicDemoJobs', 'mechanicDemoNotifications'].forEach((key) => localStorage.removeItem(key));
+  clearAuthSession('mechanic');
+  ['mechanicMode', 'mechanicDemoProfile', 'mechanicDemoJobs', 'mechanicDemoNotifications'].forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
 }

@@ -75,22 +75,29 @@ const getMechanicsSummary = async (req, res) => {
 
 const createMechanic = async (req, res) => {
     try {
-    const { email, password, firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications } = req.body;
+    const { username, email, password, firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications } = req.body;
 
     if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
       return res.status(400).json({ message: 'Password must be at least 8 characters and include a letter and a number.' });
     }
 
-    // Check if mechanic exists (normalize email to match schema lowercase/trim)
-    const normalizedEmail = email.toLowerCase().trim();
-    const existingMechanic = await Mechanic.findOne({ email: normalizedEmail });
-    if (existingMechanic) {
-      return res.status(400).json({ message: 'Mechanic email already exists' });
+    const normalizedUsername = username.trim().toLowerCase();
+    const existingUsername = await Mechanic.findOne({ username: normalizedUsername })
+      .collation({ locale: 'en', strength: 2 });
+    if (existingUsername) {
+      return res.status(409).json({ message: 'Username is already taken' });
+    }
+    if (email) {
+      const existingEmail = await Mechanic.findOne({ email: email.trim().toLowerCase() });
+      if (existingEmail) {
+        return res.status(400).json({ message: 'Mechanic email already exists' });
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const mechanic = await Mechanic.create({
+      username: normalizedUsername,
       email,
       password: hashedPassword,
       firstName,
@@ -106,6 +113,7 @@ const createMechanic = async (req, res) => {
       message: 'Mechanic account created successfully',
       mechanic: {
         id: mechanic._id,
+        username: mechanic.username,
         email: mechanic.email,
         firstName: mechanic.firstName,
         lastName: mechanic.lastName,
@@ -121,30 +129,32 @@ const createMechanic = async (req, res) => {
     });
   } catch (error) {
     console.error('[createMechanic] error', error);
+    if (error.code === 11000 && error.keyPattern?.username) {
+      return res.status(409).json({ message: 'Username is already taken' });
+    }
+    if (error.code === 11000 && error.keyPattern?.email) {
+      return res.status(400).json({ message: 'Mechanic email already exists' });
+    }
     res.status(500).json({ message: 'Failed to create mechanic. Please try again.' });
   }
 };
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { username, password, rememberMe } = req.body || {};
+    const invalidCredentials = () => res.status(401).json({ message: 'Invalid username or password' });
+    if (typeof username !== 'string' || typeof password !== 'string') return invalidCredentials();
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const mechanic = await Mechanic.findOne({ email: normalizedEmail }).select('+password');
-    if (!mechanic) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    if (!mechanic.isActive) {
-      return res.status(403).json({ message: 'Mechanic account is inactive' });
-    }
+    const mechanic = await Mechanic.findOne({ username: username.trim().toLowerCase(), role: 'mechanic' })
+      .collation({ locale: 'en', strength: 2 })
+      .select('+password');
+    if (!mechanic || !mechanic.isActive) return invalidCredentials();
 
     const isPasswordValid = await bcrypt.compare(password, mechanic.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
+    if (!isPasswordValid) return invalidCredentials();
 
     const token = jwt.sign({ userId: mechanic._id, role: 'mechanic' }, process.env.JWT_SECRET, {
-      expiresIn: '7d'
+      expiresIn: rememberMe === true ? '30d' : '12h'
     });
 
     res.status(200).json({
@@ -153,6 +163,7 @@ const login = async (req, res) => {
       mechanic: {
         id: mechanic._id,
         _id: mechanic._id,
+        username: mechanic.username,
         email: mechanic.email,
         firstName: mechanic.firstName,
         lastName: mechanic.lastName,
@@ -178,6 +189,7 @@ const getProfile = async (req, res) => {
     res.status(200).json({
       mechanic: {
         id: mechanic._id,
+        username: mechanic.username,
         email: mechanic.email,
         firstName: mechanic.firstName,
         lastName: mechanic.lastName,
@@ -225,6 +237,7 @@ const updateProfile = async (req, res) => {
       message: 'Profile updated successfully',
       mechanic: {
         id: mechanic._id,
+        username: mechanic.username,
         email: mechanic.email,
         firstName: mechanic.firstName,
         lastName: mechanic.lastName,
@@ -244,12 +257,14 @@ const updateProfile = async (req, res) => {
 
 const listAllMechanics = async (req, res) => {
   try {
-    const mechanics = await Mechanic.find({ isActive: { $ne: false } }).select('firstName lastName email specialization totalRepairs averageRating isActive createdBy photoUrl bio availabilityStatus successRate yearsOfExperience');
+    const mechanics = await Mechanic.find({ isActive: { $ne: false } }).select('firstName lastName username phoneNumber email specialization totalRepairs averageRating isActive createdBy photoUrl bio availabilityStatus successRate yearsOfExperience');
 
     const formatted = mechanics.map(m => ({
       id: m._id,
       firstName: m.firstName,
       lastName: m.lastName,
+      username: m.username,
+      phoneNumber: m.phoneNumber,
       email: m.email,
       specialization: m.specialization,
       yearsOfExperience: m.yearsOfExperience,
@@ -316,7 +331,7 @@ const deleteMechanic = async (req, res) => {
 const updateMechanic = async (req, res) => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications, password, photoUrl, bio, availabilityStatus, successRate } = req.body;
+    const { username, firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications, password, photoUrl, bio, availabilityStatus, successRate } = req.body;
 
     const mechanic = await Mechanic.findById(id);
     if (!mechanic) {
@@ -324,6 +339,7 @@ const updateMechanic = async (req, res) => {
     }
 
     const update = {
+      username: username !== undefined ? username.trim().toLowerCase() : mechanic.username,
       firstName: firstName !== undefined ? firstName : mechanic.firstName,
       lastName: lastName !== undefined ? lastName : mechanic.lastName,
       phoneNumber: phoneNumber !== undefined ? phoneNumber : mechanic.phoneNumber,
@@ -344,10 +360,19 @@ const updateMechanic = async (req, res) => {
       update.password = hashed;
     }
 
+    if (username !== undefined) {
+      const existingUsername = await Mechanic.findOne({ username: update.username, _id: { $ne: id } })
+        .collation({ locale: 'en', strength: 2 });
+      if (existingUsername) {
+        return res.status(409).json({ message: 'Username is already taken' });
+      }
+    }
+
     const updated = await Mechanic.findByIdAndUpdate(id, update, { new: true, runValidators: true });
 
     res.status(200).json({ message: 'Mechanic updated successfully', mechanic: {
       id: updated._id,
+      username: updated.username,
       firstName: updated.firstName,
       lastName: updated.lastName,
       email: updated.email,
@@ -361,6 +386,9 @@ const updateMechanic = async (req, res) => {
     }});
   } catch (error) {
     console.error('[updateMechanic] error', error);
+    if (error.code === 11000 && error.keyPattern?.username) {
+      return res.status(409).json({ message: 'Username is already taken' });
+    }
     res.status(500).json({ message: 'Failed to update mechanic. Please try again.' });
   }
 };

@@ -252,6 +252,20 @@
 .admin-root .admin-management-page .transactions-container {
   overflow-x: visible;
 }
+@media (max-width: 1024px) {
+  .admin-root .admin-management-page .transactions-table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted) transparent;
+    box-shadow: inset -10px 0 10px -12px rgba(43, 26, 18, .8);
+  }
+
+  .admin-root .admin-management-page .transactions-table {
+    min-width: 1050px;
+  }
+}
 .admin-root .admin-management-page .inventory-table th,
 .admin-root .admin-management-page .transactions-table th {
   color: var(--muted);
@@ -903,15 +917,6 @@
     padding: 14px;
   }
 
-  @media (max-width: 1099px) {
-    .admin-root .admin-management-page .transactions-table-scroll {
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
-    }
-    .admin-root .admin-management-page .transactions-table {
-      min-width: 1050px;
-    }
-  }
   .admin-root .admin-management-page .search-filter,
   .admin-root .admin-management-page .transactions-header,
   .admin-root .admin-management-page .inventory-header,
@@ -1335,6 +1340,101 @@
 @media (max-width: 700px) {
   .gcash-admin-settings-grid,
   .gcash-admin-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.admin-root .admin-management-page .mechanic-form-dialog {
+  width: min(100%, 560px);
+  max-height: min(90dvh, 800px);
+  overflow: auto;
+  padding: 22px;
+}
+
+.admin-root .admin-management-page .mechanic-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 12px;
+}
+
+.admin-root .admin-management-page .mechanic-form-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 6px;
+}
+
+.admin-root .admin-management-page .mechanic-form-field > input,
+.admin-root .admin-management-page .mechanic-password-control > input,
+.admin-root .admin-management-page .mechanic-form-field > select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 11px;
+}
+
+.admin-root .admin-management-page .mechanic-form-field > input[readonly] {
+  background: #f7f3ef;
+  color: #6b5440;
+}
+
+.admin-root .admin-management-page .mechanic-username-hint {
+  color: #6b5440;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.admin-root .admin-management-page .mechanic-password-control {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.admin-root .admin-management-page .mechanic-password-control > input {
+  padding-right: 60px;
+}
+
+.admin-root .admin-management-page .mechanic-password-toggle {
+  position: absolute;
+  right: 4px;
+  min-width: 48px;
+  min-height: 36px;
+  padding: 5px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8c4b1f;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-root .admin-management-page .mechanic-password-toggle:focus-visible {
+  outline: 2px solid #e8630f;
+  outline-offset: 1px;
+}
+
+.admin-root .admin-management-page .mechanic-form-dialog .admin-dialog-form {
+  gap: 14px;
+}
+
+.admin-root .admin-management-page .mechanic-form-dialog .admin-dialog-actions {
+  margin-top: 2px;
+}
+
+@media (max-width: 599px) {
+  .admin-root .admin-management-page .admin-dialog-backdrop {
+    padding: 8px;
+  }
+
+  .admin-root .admin-management-page .mechanic-form-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 16px);
+    padding: 16px;
+  }
+
+  .admin-root .admin-management-page .mechanic-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

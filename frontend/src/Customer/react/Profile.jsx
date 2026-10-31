@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
+import { clearAuthSession } from '../../auth/authSession';
+import { clearCustomerAuthAction } from './customerAuthAction';
 import '../styles/customer-flow.css';
 
 const activeReservationStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved'];
@@ -193,7 +195,8 @@ export default function CustomerProfile() {
         password: deletePassword,
         confirmation: deleteConfirmation
       });
-      localStorage.removeItem('customerToken');
+      clearAuthSession('customer');
+      clearCustomerAuthAction();
       clearCustomerData();
       navigate('/customer/shop', {
         replace: true,

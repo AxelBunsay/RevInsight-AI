@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { getMechanicNotifications, logoutMechanic, markMechanicNotificationsRead } from './mechanicService';
+import { getAuthUser } from '../auth/authSession';
 import NotificationContent from '../components/NotificationContent';
+import RouteContentTransition from '../components/RouteContentTransition';
 import useDocumentTitle from '../utils/useDocumentTitle';
 import './mechanic-ui.css';
 import './mechanic-notifications.css';
@@ -12,16 +14,21 @@ const links = [
   { to: '/mechanic/profile', label: 'Profile', icon: '●' }
 ];
 
-export default function MechanicLayout({ title, children }) {
+export default function MechanicLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const pageName = title === 'Mechanic Jobs'
+  const currentTitle = location.pathname === '/mechanic/jobs'
+    ? 'Mechanic Jobs'
+    : location.pathname === '/mechanic/profile'
+      ? 'Mechanic Profile'
+      : 'Mechanic Dashboard';
+  const pageName = currentTitle === 'Mechanic Jobs'
     ? 'Jobs'
-    : title === 'Mechanic Dashboard'
+    : currentTitle === 'Mechanic Dashboard'
       ? 'Dashboard'
-      : title === 'Mechanic Profile'
+      : currentTitle === 'Mechanic Profile'
         ? 'Profile'
-        : title;
+        : currentTitle;
   useDocumentTitle(`${pageName} | Mechanic | Manoy's`);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -33,7 +40,7 @@ export default function MechanicLayout({ title, children }) {
     getMechanicNotifications().then((items) => {
       if (active) {
         setNotifications(items);
-        setProfile(JSON.parse(localStorage.getItem('mechanicUser') || '{}'));
+        setProfile(getAuthUser('mechanic') || {});
       }
     });
     return () => { active = false; };
@@ -46,7 +53,7 @@ export default function MechanicLayout({ title, children }) {
   return (
     <div className="mechanic-shell">
       <aside className="mechanic-sidebar">
-        <Link className="mechanic-brand" to="/mechanic/dashboard" aria-label="Mechanic dashboard">🔧</Link>
+        <Link className="mechanic-brand" to="/mechanic/dashboard" aria-label="Mechanic dashboard"><img src="/logo-mechanic.png" alt="Manoy's mechanic portal" width="40" height="40" /></Link>
         <nav className="mechanic-navigation" aria-label="Mechanic navigation">
           {links.map((item) => <NavLink key={item.to} to={item.to} className={({ isActive }) => `mechanic-nav-link${isActive ? ' active' : ''}`}><span className="mechanic-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span></NavLink>)}
         </nav>
@@ -55,7 +62,7 @@ export default function MechanicLayout({ title, children }) {
 
       <div className="mechanic-workspace">
         <header className="mechanic-header">
-          <div className="mechanic-heading"><span className="mechanic-eyebrow">Mechanic portal</span><h1>{title}</h1></div>
+          <div className="mechanic-heading"><img className="mechanic-header-logo" src="/logo-mechanic.png" alt="Manoy's mechanic portal" width="40" height="40" /><div><span className="mechanic-eyebrow">Mechanic portal</span><h1>{currentTitle}</h1></div></div>
           <div className="mechanic-header-tools">
             <time>{date}</time>
             <div className="mechanic-notification-wrap">
@@ -76,7 +83,11 @@ export default function MechanicLayout({ title, children }) {
             <Link className="mechanic-user-link" to="/mechanic/profile" aria-label={`Profile: ${name}`}><span>{name.charAt(0).toUpperCase()}</span></Link>
           </div>
         </header>
-        <main className="mechanic-main">{children}</main>
+        <main className="mechanic-main">
+          <RouteContentTransition pathname={location.pathname}>
+            <Outlet />
+          </RouteContentTransition>
+        </main>
       </div>
 
       {showLogout && <div className="mechanic-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLogout(false); }}>

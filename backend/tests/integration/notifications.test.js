@@ -98,6 +98,23 @@ describe('notification clear integration', () => {
     expect(await Notification.countDocuments()).toBe(1);
   });
 
+  it('counts new admin notifications as unread and clears the badge when all are read', async () => {
+    const [newNotification] = await Notification.create([
+      notification({ audience: 'admin', message: 'A new payment needs review.' })
+    ]);
+
+    const beforeRead = await api.get('/api/admin/notifications').set('Authorization', 'Bearer ' + adminToken);
+    const markedRead = await api.post('/api/admin/notifications/read-all').set('Authorization', 'Bearer ' + adminToken);
+    const afterRead = await api.get('/api/admin/notifications').set('Authorization', 'Bearer ' + adminToken);
+
+    expect(beforeRead.status).toBe(200);
+    expect(beforeRead.body.notifications.map((item) => item._id)).toContain(String(newNotification._id));
+    expect(beforeRead.body.unreadCount).toBe(1);
+    expect(markedRead.status).toBe(200);
+    expect(afterRead.body.unreadCount).toBe(0);
+    expect((await Notification.findById(newNotification._id)).read).toBe(true);
+  });
+
   it('shows notifications created after a customer clears the current list', async () => {
     await Notification.create(notification({ audience: 'customer', customerId: fixtures.customer._id }));
     await api.delete('/api/notifications').set('Authorization', 'Bearer ' + customerToken);

@@ -62,6 +62,7 @@ describe('customer profile phone validation', () => {
 
     it('requires an eight-character password with a letter and number for mechanic creation', () => {
       const body = {
+        username: 'mechanic.alex',
         email: 'mechanic@example.com',
         password: 'short1',
         firstName: 'Alex',

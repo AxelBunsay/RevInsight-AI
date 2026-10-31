@@ -1,12 +1,19 @@
-const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
+import { clearAuthSession, getAuthToken } from '../auth/authSession';
 
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:5000' : '');
 export async function request(path, options = {}) {
   const tokenKey = Object.prototype.hasOwnProperty.call(options, 'tokenKey')
     ? options.tokenKey
     : 'adminToken';
-  const token = tokenKey ? localStorage.getItem(tokenKey) : null;
+  const token = tokenKey === 'customerToken'
+    ? getAuthToken('customer')
+    : tokenKey === 'mechanicToken'
+      ? getAuthToken('mechanic')
+      : tokenKey ? localStorage.getItem(tokenKey) : null;
   const requestOptions = { ...options };
   delete requestOptions.tokenKey;
+  const suppressAuthRedirect = requestOptions.suppressAuthRedirect === true;
+  delete requestOptions.suppressAuthRedirect;
   const headers = new Headers(options.headers);
 
   if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -32,10 +39,14 @@ export async function request(path, options = {}) {
       || /\/customers\/me\/password(?:[/?]|$)/.test(path)
       || (path === '/api/customers/me' && requestOptions.method === 'DELETE');
     if (response.status === 401 && token && tokenKey && !isAuthException) {
-      localStorage.removeItem(tokenKey);
+      if (tokenKey === 'customerToken' || tokenKey === 'mechanicToken') {
+        clearAuthSession(tokenKey === 'customerToken' ? 'customer' : 'mechanic');
+      } else {
+        localStorage.removeItem(tokenKey);
+      }
       if (tokenKey === 'adminToken') {
         window.dispatchEvent(new Event('admin-auth-expired'));
-      } else if (tokenKey === 'customerToken' || tokenKey === 'mechanicToken') {
+      } else if (!suppressAuthRedirect && (tokenKey === 'customerToken' || tokenKey === 'mechanicToken')) {
         const loginPath = tokenKey === 'customerToken' ? '/customer/login' : '/mechanic/login';
         const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
         window.location.assign(`${loginPath}?returnTo=${encodeURIComponent(returnPath)}`);
@@ -63,6 +74,16 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(credentials),
     tokenKey: null
+  }),
+  getCustomerProfile: (options = {}) => request('/api/users/profile', {
+    ...options,
+    tokenKey: 'customerToken',
+    cache: 'no-store'
+  }),
+  getMechanicProfile: (options = {}) => request('/api/mechanics/profile', {
+    ...options,
+    tokenKey: 'mechanicToken',
+    cache: 'no-store'
   }),
   updateCustomerProfile: (profile) => request('/api/customers/me', {
     method: 'PUT',
@@ -129,10 +150,9 @@ export const api = {
   getServiceSlots: (serviceId, date, units = 1) => request(`/api/services/${encodeURIComponent(serviceId)}/slots?date=${encodeURIComponent(date)}&units=${encodeURIComponent(units)}`, { tokenKey: 'customerToken', cache: 'no-store' }),
   createServiceBookings: (bookings) => request('/api/services/bookings', { method: 'POST', body: JSON.stringify({ bookings }), tokenKey: 'customerToken' }),
   getAvailableMechanics: () => request('/api/mechanics/available', { tokenKey: 'customerToken' }),
-  getMechanicProfile: () => request('/api/mechanics/profile', { tokenKey: 'mechanicToken' }),
-  getMechanicStats: (mechanicId) => request(`/api/mechanic/${encodeURIComponent(mechanicId)}/stats`, { tokenKey: 'mechanicToken' })
-  ,updateMechanicProfile: (profile) => request('/api/mechanics/profile', { method: 'PUT', body: JSON.stringify(profile), tokenKey: 'mechanicToken' })
-  ,getMechanicJobs: () => request('/api/service-requests/mechanic', { tokenKey: 'mechanicToken' })
-  ,acceptMechanicJob: (requestId, startTime) => request('/api/service-requests/accept', { method: 'PUT', body: JSON.stringify({ requestId, startTime }), tokenKey: 'mechanicToken' })
-  ,updateMechanicJobStatus: (requestId, status) => request('/api/service-requests/status', { method: 'PUT', body: JSON.stringify({ requestId, status }), tokenKey: 'mechanicToken' })
+  getMechanicStats: (mechanicId) => request(`/api/mechanic/${encodeURIComponent(mechanicId)}/stats`, { tokenKey: 'mechanicToken' }),
+  updateMechanicProfile: (profile) => request('/api/mechanics/profile', { method: 'PUT', body: JSON.stringify(profile), tokenKey: 'mechanicToken' }),
+  getMechanicJobs: () => request('/api/service-requests/mechanic', { tokenKey: 'mechanicToken' }),
+  acceptMechanicJob: (requestId, startTime) => request('/api/service-requests/accept', { method: 'PUT', body: JSON.stringify({ requestId, startTime }), tokenKey: 'mechanicToken' }),
+  updateMechanicJobStatus: (requestId, status) => request('/api/service-requests/status', { method: 'PUT', body: JSON.stringify({ requestId, status }), tokenKey: 'mechanicToken' })
 };

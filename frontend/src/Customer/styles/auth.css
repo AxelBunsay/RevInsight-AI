@@ -243,6 +243,33 @@
   box-shadow: 0 0 0 3px rgba(251, 101, 13, 0.12);
 }
 
+.customer-auth-form .customer-auth-remember {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  margin-top: -10px;
+  color: #45566b;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.customer-auth-form .customer-auth-remember input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: #fb650d;
+  cursor: pointer;
+}
+
+.customer-auth-form .customer-auth-remember input[type="checkbox"]:focus-visible {
+  outline: 2px solid #fb650d;
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
 .customer-auth-form button {
   display: inline-flex;
   align-items: center;

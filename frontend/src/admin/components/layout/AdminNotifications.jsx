@@ -29,9 +29,16 @@ function AdminNotifications() {
     };
     load();
     const interval = window.setInterval(load, 30000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
     return () => {
       active = false;
       window.clearInterval(interval);
+      window.removeEventListener('focus', load);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, []);
 

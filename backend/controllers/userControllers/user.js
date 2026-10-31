@@ -379,16 +379,26 @@ const resendOtp = async (req, res) => {
 // Login (unchanged - only for verified users)
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email }).select('+password');
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    let user = normalizedEmail
+      ? await User.findOne({ email: normalizedEmail }).select('+password')
+      : null;
+    if (!user && normalizedEmail) {
+      user = await User.findOne({ email: normalizedEmail })
+        .collation({ locale: 'en', strength: 2 })
+        .select('+password');
+    }
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     if (user.isDeleted) {
       return res.status(401).json({ message: 'This customer account has been deleted.' });
+    }
+    if (user.isActive === false) {
+      return res.status(401).json({ message: 'Invalid credentials' });
     }
 
     // Check if email is verified
@@ -404,7 +414,7 @@ const login = async (req, res) => {
 
     // Generate token
     const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: '7d'
+      expiresIn: rememberMe === true ? '30d' : '1d'
     });
 
     res.status(200).json({
@@ -727,6 +737,7 @@ const getReceipts = async (req, res) => {
 };
 
 module.exports = {
+  transporter,
   registerRequest,
   verifyOtp,
   resendOtp,

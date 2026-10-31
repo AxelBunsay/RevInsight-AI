@@ -26,6 +26,14 @@
   -webkit-font-smoothing: antialiased;
 }
 
+.admin-root.admin-root--drawer-layout {
+  display: block;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
 .admin-root .admin-dashboard {
   --bg: #faf3ec;
   --surface: #ffffff;
@@ -193,6 +201,13 @@
   font-weight: 800;
   letter-spacing: .06em;
   line-height: 1;
+}
+
+.admin-login__wordmark img {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  object-fit: contain;
 }
 
 .admin-login__ai-badge {

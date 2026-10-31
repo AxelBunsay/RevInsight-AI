@@ -691,7 +691,12 @@ function Transactions() {
         <div className="transactions-container">
           {error && (
             <p className="dashboard-error" role="alert">
-              {error}
+              {error}{" "}
+              {activeTab === "services" && (
+                <button type="button" onClick={() => setRefreshKey((key) => key + 1)}>
+                  Retry
+                </button>
+              )}
             </p>
           )}
           {settingsToast && <p className="reservation-admin-toast" role="status">{settingsToast}</p>}

@@ -84,6 +84,29 @@ describe('request authentication expiry handling', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it('sends mechanic login fields without attaching a stale stored token', async () => {
+    mockUnauthorized({
+      customerToken: 'customer-token',
+      mechanicToken: 'mechanic-token',
+      adminToken: 'admin-token'
+    });
+
+    await expect(api.loginMechanic({
+      username: 'donjhon',
+      password: 'MechanicPass1',
+      rememberMe: true
+    })).rejects.toMatchObject({ status: 401 });
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toContain('/api/mechanics/login');
+    expect(JSON.parse(options.body)).toEqual({
+      username: 'donjhon',
+      password: 'MechanicPass1',
+      rememberMe: true
+    });
+    expect(options.headers.get('Authorization')).toBeNull();
+  });
+
   it('keeps the customer token when a protected password request returns 401', async () => {
     const { removeItem, assign } = mockUnauthorized({ customerToken: 'customer-token' });
 
@@ -104,7 +127,6 @@ describe('request authentication expiry handling', () => {
 
     await expect(api.getCustomerReservations()).rejects.toMatchObject({ status: 401 });
 
-    expect(removeItem).toHaveBeenCalledOnce();
     expect(removeItem).toHaveBeenCalledWith('customerToken');
     expect(assign).toHaveBeenCalledWith('/customer/login?returnTo=%2Fcustomer%2Fprofile%3Ftab%3Dsecurity');
   });

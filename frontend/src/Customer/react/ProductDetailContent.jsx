@@ -4,6 +4,7 @@ import { useCustomerPrototype } from './useCustomerPrototype';
 import { api } from '../../services/api';
 import ProductImage from './ProductImage';
 import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
+import { getAuthToken } from '../../auth/authSession';
 import { getProductDetailSelection, getVariantAvailability } from './productDetailHelpers';
 import '../styles/customer-flow.css';
 
@@ -132,7 +133,7 @@ export default function ProductDetailContent({
 
   const addProduct = (goToCart = false) => {
     if (!product || availableStock <= 0) return;
-    const customerToken = localStorage.getItem('customerToken');
+    const customerToken = getAuthToken('customer');
     if (!customerToken || customerToken === 'prototype-guest') {
       saveCustomerAuthAction({
         type: 'item',

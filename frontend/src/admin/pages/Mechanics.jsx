@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
+import { getMechanicFormError } from "./mechanicFormValidation";
 
 function Mechanics() {
   const [mechanics, setMechanics] = useState([]);
@@ -14,10 +15,12 @@ function Mechanics() {
   const [editingMechanic, setEditingMechanic] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
+    username: "",
     email: "",
     password: "",
     phoneNumber: "",
@@ -60,6 +63,7 @@ function Mechanics() {
   }, [refreshKey]);
 
   const openMechanicDialog = (mechanic = null) => {
+    setShowPassword(false);
     setEditingMechanic(mechanic);
     setIsAdding(!mechanic);
     setForm(
@@ -67,6 +71,7 @@ function Mechanics() {
         ? {
             firstName: mechanic.firstName || "",
             lastName: mechanic.lastName || "",
+            username: mechanic.username || "",
             email: mechanic.email || "",
             password: "",
             phoneNumber: mechanic.phoneNumber || "",
@@ -76,6 +81,7 @@ function Mechanics() {
         : {
             firstName: "",
             lastName: "",
+            username: "",
             email: "",
             password: "",
             phoneNumber: "",
@@ -87,8 +93,13 @@ function Mechanics() {
 
   const saveMechanic = async (event) => {
     event.preventDefault();
-    setIsSaving(true);
     setError("");
+    const formError = getMechanicFormError(form, Boolean(editingMechanic));
+    if (formError) {
+      setError(formError);
+      return;
+    }
+    setIsSaving(true);
 
     try {
       const payload = {
@@ -150,7 +161,7 @@ function Mechanics() {
     <AdminPageFrame>
       <section className="section-content active">
         <div className="mechanics-container">
-          {error && (
+          {error && !isAdding && !editingMechanic && (
             <p className="dashboard-error" role="alert">
               {error}
             </p>
@@ -208,6 +219,7 @@ function Mechanics() {
                     <div className="mechanic-specialty">
                       {mechanic.specialization || "General Service"}
                     </div>
+                    <div className="mechanic-email">@{mechanic.username || "No username"}</div>
                     <div className="mechanic-email">
                       {mechanic.email || "N/A"}
                     </div>
@@ -264,11 +276,12 @@ function Mechanics() {
         <AdminDialog
           title={editingMechanic ? "Edit Mechanic" : "Add Mechanic"}
           onClose={closeMechanicDialog}
+            dialogClassName="mechanic-form-dialog"
         >
-          <form className="admin-dialog-form" onSubmit={saveMechanic}>
-            <div className="admin-dialog-fields">
-              <label>
-                First name
+            <form className="admin-dialog-form" onSubmit={saveMechanic}>
+              <div className="mechanic-form-grid">
+                <label className="mechanic-form-field">
+                  First name
                 <input
                   required
                   value={form.firstName}
@@ -277,7 +290,7 @@ function Mechanics() {
                   }
                 />
               </label>
-              <label>
+              <label className="mechanic-form-field">
                 Last name
                 <input
                   required
@@ -287,44 +300,68 @@ function Mechanics() {
                   }
                 />
               </label>
-            </div>
-            {!editingMechanic && (
-              <label>
-                Email
+              <label className="mechanic-form-field">
+                Username
                 <input
                   required
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  minLength="4"
+                  maxLength="20"
+                  pattern="[A-Za-z0-9][A-Za-z0-9._-]{3,19}"
+                  value={form.username}
+                  onChange={(event) =>
+                    setForm({ ...form, username: event.target.value })
+                  }
+                />
+                <small className="mechanic-username-hint">4-20 characters: letters, numbers, . _ -</small>
+              </label>
+              <label className="mechanic-form-field mechanic-password-field">
+                {editingMechanic ? "New password (optional)" : "Password"}
+                <span className="mechanic-password-control">
+                  <input
+                    required={!editingMechanic}
+                    minLength="8"
+                    autoComplete="new-password"
+                    type={showPassword ? "text" : "password"}
+                    value={form.password}
+                    onChange={(event) =>
+                      setForm({ ...form, password: event.target.value })
+                    }
+                  />
+                  <button
+                    className="mechanic-password-toggle"
+                    type="button"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </span>
+              </label>
+              <label className="mechanic-form-field">
+                Phone number
+                <input
+                  required
+                  type="tel"
+                  value={form.phoneNumber}
+                  onChange={(event) =>
+                    setForm({ ...form, phoneNumber: event.target.value })
+                  }
+                />
+              </label>
+              <label className="mechanic-form-field">
+                Email (optional)
+                <input
                   type="email"
+                  readOnly={Boolean(editingMechanic)}
                   value={form.email}
                   onChange={(event) =>
                     setForm({ ...form, email: event.target.value })
                   }
                 />
               </label>
-            )}
-            <label>
-              {editingMechanic ? "New password (optional)" : "Password"}
-              <input
-                required={!editingMechanic}
-                minLength="6"
-                type="password"
-                value={form.password}
-                onChange={(event) =>
-                  setForm({ ...form, password: event.target.value })
-                }
-              />
-            </label>
-            <label>
-              Phone number
-              <input
-                required={!editingMechanic}
-                value={form.phoneNumber}
-                onChange={(event) =>
-                  setForm({ ...form, phoneNumber: event.target.value })
-                }
-              />
-            </label>
-            <div className="admin-dialog-fields">
-              <label>
+              <label className="mechanic-form-field">
                 Specialization
                 <select
                   value={form.specialization}
@@ -340,7 +377,7 @@ function Mechanics() {
                   <option value="brakes">Brakes</option>
                 </select>
               </label>
-              <label>
+              <label className="mechanic-form-field">
                 Years of experience
                 <input
                   required
@@ -353,6 +390,7 @@ function Mechanics() {
                 />
               </label>
             </div>
+            {error && <p className="dashboard-error" role="alert">{error}</p>}
             <div className="admin-dialog-actions">
               <button
                 className="btn-small"

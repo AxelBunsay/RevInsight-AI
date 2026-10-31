@@ -120,6 +120,7 @@ async function createFixtures() {
     }
   ]);
   const mechanic = await Mechanic.create({
+    username: 'integration.mechanic',
     email: 'integration.mechanic@example.com',
     password: 'MechanicPass1',
     firstName: 'Morgan',
@@ -175,6 +176,7 @@ module.exports = {
   Notification,
   Order,
   PaymentReference,
+  PendingUser,
   Product,
   Reservation,
   ReservationSettings,

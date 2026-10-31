@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import MechanicLayout from './MechanicLayout';
 import { api } from '../services/api';
 import { getMechanicProfile, saveMechanicProfile } from './mechanicService';
 
-const emptyProfile = { firstName: '', lastName: '', email: '', phoneNumber: '', specialization: 'general', yearsOfExperience: 0, certifications: [], bio: '', availabilityStatus: 'available' };
+const emptyProfile = { username: '', firstName: '', lastName: '', email: '', phoneNumber: '', specialization: 'general', yearsOfExperience: 0, certifications: [], bio: '', availabilityStatus: 'available' };
 
 export default function MechanicProfile() {
   const [profile, setProfile] = useState(emptyProfile);
@@ -41,7 +40,7 @@ export default function MechanicProfile() {
     finally { setSaving(false); }
   };
 
-  return <MechanicLayout title="Mechanic Profile">
+  return <>
     {error && <p className="mechanic-alert" role="alert">{error}</p>}{message && <p className="mechanic-success" role="status">{message}</p>}
     {loading ? <p className="mechanic-loading">Loading profile…</p> : <>
       <section className="mechanic-panel workload-panel">
@@ -56,6 +55,7 @@ export default function MechanicProfile() {
       <div className="mechanic-profile-grid">
         <label className="mechanic-field"><span>First name</span><input required value={profile.firstName} onChange={(event) => setField('firstName', event.target.value)} /></label>
         <label className="mechanic-field"><span>Last name</span><input required value={profile.lastName} onChange={(event) => setField('lastName', event.target.value)} /></label>
+        <label className="mechanic-field full-width"><span>Username</span><input value={profile.username || ''} readOnly autoComplete="username" /></label>
         <label className="mechanic-field full-width"><span>Email</span><input type="email" value={profile.email} readOnly /></label>
         <label className="mechanic-field full-width"><span>Phone number</span><input required value={profile.phoneNumber || ''} onChange={(event) => setField('phoneNumber', event.target.value)} /></label>
         <label className="mechanic-field"><span>Specialization</span><select value={profile.specialization} onChange={(event) => setField('specialization', event.target.value)}><option value="general">General</option><option value="engine">Engine</option><option value="transmission">Transmission</option><option value="electrical">Electrical</option><option value="suspension">Suspension</option><option value="brakes">Brakes</option></select></label>
@@ -67,5 +67,5 @@ export default function MechanicProfile() {
       <button className="button-primary profile-save" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save profile'}</button>
       </form>
     </>}
-  </MechanicLayout>;
+  </>;
 }

@@ -2,7 +2,7 @@ export function AdminPageFrame({ children }) {
   return <div className="admin-management-page">{children}</div>;
 }
 
-export function AdminDialog({ title, children, onClose }) {
+export function AdminDialog({ title, children, onClose, dialogClassName = '' }) {
   return (
     <div
       className="admin-dialog-backdrop"
@@ -10,7 +10,7 @@ export function AdminDialog({ title, children, onClose }) {
       onMouseDown={onClose}
     >
       <div
-        className="admin-dialog"
+        className={`admin-dialog${dialogClassName ? ` ${dialogClassName}` : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="admin-dialog-title"

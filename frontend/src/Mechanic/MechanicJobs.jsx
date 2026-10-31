@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import MechanicLayout from './MechanicLayout';
 import { JobDialog, JobTable } from './MechanicJobTable';
 import { getJobActions, getMechanicJobs, performJobAction } from './mechanicService';
 
@@ -55,7 +54,7 @@ export default function MechanicJobs() {
     finally { setBusy(false); }
   };
 
-  return <MechanicLayout title="Mechanic Jobs">
+  return <>
     {error && !selectedJob && <p className="mechanic-alert" role="alert">{error}</p>}
     <section className="mechanic-panel jobs-panel">
       <div className="mechanic-job-filters">
@@ -68,5 +67,5 @@ export default function MechanicJobs() {
       <JobTable jobs={visibleJobs} onSelect={setSelectedJob} />
     </section>
     <JobDialog job={selectedJob} onClose={() => setSelectedJob(null)} actions={selectedJob ? getJobActions(selectedJob) : []} onAction={runAction} busy={busy} error={selectedJob ? error : ''} />
-  </MechanicLayout>;
+  </>;
 }
