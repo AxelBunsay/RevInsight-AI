@@ -7,6 +7,12 @@ import {
   customerActionSignInMessage,
   readCustomerAuthAction
 } from './customerAuthAction';
+import {
+  buildLoginPayload,
+  DEFAULT_REMEMBER_ME,
+  getRememberedIdentifier,
+  storeAuthSession
+} from '../../auth/authSession';
 import '../styles/auth.css';
 
 export function CustomerLogin() {
@@ -14,7 +20,11 @@ export function CustomerLogin() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const { updateProfile } = useCustomerPrototype();
-  const [credentials, setCredentials] = useState({ email: '', password: '' });
+  const [credentials, setCredentials] = useState(() => ({
+    email: getRememberedIdentifier('customer'),
+    password: ''
+  }));
+  const [rememberMe, setRememberMe] = useState(DEFAULT_REMEMBER_ME);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const pendingAction = readCustomerAuthAction();
@@ -25,9 +35,18 @@ export function CustomerLogin() {
     setIsSubmitting(true);
     setError('');
     try {
-      const response = await api.loginCustomer(credentials);
-      localStorage.setItem('customerToken', response.token);
-      localStorage.setItem('customerUser', JSON.stringify(response.user || {}));
+      const response = await api.loginCustomer(buildLoginPayload(
+        'email',
+        credentials.email,
+        credentials.password,
+        rememberMe
+      ));
+      storeAuthSession('customer', {
+        token: response.token,
+        user: response.user,
+        rememberMe,
+        identifier: credentials.email
+      });
       updateProfile(response.user || {});
       const returnTo = searchParams.get('returnTo');
       const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : null;
@@ -53,6 +72,7 @@ export function CustomerLogin() {
       {error && <p className="customer-error" role="alert">{error}</p>}
       <label>Email Address<input type="email" required placeholder="you@email.com" value={credentials.email} onChange={(event) => setCredentials({ ...credentials, email: event.target.value })} /></label>
       <label>Password<input type="password" required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
+      <label className="customer-auth-remember"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
       <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
     </form>
   </>;

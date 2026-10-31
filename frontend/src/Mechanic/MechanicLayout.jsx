@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { getMechanicNotifications, logoutMechanic, markMechanicNotificationsRead } from './mechanicService';
+import { getAuthUser } from '../auth/authSession';
 import NotificationContent from '../components/NotificationContent';
 import useDocumentTitle from '../utils/useDocumentTitle';
 import './mechanic-ui.css';
@@ -33,7 +34,7 @@ export default function MechanicLayout({ title, children }) {
     getMechanicNotifications().then((items) => {
       if (active) {
         setNotifications(items);
-        setProfile(JSON.parse(localStorage.getItem('mechanicUser') || '{}'));
+        setProfile(getAuthUser('mechanic') || {});
       }
     });
     return () => { active = false; };

@@ -7,7 +7,9 @@ const {
   app,
   BusinessRecord,
   Product,
+  Reservation,
   ServiceRequest,
+  mongoose,
   startReplicaSet,
   stopReplicaSet,
   clearCollections,
@@ -43,7 +45,7 @@ function nextSundayDate() {
   return dateOffset(daysUntilSunday);
 }
 
-const serviceDate = dateOffset(1);
+const serviceDate = dateOffset(new Date().getDay() === 6 ? 2 : 1);
 
 let fixtures;
 let customerToken;
@@ -114,6 +116,87 @@ describe('service booking business flow integration', () => {
     secondCustomerToken = signCustomer(fixtures.secondCustomer);
     mechanicToken = signMechanic(fixtures.mechanic);
     adminToken = signAdmin(fixtures.admin);
+  });
+
+  it('lists new and legacy service bookings safely alongside item reservations', async () => {
+    const missingMechanicId = new mongoose.Types.ObjectId();
+    const [paymentSubmitted, legacyBooking] = await ServiceRequest.create([
+      {
+        user: fixtures.customer._id,
+        serviceId: fixtures.service._id,
+        mechanic: fixtures.mechanic._id,
+        serviceType: 'Brake repair',
+        description: 'New down-payment booking',
+        estimatedPrice: 300,
+        totalAmount: 333,
+        downPaymentPercent: 50,
+        downPaymentAmount: 166.5,
+        balanceDue: 166.5,
+        amountPaid: 0,
+        paymentStatus: 'Payment Submitted',
+        paymentSubmissions: [{
+          reference: '1234567890',
+          paymentProofPublicId: 'private/proof',
+          submittedAt: new Date(),
+          amount: 166.5
+        }]
+      },
+      {
+        user: fixtures.customer._id,
+        serviceId: null,
+        mechanic: missingMechanicId,
+        serviceType: 'Legacy service',
+        description: 'Legacy confirmed booking',
+        estimatedPrice: 500,
+        paymentStatus: 'Confirmed'
+      }
+    ]);
+    await Reservation.create({
+      code: 'ITM-MIXED-TEST',
+      customerId: fixtures.customer._id,
+      customerName: 'Casey Customer',
+      items: [{
+        productId: fixtures.product._id,
+        name: fixtures.product.name,
+        unitPrice: 1000,
+        qty: 1,
+        lineTotal: 1000
+      }],
+      total: 1000,
+      downPaymentPercent: 30,
+      downPaymentAmount: 300,
+      balanceDue: 700
+    });
+
+    const response = await api.get('/api/service-requests?page=1&limit=100')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.requests).toHaveLength(2);
+    const listedPayment = response.body.requests.find((item) => item._id === String(paymentSubmitted._id));
+    const listedLegacy = response.body.requests.find((item) => item._id === String(legacyBooking._id));
+    expect(listedPayment).toMatchObject({
+      paymentStatus: 'Payment Submitted',
+      totalAmount: 333,
+      downPaymentAmount: 166.5,
+      balanceDue: 166.5,
+      paymentSubmissions: [{ reference: '1234567890', amount: 166.5 }]
+    });
+    expect(listedPayment.paymentSubmissions[0]).not.toHaveProperty('paymentProofPublicId');
+    expect(listedLegacy).toMatchObject({
+      serviceId: null,
+      mechanic: null,
+      estimatedPrice: 500,
+      paymentStatus: 'Confirmed'
+    });
+    expect(getServicePaymentSummary(listedLegacy)).toMatchObject({
+      totalAmount: 500,
+      downPaymentAmount: 500,
+      balanceDue: 0,
+      amountPaid: 500
+    });
+    expect(response.body.paymentSubmittedCount).toBe(1);
+    expect(response.body.totalAmount).toBe(800);
   });
 
   it('uses the configured service price and mechanic fee instead of client-supplied values', async () => {
@@ -260,10 +343,15 @@ describe('service booking business flow integration', () => {
       .field('amount', '1')
       .attach('proof', png, { filename: 'service-receipt.png', contentType: 'image/png' });
     const saved = await ServiceRequest.findById(requestId).lean();
+    const adminNotifications = await api.get('/api/admin/notifications')
+      .set('Authorization', `Bearer ${adminToken}`);
 
     expect(payment.status).toBe(200);
     expect(saved.paymentSubmissions[0].amount).toBe(166.5);
     expect(saved.amountPaid).toBe(0);
+    expect(adminNotifications.status).toBe(200);
+    expect(adminNotifications.body.notifications[0].message).toContain('New payment submitted:');
+    expect(adminNotifications.body.unreadCount).toBe(1);
   });
 
   it('treats a legacy confirmed booking without payment snapshots as fully paid upfront', () => {

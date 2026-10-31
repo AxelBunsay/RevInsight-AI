@@ -18,6 +18,7 @@ import MechanicDashboard from './Mechanic/MechanicDashboard';
 import MechanicJobs from './Mechanic/MechanicJobs';
 import MechanicProfile from './Mechanic/MechanicProfile';
 import MechanicAuthGuard from './Mechanic/MechanicAuthGuard';
+import SessionBootstrap from './auth/SessionBootstrap';
 import { CustomerPrototypeProvider } from './Customer/react/CustomerPrototypeProvider';
 import { CustomerPage } from './Customer/react/CustomerLayout';
 
@@ -41,9 +42,10 @@ function NotFoundPage() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <CustomerPrototypeProvider>
-          <Routes>
+      <SessionBootstrap>
+        <AuthProvider>
+          <CustomerPrototypeProvider>
+            <Routes>
           <Route path="/admin/*" element={<AdminApp />} />
           <Route path="/" element={<Shop />} />
         <Route path="/customer/shop" element={<Shop />} />
@@ -67,9 +69,10 @@ function App() {
         <Route path="/mechanic/jobs" element={<MechanicAuthGuard><MechanicJobs /></MechanicAuthGuard>} />
         <Route path="/mechanic/profile" element={<MechanicAuthGuard><MechanicProfile /></MechanicAuthGuard>} />
           <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </CustomerPrototypeProvider>
-      </AuthProvider>
+            </Routes>
+          </CustomerPrototypeProvider>
+        </AuthProvider>
+      </SessionBootstrap>
     </BrowserRouter>
   );
 }

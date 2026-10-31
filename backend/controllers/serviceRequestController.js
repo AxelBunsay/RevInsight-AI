@@ -642,7 +642,7 @@ const getAllServiceRequests = async (req, res) => {
     const response = { requests: requests.map((request) => {
       const value = request.toObject();
       value.paymentSubmissions = (value.paymentSubmissions || []).map((submission) => {
-        const data = submission.toObject();
+        const data = { ...submission };
         delete data.paymentProofPublicId;
         return data;
       });

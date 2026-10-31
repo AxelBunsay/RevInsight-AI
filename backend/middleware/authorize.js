@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { isDeletedCustomer, isInactiveMechanic } = require('./auth');
+const { isDeletedCustomer, isInactiveCustomer, isInactiveMechanic } = require('./auth');
 
 const authorizeRoles = (...roles) => async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -21,18 +21,20 @@ const authorizeRoles = (...roles) => async (req, res, next) => {
       if (await isDeletedCustomer(decoded.userId)) {
         return res.status(401).json({ message: 'This customer account has been deleted.' });
       }
-      if (decoded.role === 'mechanic') {
-        try {
-          if (await isInactiveMechanic(decoded.userId)) {
-            return res.status(401).json({ message: 'This mechanic account is inactive.' });
-          }
-        } catch (error) {
-          console.error('[authorizeRoles] mechanic status check failed', error);
-          return res.status(500).json({ message: 'Authentication could not be verified.' });
-        }
+      if (await isInactiveCustomer(decoded.userId)) {
+        return res.status(401).json({ message: 'Customer account is inactive.' });
       }
     } catch (error) {
       console.error('[authorizeRoles] customer status check failed', error);
+      return res.status(500).json({ message: 'Authentication could not be verified.' });
+    }
+  } else if (decoded.role === 'mechanic') {
+    try {
+      if (await isInactiveMechanic(decoded.userId)) {
+        return res.status(401).json({ message: 'This mechanic account is inactive.' });
+      }
+    } catch (error) {
+      console.error('[authorizeRoles] mechanic status check failed', error);
       return res.status(500).json({ message: 'Authentication could not be verified.' });
     }
   }

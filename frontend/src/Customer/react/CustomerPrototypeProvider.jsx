@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CustomerPrototypeContext } from './CustomerPrototypeContext';
 import { replaceServiceCartItem as replaceServiceCartItemInList } from './serviceCart';
+import { getAuthUser } from '../../auth/authSession';
 
 const STORAGE_KEY = 'revinsightCustomerPrototype';
 function readInitialState() {
@@ -11,7 +12,7 @@ function readInitialState() {
       wishlist: Array.isArray(saved.wishlist) ? saved.wishlist : [],
       reservations: Array.isArray(saved.reservations) ? saved.reservations : [],
       vehicles: Array.isArray(saved.vehicles) ? saved.vehicles : [],
-      profile: saved.profile || JSON.parse(localStorage.getItem('customerUser') || '{}')
+      profile: saved.profile || getAuthUser('customer') || JSON.parse(localStorage.getItem('customerUser') || '{}')
     };
   } catch {
     return { cart: [], wishlist: [], reservations: [], vehicles: [], profile: {} };

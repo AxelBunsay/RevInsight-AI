@@ -7,6 +7,7 @@ import { formatServiceName } from '../../utils/servicePricing';
 import { calculateServiceAmounts } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
+import { getAuthToken } from '../../auth/authSession';
 import {
   canSubmitServiceBooking,
   getDateChangeState
@@ -299,7 +300,7 @@ export default function ServiceDetail() {
 
   const addBooking = async () => {
     if (!canAddBooking || !selectedSlot) return;
-    const customerToken = localStorage.getItem('customerToken');
+    const customerToken = getAuthToken('customer');
     if (!customerToken || customerToken === 'prototype-guest') {
       saveCustomerAuthAction({
         type: 'service',

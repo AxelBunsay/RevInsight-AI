@@ -1,14 +1,30 @@
 const mongoose = require('mongoose');
 
+const usernamePattern = /^[a-z0-9][a-z0-9._-]{3,19}$/;
+
+const isValidPhilippinePhone = (phoneNumber) => {
+  return typeof phoneNumber === 'string'
+    && /^(?:(?:\+?63)|0)?[\s()-]*9(?:[\s()-]*\d){9}$/.test(phoneNumber.trim());
+};
+
 const mechanicSchema = new mongoose.Schema({
   // Authentication & Identity
-  email: {
+  username: {
     type: String,
-    required: [true, 'Email is required'],
-    unique: true,
+    required: [true, 'Username is required'],
     lowercase: true,
     trim: true,
-    match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email']
+    minlength: 4,
+    maxlength: 20,
+    match: [usernamePattern, 'Username must be 4-20 characters and use letters, numbers, dots, underscores or hyphens.']
+  },
+  email: {
+    type: String,
+    required: false,
+    lowercase: true,
+    trim: true,
+    match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email'],
+    default: undefined
   },
   password: {
     type: String,
@@ -30,7 +46,12 @@ const mechanicSchema = new mongoose.Schema({
   },
   phoneNumber: {
     type: String,
-    required: [true, 'Phone number is required']
+    required: [true, 'Phone number is required'],
+    trim: true,
+    validate: {
+      validator: isValidPhilippinePhone,
+      message: 'Enter a valid Philippine mobile number.'
+    }
   },
 
   // Account Status
@@ -99,8 +120,23 @@ const mechanicSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Index for faster queries
+mechanicSchema.index(
+  { username: 1 },
+  { name: 'username_partial_unique', unique: true, partialFilterExpression: { username: { $type: 'string' } }, collation: { locale: 'en', strength: 2 } }
+);
+mechanicSchema.index(
+  { email: 1 },
+  { name: 'email_partial_unique', unique: true, partialFilterExpression: { email: { $type: 'string' } }, collation: { locale: 'en', strength: 2 } }
+);
 mechanicSchema.index({ specialization: 1 });
+
+mechanicSchema.pre('validate', function normalizeIdentity(next) {
+  if (typeof this.username === 'string') this.username = this.username.trim().toLowerCase();
+  if (typeof this.email === 'string') {
+    this.email = this.email.trim().toLowerCase() || undefined;
+  }
+  next();
+});
 
 const Mechanic = mongoose.model('Mechanic', mechanicSchema);
 
