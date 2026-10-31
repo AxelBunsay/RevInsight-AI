@@ -1,4 +1,5 @@
 import { BrowserRouter, Link, Navigate, Routes, Route, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import AuthProvider from './context/AuthProvider';
 import { AdminApp } from './admin';
 import Cart from './Customer/react/Cart';
@@ -14,6 +15,7 @@ import ServiceDetail from './Customer/react/ServiceDetail';
 import Checkout from './Customer/react/Checkout';
 import ReservationDetail from './Customer/react/ReservationDetail';
 import MechanicLogin from './Mechanic/MechanicLogin';
+import MechanicLayout from './Mechanic/MechanicLayout';
 import MechanicDashboard from './Mechanic/MechanicDashboard';
 import MechanicJobs from './Mechanic/MechanicJobs';
 import MechanicProfile from './Mechanic/MechanicProfile';
@@ -21,6 +23,17 @@ import MechanicAuthGuard from './Mechanic/MechanicAuthGuard';
 import SessionBootstrap from './auth/SessionBootstrap';
 import { CustomerPrototypeProvider } from './Customer/react/CustomerPrototypeProvider';
 import { CustomerPage } from './Customer/react/CustomerLayout';
+import { syncPortalFavicon } from './utils/portalFavicon';
+
+function PortalFavicon() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    syncPortalFavicon(pathname);
+  }, [pathname]);
+
+  return null;
+}
 
 function CustomerProfileRoute() {
   const location = useLocation();
@@ -42,6 +55,7 @@ function NotFoundPage() {
 function App() {
   return (
     <BrowserRouter>
+      <PortalFavicon />
       <SessionBootstrap>
         <AuthProvider>
           <CustomerPrototypeProvider>
@@ -65,9 +79,11 @@ function App() {
         <Route path="/customer/profile" element={<CustomerAuthGuard><CustomerProfileRoute /></CustomerAuthGuard>} />
         <Route path="/my-purchases" element={<CustomerAuthGuard><MyPurchases /></CustomerAuthGuard>} />
         <Route path="/mechanic/login" element={<MechanicLogin />} />
-        <Route path="/mechanic/dashboard" element={<MechanicAuthGuard><MechanicDashboard /></MechanicAuthGuard>} />
-        <Route path="/mechanic/jobs" element={<MechanicAuthGuard><MechanicJobs /></MechanicAuthGuard>} />
-        <Route path="/mechanic/profile" element={<MechanicAuthGuard><MechanicProfile /></MechanicAuthGuard>} />
+        <Route element={<MechanicAuthGuard><MechanicLayout /></MechanicAuthGuard>}>
+          <Route path="/mechanic/dashboard" element={<MechanicDashboard />} />
+          <Route path="/mechanic/jobs" element={<MechanicJobs />} />
+          <Route path="/mechanic/profile" element={<MechanicProfile />} />
+        </Route>
           <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </CustomerPrototypeProvider>

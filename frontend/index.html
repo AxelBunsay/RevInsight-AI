@@ -6,6 +6,21 @@
     <link rel="apple-touch-icon" href="/logo-512.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manoy's Motorcycle Parts, Accessories &amp; Services</title>
+    <script>
+      (function () {
+        var path = window.location.pathname;
+        var href = path.startsWith('/admin')
+          ? '/favicon-admin.png?v=2'
+          : path.startsWith('/mechanic')
+            ? '/favicon-mechanic.png?v=2'
+            : '/logo.svg';
+        var icon = document.querySelector('link[rel="icon"]');
+        if (icon) {
+          icon.href = href;
+          icon.type = href.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

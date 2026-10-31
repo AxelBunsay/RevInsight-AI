@@ -74,6 +74,7 @@ function RevenueGauge() {
 function BrandWordmark({ compact = false }) {
   return (
     <div className={`admin-login__wordmark${compact ? ' admin-login__wordmark--compact' : ''}`} aria-label="REVINSIGHT AI">
+      <img src="/logo-admin.png" alt="RevInsight AI admin" width="44" height="44" />
       <span>REVINSIGHT</span>
       <span className="admin-login__ai-badge">AI</span>
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { clearAuthSession, getAuthToken, storeAuthUser } from '../auth/authSession';
 
@@ -29,5 +29,5 @@ export default function MechanicAuthGuard({ children }) {
   if (status === 'unauthenticated') return <Navigate to="/mechanic/login" replace state={{ from: location }} />;
   if (status === 'checking') return <p className="mechanic-loading">Checking mechanic session…</p>;
   if (status === 'error') return <p className="mechanic-alert" role="alert">Your mechanic session could not be verified. Please try again.</p>;
-  return children;
+  return children || <Outlet />;
 }

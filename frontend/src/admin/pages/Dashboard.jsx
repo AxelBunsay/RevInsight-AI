@@ -18,12 +18,10 @@ function Dashboard() {
   const [period, setPeriod] = useState('daily');
   const seriesState = useSalesSeries(period);
   const compactChart = useMediaQuery('(max-width: 540px)');
-  const formattedDate = new Intl.DateTimeFormat('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(new Date());
 
   if (!dashboard.data && dashboard.error) {
     return (
       <div className="admin-page admin-dashboard">
-        <header className="admin-page-heading"><h1>Dashboard</h1><p>{formattedDate}</p></header>
         <div className="admin-error" role="alert"><p>{dashboard.error}</p><button type="button" onClick={dashboard.retry}>Retry</button></div>
       </div>
     );
@@ -31,7 +29,6 @@ function Dashboard() {
 
   return (
     <div className="admin-page admin-dashboard">
-      <header className="admin-page-heading"><h1>Dashboard</h1><p>{formattedDate}</p></header>
       {dashboard.error && <div className="admin-inline-error" role="alert"><span>{dashboard.error}</span><button type="button" onClick={dashboard.retry}>Retry</button></div>}
       {dashboard.data ? <StatStrip stats={dashboard.data.stats} /> : (
         <section className="admin-stat-strip admin-stat-strip--loading" aria-label="Loading business overview">

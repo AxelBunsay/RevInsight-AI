@@ -14,7 +14,7 @@ describe("mechanic login form", () => {
       createElement(MemoryRouter, null, createElement(MechanicLogin)),
     );
 
-    expect(markup).toContain('src="/logo.svg"');
+    expect(markup).toContain('src="/logo-mechanic.png"');
     expect(markup).toContain("MECHANIC PORTAL");
     expect(markup).toContain('autoComplete="username"');
     expect(markup).toContain('autoCapitalize="none"');

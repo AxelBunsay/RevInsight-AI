@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import MechanicLayout from './MechanicLayout';
 import { api } from '../services/api';
 import { getMechanicProfile, saveMechanicProfile } from './mechanicService';
 
@@ -41,7 +40,7 @@ export default function MechanicProfile() {
     finally { setSaving(false); }
   };
 
-  return <MechanicLayout title="Mechanic Profile">
+  return <>
     {error && <p className="mechanic-alert" role="alert">{error}</p>}{message && <p className="mechanic-success" role="status">{message}</p>}
     {loading ? <p className="mechanic-loading">Loading profile…</p> : <>
       <section className="mechanic-panel workload-panel">
@@ -68,5 +67,5 @@ export default function MechanicProfile() {
       <button className="button-primary profile-save" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save profile'}</button>
       </form>
     </>}
-  </MechanicLayout>;
+  </>;
 }

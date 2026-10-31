@@ -1,0 +1,39 @@
+@keyframes route-content-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.route-content-transition {
+  animation: route-content-fade-in 220ms ease-out both;
+}
+
+.mechanic-main > .route-content-transition {
+  display: grid;
+  align-content: start;
+  gap: inherit;
+}
+
+.admin-root .nav-item,
+.mechanic-nav-link,
+.mechanic-logout {
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-content-transition {
+    animation: none;
+  }
+
+  .admin-root .nav-item,
+  .mechanic-nav-link,
+  .mechanic-logout {
+    transition: none;
+  }
+}

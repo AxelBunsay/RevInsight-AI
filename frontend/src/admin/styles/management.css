@@ -252,6 +252,20 @@
 .admin-root .admin-management-page .transactions-container {
   overflow-x: visible;
 }
+@media (max-width: 1024px) {
+  .admin-root .admin-management-page .transactions-table-scroll {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted) transparent;
+    box-shadow: inset -10px 0 10px -12px rgba(43, 26, 18, .8);
+  }
+
+  .admin-root .admin-management-page .transactions-table {
+    min-width: 1050px;
+  }
+}
 .admin-root .admin-management-page .inventory-table th,
 .admin-root .admin-management-page .transactions-table th {
   color: var(--muted);
@@ -903,15 +917,6 @@
     padding: 14px;
   }
 
-  @media (max-width: 1099px) {
-    .admin-root .admin-management-page .transactions-table-scroll {
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
-    }
-    .admin-root .admin-management-page .transactions-table {
-      min-width: 1050px;
-    }
-  }
   .admin-root .admin-management-page .search-filter,
   .admin-root .admin-management-page .transactions-header,
   .admin-root .admin-management-page .inventory-header,

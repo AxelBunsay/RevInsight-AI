@@ -14,24 +14,29 @@ function Icon({ name }) {
   return <span className="nav-icon" aria-hidden="true">{icons[name]}</span>;
 }
 
-function AdminSidebar({ badges, loading, isCollapsed, onToggle, onClose }) {
+function AdminSidebar({ badges, loading, isDrawerLayout, drawerOpen, drawerRef, onClose }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const signOut = () => {
     logout();
     navigate('/admin/login', { replace: true });
   };
-  const handleNavigation = () => {
-    if (window.matchMedia('(max-width: 760px)').matches) onClose();
-  };
-
   return (
     <>
-      {!isCollapsed && <button type="button" className="sidebar-backdrop" aria-label="Close navigation menu" onClick={onClose} />}
-      <aside className={`sidebar${isCollapsed ? ' collapsed' : ''}`} aria-label="Admin sidebar">
+      {isDrawerLayout && drawerOpen && <button type="button" className="sidebar-backdrop" aria-label="Close navigation menu" onClick={() => onClose('overlay')} />}
+      <aside
+        ref={drawerRef}
+        className={`sidebar${isDrawerLayout ? drawerOpen ? ' drawer-open' : ' drawer-closed' : ''}`}
+        aria-label="Admin sidebar"
+        role={isDrawerLayout && drawerOpen ? 'dialog' : undefined}
+        aria-modal={isDrawerLayout && drawerOpen ? 'true' : undefined}
+        aria-hidden={isDrawerLayout && !drawerOpen}
+        inert={isDrawerLayout && !drawerOpen}
+      >
         <div className="sidebar-header">
           <div className="brand-row">
-            <div className="brand" aria-label="REVINSIGHT Admin">
+            <div className="brand" aria-label="RevInsight AI Admin">
+              <img className="brand-logo" src="/logo-admin.png" alt="RevInsight AI admin" width="44" height="44" />
               <div className="brand-text">
                 <span className="brand-name-row">
                   <span className="brand-name">REVINSIGHT</span>
@@ -41,18 +46,6 @@ function AdminSidebar({ badges, loading, isCollapsed, onToggle, onClose }) {
               </div>
             </div>
           </div>
-          <div className="sidebar-toggle-row">
-            <button
-              type="button"
-              className="sidebar-toggle"
-              onClick={onToggle}
-              aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              aria-expanded={!isCollapsed}
-              aria-controls="admin-sidebar-navigation"
-            >
-              ☰
-            </button>
-          </div>
         </div>
         <nav className="sidebar-nav" id="admin-sidebar-navigation" aria-label="Admin navigation">
           {navigation.map((item) => (
@@ -60,9 +53,9 @@ function AdminSidebar({ badges, loading, isCollapsed, onToggle, onClose }) {
               key={item.id}
               to={item.path}
               end={item.id === 'dashboard'}
-              onClick={handleNavigation}
+              onClick={() => onClose('navigation')}
               aria-label={item.label}
-              title={isCollapsed ? item.label : undefined}
+              title={undefined}
               className={({ isActive }) => `nav-item${isActive ? ' is-active' : ''}`}
             >
               <Icon name={item.icon} />
@@ -72,7 +65,7 @@ function AdminSidebar({ badges, loading, isCollapsed, onToggle, onClose }) {
           ))}
         </nav>
         <div className="sidebar-footer">
-          <button type="button" className="nav-item logout" onClick={signOut} aria-label="Logout" title={isCollapsed ? 'Logout' : undefined}>
+          <button type="button" className="nav-item logout" onClick={signOut} aria-label="Logout">
             <Icon name="logout" />
             <span className="nav-label">Logout</span>
           </button>
