@@ -276,9 +276,13 @@ function Mechanics() {
         <AdminDialog
           title={editingMechanic ? "Edit Mechanic" : "Add Mechanic"}
           onClose={closeMechanicDialog}
-            dialogClassName="mechanic-form-dialog"
+          dialogClassName="mechanic-form-dialog"
+          footer={<div className="admin-dialog-actions">
+            <button className="btn-small" type="button" onClick={closeMechanicDialog}>Cancel</button>
+            <button className="btn-primary" type="submit" form="mechanic-form" disabled={isSaving}>{isSaving ? "Saving..." : "Save Mechanic"}</button>
+          </div>}
         >
-            <form className="admin-dialog-form" onSubmit={saveMechanic}>
+            <form id="mechanic-form" className="admin-dialog-form" onSubmit={saveMechanic}>
               <div className="mechanic-form-grid">
                 <label className="mechanic-form-field">
                   First name
@@ -391,18 +395,6 @@ function Mechanics() {
               </label>
             </div>
             {error && <p className="dashboard-error" role="alert">{error}</p>}
-            <div className="admin-dialog-actions">
-              <button
-                className="btn-small"
-                type="button"
-                onClick={closeMechanicDialog}
-              >
-                Cancel
-              </button>
-              <button className="btn-primary" type="submit" disabled={isSaving}>
-                {isSaving ? "Saving..." : "Save Mechanic"}
-              </button>
-            </div>
           </form>
         </AdminDialog>
       )}

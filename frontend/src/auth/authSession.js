@@ -13,6 +13,18 @@ const SESSION_KEYS = {
   }
 };
 
+export const AUTH_SESSION_LOGIN_PATHS = Object.freeze({
+  admin: '/admin/login',
+  customer: '/customer/login',
+  mechanic: '/mechanic/login'
+});
+
+export function getAuthSessionLoginPath(kind) {
+  const path = AUTH_SESSION_LOGIN_PATHS[kind];
+  if (!path) throw new Error(`Unknown auth session: ${kind}`);
+  return path;
+}
+
 function getStores() {
   return [globalThis.localStorage, globalThis.sessionStorage].filter(Boolean);
 }
@@ -48,6 +60,14 @@ export function getAuthUser(kind) {
 
 export function getRememberedIdentifier(kind) {
   return getStores()[0]?.getItem(getKeys(kind).identifier) || '';
+}
+
+export function getAuthSessionKind(pathname) {
+  if (pathname === '/' || pathname.startsWith('/customer/') || pathname.startsWith('/my-purchases')) {
+    return 'customer';
+  }
+  if (pathname.startsWith('/mechanic/')) return 'mechanic';
+  return null;
 }
 
 export function storeAuthUser(kind, value) {
@@ -127,12 +147,13 @@ export function getSessionRedirect({
         pendingActionPath
       });
     }
-    if (mechanicValid) return '/mechanic/dashboard';
     return null;
   }
 
-  if (mechanicValid) return '/mechanic/dashboard';
-  if (mechanicInvalid && isMechanicArea && pathname !== '/mechanic/login') return '/mechanic/login';
+  if (isMechanicArea) {
+    if (mechanicInvalid && pathname !== '/mechanic/login') return '/mechanic/login';
+    if (mechanicValid && pathname === '/mechanic/login') return '/mechanic/dashboard';
+  }
   return null;
 }
 

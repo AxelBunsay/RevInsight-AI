@@ -854,7 +854,7 @@
 }
 .admin-root .ai-revenue-modal-layer {
   position: fixed;
-  z-index: 20;
+  z-index: 1100;
   inset: 0;
   display: grid;
   place-items: center;
@@ -870,6 +870,12 @@
   border-radius: 20px;
   background: var(--surface);
   box-shadow: 0 24px 80px rgba(43, 26, 18, 0.24);
+}
+.admin-root .ai-revenue-modal__header,
+.admin-root .ai-revenue-modal__body,
+.admin-root .ai-revenue-modal__footer,
+.admin-root .ai-revenue-modal__header > div {
+  display: contents;
 }
 .admin-root .ai-revenue-modal__close {
   position: absolute;
@@ -1297,6 +1303,109 @@
   border-radius: 12px;
   background: #fff;
 }
+.admin-root .ai-revenue-report-card-list,
+.admin-root .ai-revenue-report-card-pagination {
+  display: none;
+}
+.admin-root .ai-revenue-report-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow-wrap: anywhere;
+}
+.admin-root .ai-revenue-report-card__top,
+.admin-root .ai-revenue-report-card__top > div,
+.admin-root .ai-revenue-report-card__details {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.admin-root .ai-revenue-report-card__top {
+  justify-content: space-between;
+}
+.admin-root .ai-revenue-report-card__top > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.admin-root .ai-revenue-report-card__top > div {
+  justify-content: flex-end;
+}
+.admin-root .ai-revenue-report-card__top .transaction-type-badge {
+  display: inline-flex;
+  min-height: 23px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.admin-root .ai-revenue-report-card__top .is-item {
+  background: #ffe0c2;
+  color: #9a4308;
+}
+.admin-root .ai-revenue-report-card__top .is-service {
+  background: #e8edf2;
+  color: #44566a;
+}
+.admin-root .ai-revenue-report-card__top .status-badge {
+  padding: 4px 9px;
+  border-radius: 99px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.admin-root .ai-revenue-report-card__items {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 8px 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.admin-root .ai-revenue-report-card__details {
+  color: var(--muted);
+  font-size: 11px;
+}
+.admin-root .ai-revenue-report-card__amount {
+  display: block;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.admin-root .ai-revenue-report-card-state {
+  margin: 0;
+  padding: 22px 10px;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.admin-root .ai-revenue-report-card-pagination {
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+.admin-root .ai-revenue-report-card-pagination button {
+  min-width: 88px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+}
+.admin-root .ai-revenue-report-card-pagination button:disabled {
+  opacity: .55;
+}
+.admin-root .ai-revenue-report-card-pagination span {
+  color: var(--muted);
+  font-size: 12px;
+}
 .admin-root .ai-revenue-report__table-wrap--drilldown {
   margin-top: 14px;
 }
@@ -1329,6 +1438,11 @@
   justify-content: center;
   margin-top: 18px;
 }
+.admin-root .ai-revenue-report .ai-revenue-modal__footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 18px;
+}
 
 @media print {
   body * {
@@ -1352,21 +1466,139 @@
   .admin-root .ai-revenue-report h2,
   .admin-root .ai-revenue-report__month-tabs,
   .admin-root .ai-revenue-report .ai-revenue-modal__close,
-  .admin-root .ai-revenue-report .ai-revenue-settings__actions {
+  .admin-root .ai-revenue-report .ai-revenue-settings__actions,
+  .admin-root .ai-revenue-report .ai-revenue-settings__actions--report {
     display: none !important;
   }
   .admin-root .ai-revenue-report__table-wrap {
     overflow: visible;
     border: 0;
   }
+  .admin-root .ai-revenue-modal__body {
+    display: block;
+    overflow: visible;
+  }
+  .admin-root .ai-revenue-modal__footer {
+    display: none !important;
+  }
   .admin-root .ai-revenue-report__table {
     min-width: 0;
+  }
+  .admin-root .ai-revenue-report-card-list,
+  .admin-root .ai-revenue-report-card-pagination {
+    display: none !important;
+  }
+  .admin-root .ai-revenue-report__table-wrap {
+    display: block !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .admin-root .ai-revenue-modal-layer {
+    z-index: 1100;
+    padding: 12px;
+  }
+  .admin-root .ai-revenue-modal-layer .ai-revenue-modal {
+    display: flex;
+    width: min(680px, 100%);
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+  }
+  .admin-root .ai-revenue-modal__header {
+    display: flex;
+    min-width: 0;
+    flex: 0 0 auto;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 12px 10px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .admin-root .ai-revenue-modal__header > div {
+    display: block;
+    min-width: 0;
+  }
+  .admin-root .ai-revenue-modal__header h2 {
+    padding-right: 4px;
+    overflow-wrap: anywhere;
+  }
+  .admin-root .ai-revenue-modal__close {
+    position: static;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+  }
+  .admin-root .ai-revenue-modal__body {
+    display: block;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 16px;
+  }
+  .admin-root .ai-revenue-modal__footer {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .admin-root .ai-revenue-report .ai-revenue-modal__footer {
+    margin-top: 0;
+  }
+  .admin-root .ai-revenue-modal__footer button,
+  .admin-root .ai-revenue-modal__body input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .admin-root .ai-revenue-modal__body select,
+  .admin-root .ai-revenue-modal__body textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .admin-root .ai-revenue-modal__body textarea {
+    min-height: 88px;
+  }
+  .admin-root .ai-revenue-modal__footer button {
+    min-width: 120px;
+  }
+  .admin-root .ai-revenue-report__month-tabs {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .admin-root .ai-revenue-report__month-tabs button {
+    min-height: 44px;
+  }
+  .admin-root .ai-revenue-report__table-wrap {
+    display: none;
+  }
+  .admin-root .ai-revenue-report-card-list {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+  }
+  .admin-root .ai-revenue-report-card-pagination {
+    display: flex;
   }
 }
 
 @media (max-width: 900px) {
   .admin-root .ai-revenue-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .admin-root .ai-revenue-modal-layer {
+    padding: 12px;
+  }
+  .admin-root .ai-revenue-modal-layer .ai-revenue-modal {
+    width: 100%;
+  }
+  .admin-root .ai-revenue-modal__footer button {
+    width: 100%;
   }
 }
 @media (max-width: 540px) {
@@ -1400,9 +1632,6 @@
   }
   .admin-root .ai-revenue-card > strong {
     white-space: normal;
-  }
-  .admin-root .ai-revenue-modal {
-    padding: 23px 18px;
   }
   .admin-root .ai-revenue-modal.ai-revenue-ai-panel {
     padding: 20px 16px;

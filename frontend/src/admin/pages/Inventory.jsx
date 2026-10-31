@@ -617,6 +617,52 @@ function Inventory() {
                 {isLoading ? "Loading..." : filteredItems.length} inventory
                 items
               </div>
+              <div className="inventory-card-list" aria-label="Inventory item cards">
+                {isLoading ? <p className="inventory-card-state" role="status">Loading inventory...</p>
+                  : filteredItems.length ? filteredItems.map((item) => (
+                    <article className="inventory-mobile-card" key={item.id}>
+                      <div className="inventory-mobile-card__heading">
+                        <ProductImage src={item.imageUrl || item.image} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">{String(item.category || "?").charAt(0).toUpperCase()}</span>} />
+                        <div className="inventory-mobile-card__name"><strong>{item.name}</strong><span>{item.category}</span></div>
+                      </div>
+                      <div className="inventory-mobile-card__metrics">
+                        <div><span>Price</span><strong>{item.price}</strong></div>
+                        <div><span>Stock</span><strong className={item.stock < 10 ? "stock-text low" : "stock-text"}>{item.stock}</strong></div>
+                        <div><span>Reserved</span><strong>{item.reserved}</strong></div>
+                        <div><span>Available</span><strong className={item.available <= 5 ? "stock-text low" : "stock-text"}>{item.available}</strong></div>
+                      </div>
+                      {item.variants?.length > 0 && <>
+                        <button
+                          className="inventory-variant-toggle"
+                          type="button"
+                          aria-expanded={Boolean(expandedItems[item.id])}
+                          onClick={() => setExpandedItems((expanded) => ({
+                            ...expanded,
+                            [item.id]: !expanded[item.id]
+                          }))}
+                        >
+                          {item.variants.length} variants · {expandedItems[item.id] ? "Hide" : "View"}
+                        </button>
+                        {expandedItems[item.id] && <div className="inventory-mobile-card__variants">
+                          {item.variants.map((variant) => {
+                            const available = Math.max(0, Number(variant.stock || 0) - Number(variant.reservedQty || 0));
+                            return <div className="inventory-mobile-card__variant" key={variant._id}>
+                              <ProductImage src={variant.imageUrl} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">V</span>} />
+                              <strong>{variant.label || variantLabel(variant)}</strong>
+                              <span>{[variant.brand, variant.model, variant.size, variant.color].filter(Boolean).join(" · ") || "Variant"}</span>
+                              <span>{formatPrice(variant.price)} · Stock {variant.stock} · Reserved {variant.reservedQty || 0} · Available {available}</span>
+                            </div>;
+                          })}
+                        </div>}
+                      </>}
+                      <div className="inventory-mobile-card__actions">
+                        <button className="btn-small btn-edit" type="button" onClick={() => openItemDialog(item)}>Edit</button>
+                        <button className="btn-small btn-delete" type="button" disabled={item.hasActiveReservation} title={item.hasActiveReservation ? "Cannot delete an item with an active reservation." : undefined} onClick={() => openDeleteDialog({ type: "item", id: item.id, name: item.name })}>Delete</button>
+                        {item.hasActiveReservation && <small className="inventory-field-error">Active reservation</small>}
+                      </div>
+                    </article>
+                  )) : <p className="inventory-card-state">No inventory items match this search.</p>}
+              </div>
               <div className="inventory-table-scroll">
                 <table className="inventory-table">
                   <thead>
@@ -771,7 +817,28 @@ function Inventory() {
                 {isLoadingServices ? "Loading..." : serviceRows.length}{" "}
                 services · mechanic fee per completed service
               </div>
-              <table className="inventory-table">
+              <div className="inventory-card-list" aria-label="Service cards">
+                {isLoadingServices ? <p className="inventory-card-state" role="status">Loading services...</p>
+                  : visibleServiceRows.length ? visibleServiceRows.map((service) => (
+                    <article className="inventory-mobile-card" key={service._id}>
+                      <div className="inventory-mobile-card__name">
+                        <strong>{service.name}</strong>
+                        <span>{service.category || "General"}</span>
+                      </div>
+                      {service.description && <p className="inventory-mobile-card__description">{service.description}</p>}
+                      <div className="inventory-mobile-card__metrics">
+                        <div><span>Price{service.pricePerUnit ? ` / ${service.unitLabel || "unit"}` : ""}</span><strong>{`₱${Number(service.price).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}</strong></div>
+                        <div><span>Duration</span><strong>{Number(service.durationMinutes) || 60} min{service.pricePerUnit && service.scaleDuration !== false ? ` / ${service.unitLabel || "unit"}` : ""}</strong></div>
+                        <div><span>Mechanic fee</span><strong>{`₱${Number(service.mechanicFee || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}</strong></div>
+                      </div>
+                      <div className="inventory-mobile-card__actions">
+                        <button className="btn-small btn-edit" type="button" onClick={() => openServiceDialog(service)}>Edit</button>
+                        <button className="btn-small btn-delete" type="button" onClick={() => openDeleteDialog({ type: "service", id: service._id, name: service.name })}>Delete</button>
+                      </div>
+                    </article>
+                  )) : <p className="inventory-card-state">No services match this search.</p>}
+              </div>
+              <table className="inventory-table inventory-service-table">
                   <thead>
                     <tr>
                       <th>SERVICE</th>
@@ -851,8 +918,12 @@ function Inventory() {
         <AdminDialog
           title={editingItem ? "Edit Inventory Item" : "Add Inventory Item"}
           onClose={closeItemDialog}
+          footer={<div className="admin-dialog-actions">
+            <button className="btn-small" type="button" onClick={closeItemDialog}>Cancel</button>
+            <button className="btn-primary" type="submit" form="inventory-item-form" disabled={isSaving}>{isSaving ? imageFile ? "Uploading image..." : "Saving..." : "Save Item"}</button>
+          </div>}
         >
-          <form className="admin-dialog-form" noValidate onSubmit={saveItem}>
+          <form id="inventory-item-form" className="admin-dialog-form" noValidate onSubmit={saveItem}>
             {itemFormError && <p className="admin-dialog-error" role="alert">{itemFormError}</p>}
             <label>
               Name
@@ -1054,18 +1125,6 @@ function Inventory() {
               {imageError && <small className="inventory-field-error" role="alert">{imageError}</small>}
               <small>PNG, JPG, or WEBP · up to 2 MB</small>
             </div>
-            <div className="admin-dialog-actions">
-              <button
-                className="btn-small"
-                type="button"
-                onClick={closeItemDialog}
-              >
-                Cancel
-              </button>
-              <button className="btn-primary" type="submit" disabled={isSaving}>
-                {isSaving ? imageFile ? "Uploading image..." : "Saving..." : "Save Item"}
-              </button>
-            </div>
           </form>
         </AdminDialog>
       )}
@@ -1073,8 +1132,12 @@ function Inventory() {
         <AdminDialog
           title={editingService ? "Edit Service" : "Add Service"}
           onClose={closeServiceDialog}
+          footer={<div className="admin-dialog-actions">
+            <button className="btn-small" type="button" disabled={isSavingService} onClick={closeServiceDialog}>Cancel</button>
+            <button className="btn-primary" type="submit" form="inventory-service-form" disabled={isSavingService}>{isSavingService ? "Saving..." : editingService ? "Save" : "Add Service"}</button>
+          </div>}
         >
-          <form className="admin-dialog-form" noValidate onSubmit={saveService}>
+          <form id="inventory-service-form" className="admin-dialog-form" noValidate onSubmit={saveService}>
             {serviceFormError && <p className="admin-dialog-error" role="alert">{serviceFormError}</p>}
             <label>
               Name
@@ -1215,19 +1278,6 @@ function Inventory() {
               </label>
               <small>{`Customer pays ${formatPrice(Number(serviceForm.price || 0) + Number(serviceForm.mechanicFee || 0))} per ${serviceForm.unitLabel || "unit"}.`}</small>
             </>}
-            <div className="admin-dialog-actions">
-              <button
-                className="btn-small"
-                type="button"
-                disabled={isSavingService}
-                onClick={closeServiceDialog}
-              >
-                Cancel
-              </button>
-              <button className="btn-primary" type="submit" disabled={isSavingService}>
-                {isSavingService ? "Saving..." : editingService ? "Save" : "Add Service"}
-              </button>
-            </div>
           </form>
         </AdminDialog>
       )}
@@ -1237,32 +1287,15 @@ function Inventory() {
           onClose={() => {
             if (!isDeleting) setDeleteTarget(null);
           }}
+          footer={<div className="admin-dialog-actions">
+            <button className="btn-small" type="button" disabled={isDeleting} onClick={() => { setDeleteTarget(null); setDeleteError(""); }}>Cancel</button>
+            <button className="btn-small btn-delete" type="button" disabled={isDeleting} onClick={confirmDelete}>{isDeleting ? "Deleting..." : "Delete"}</button>
+          </div>}
         >
           {deleteError && <p className="admin-dialog-error" role="alert">{deleteError}</p>}
           <p className="inventory-delete-message">
             Delete &quot;{deleteTarget.name}&quot;? This cannot be undone.
           </p>
-          <div className="admin-dialog-actions">
-            <button
-              className="btn-small"
-              type="button"
-              disabled={isDeleting}
-              onClick={() => {
-                setDeleteTarget(null);
-                setDeleteError("");
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn-small btn-delete"
-              type="button"
-              disabled={isDeleting}
-              onClick={confirmDelete}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </button>
-          </div>
         </AdminDialog>
       )}
     </AdminPageFrame>

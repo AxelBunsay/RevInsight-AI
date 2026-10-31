@@ -1,11 +1,18 @@
 import dashboardMock from '../data/dashboardMock.json';
-import { request } from '../../services/api';
+import { request as apiRequest } from '../../services/api';
 import inventoryConfig from '../../../../shared/inventory.json';
 
 const confirmedStatuses = new Set(['completed', 'paid']);
 const { LOW_STOCK_THRESHOLD } = inventoryConfig;
 // Set VITE_ADMIN_USE_MOCKS=true to use demo data in development.
 const useDemoData = import.meta.env.DEV && import.meta.env.VITE_ADMIN_USE_MOCKS === 'true';
+
+function request(path, options = {}) {
+  const tokenKey = Object.prototype.hasOwnProperty.call(options, 'tokenKey')
+    ? options.tokenKey
+    : 'adminToken';
+  return apiRequest(path, { ...options, tokenKey });
+}
 
 function unwrapRows(response) {
   return Array.isArray(response?.data) ? response.data : [];

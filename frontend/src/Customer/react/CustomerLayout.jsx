@@ -9,7 +9,7 @@ import NotificationDropdown from '../../components/NotificationDropdown';
 import NotificationContent from '../../components/NotificationContent';
 import { clearNotificationList } from '../../utils/notificationActions';
 import useDocumentTitle from '../../utils/useDocumentTitle';
-import { clearAuthSession, getAuthToken } from '../../auth/authSession';
+import { clearAuthSession, getAuthSessionLoginPath, getAuthToken } from '../../auth/authSession';
 import { clearCustomerAuthAction } from './customerAuthAction';
 import '../styles/shared.css';
 import '../styles/customer-flow.css';
@@ -148,7 +148,7 @@ export function CustomerHeader() {
     clearAuthSession('customer');
     clearCustomerAuthAction();
     clearCustomerData();
-    window.location.href = '/customer/login';
+    window.location.href = getAuthSessionLoginPath('customer');
   };
 
   const currentPath = location.pathname;

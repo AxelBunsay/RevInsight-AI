@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { loginMechanic } from './mechanicService';
-import { getPasswordInputType, togglePasswordVisibility } from './mechanicLoginHelpers';
+import {
+  getMechanicLoginDestination,
+  getPasswordInputType,
+  togglePasswordVisibility
+} from './mechanicLoginHelpers';
 import {
   buildLoginPayload,
   DEFAULT_REMEMBER_ME,
@@ -37,8 +41,7 @@ export default function MechanicLogin() {
       const from = location.state?.from;
       const fromPath = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : null;
       const returnTo = searchParams.get('returnTo');
-      const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : null;
-      navigate(fromPath || safeReturnTo || '/mechanic/dashboard', { replace: true });
+      navigate(getMechanicLoginDestination(fromPath, returnTo), { replace: true });
     } catch (loginError) {
       setError(loginError.message || 'Invalid username or password');
     } finally {

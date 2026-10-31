@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { adminApi } from '../../services/adminApi';
 import MarkdownAnswer from './MarkdownAnswer';
 import { askRevenueQuestion, handleQuestionKeyDown } from './askRevenueQuestion';
+import { AdminModalPortal } from '../../pages/ManagementPageComponents';
+import useAdminModalEffects from '../useAdminModalEffects';
 import riskThresholds from '../../../../../shared/revenueRiskConfig.json';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
@@ -371,6 +373,11 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [reportRows, setReportRows] = useState([]);
   const [reportError, setReportError] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
+  const [reportCardPage, setReportCardPage] = useState(1);
+
+  useAdminModalEffects(settingsOpen, () => setSettingsOpen(false));
+  useAdminModalEffects(reportOpen, () => setReportOpen(false));
+  useAdminModalEffects(Boolean(modalId), () => setModalId(null));
 
   useEffect(() => {
     let active = true;
@@ -458,14 +465,10 @@ function AIRevenueAnalysis({ dashboardData }) {
     return () => { active = false; };
   }, [reportMonth, reportOpen, reportQuarterNumber, reportYear]);
 
-  useEffect(() => {
-    if (!modalId) return undefined;
-    const onKeyDown = (event) => { if (event.key === 'Escape') setModalId(null); };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [modalId]);
-
   const reportTotal = reportRows.reduce((sum, row) => sum + row.amount, 0);
+  const reportCardPageSize = 20;
+  const reportCardTotalPages = Math.max(1, Math.ceil(reportRows.length / reportCardPageSize));
+  const visibleReportCards = reportRows.slice((reportCardPage - 1) * reportCardPageSize, reportCardPage * reportCardPageSize);
   const reportPaid = reportRows.filter((row) => ['paid', 'completed'].includes(row.status.toLowerCase()))
     .reduce((sum, row) => sum + row.amount, 0);
   const reportOutstanding = reportTotal - reportPaid;
@@ -545,7 +548,7 @@ function AIRevenueAnalysis({ dashboardData }) {
       <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue, risk, and concentration from business data</p></div></div>
       <div className="ai-revenue-toolbar">
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>ⓘ Risk thresholds</button>
-        <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportMonth(null); setReportOpen(true); }}>⬇ Export report</button>
+        <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportMonth(null); setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
       </div>
     </div>
     <div className="ai-revenue-overall-risk">
@@ -631,25 +634,34 @@ function AIRevenueAnalysis({ dashboardData }) {
             {(analysis.risk?.completedQuarterCount || 0) < riskThresholds.minimumCompletedQuarters && <p className="ai-revenue-empty" role="status">Fewer than {riskThresholds.minimumCompletedQuarters} completed quarters are available. The quarterly trend is shown; the forecast will appear after more data is recorded.</p>}
           </>}
 
-    {settingsOpen && <div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
+    {settingsOpen && <AdminModalPortal><div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSettingsOpen(false); }}>
       <section className="ai-revenue-modal ai-revenue-settings" role="dialog" aria-modal="true" aria-labelledby="ai-thresholds-title">
-        <button type="button" className="ai-revenue-modal__close" aria-label="Close thresholds" onClick={() => setSettingsOpen(false)}>×</button>
-        <p className="ai-revenue-modal__eyebrow">Reference</p><h2 id="ai-thresholds-title">Risk thresholds</h2>
-        <div className="ai-revenue-thresholds__reference">
-          <p><strong>Quarter-over-quarter change:</strong> Normal ≥ {riskThresholds.qoqChange.normalMin}%; Moderate {qoqModerateRange}%; High &lt; {riskThresholds.qoqChange.moderateMin}%.</p>
-          <p><strong>Concentration (HHI):</strong> Normal &lt; {riskThresholds.concentrationHhi.normalMaxExclusive}; Moderate {hhiModerateRange}; High &gt; {riskThresholds.concentrationHhi.moderateMaxInclusive}.</p>
-          <p><strong>Top contributor share:</strong> Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate {contributorModerateRange}; High &gt; {riskThresholds.topContributorShare.moderateMaxInclusive}%.</p>
-          <p><strong>Forecast vs. last four completed-quarter average:</strong> Normal ≥ {riskThresholds.forecastVsFourQuarterAverage.normalMin}%; Moderate {forecastModerateRange}; High &lt; {riskThresholds.forecastVsFourQuarterAverage.moderateMin}%.</p>
-          <p>Overall risk is the highest indicator level. Uncategorized historical revenue is excluded from concentration calculations and shown separately.</p>
+        <header className="ai-revenue-modal__header">
+          <div><p className="ai-revenue-modal__eyebrow">Reference</p><h2 id="ai-thresholds-title">Risk thresholds</h2></div>
+          <button type="button" className="ai-revenue-modal__close" aria-label="Close thresholds" onClick={() => setSettingsOpen(false)}>×</button>
+        </header>
+        <div className="ai-revenue-modal__body">
+          <div className="ai-revenue-thresholds__reference">
+            <p><strong>Quarter-over-quarter change:</strong> Normal ≥ {riskThresholds.qoqChange.normalMin}%; Moderate {qoqModerateRange}%; High &lt; {riskThresholds.qoqChange.moderateMin}%.</p>
+            <p><strong>Concentration (HHI):</strong> Normal &lt; {riskThresholds.concentrationHhi.normalMaxExclusive}; Moderate {hhiModerateRange}; High &gt; {riskThresholds.concentrationHhi.moderateMaxInclusive}.</p>
+            <p><strong>Top contributor share:</strong> Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate {contributorModerateRange}; High &gt; {riskThresholds.topContributorShare.moderateMaxInclusive}%.</p>
+            <p><strong>Forecast vs. last four completed-quarter average:</strong> Normal ≥ {riskThresholds.forecastVsFourQuarterAverage.normalMin}%; Moderate {forecastModerateRange}; High &lt; {riskThresholds.forecastVsFourQuarterAverage.moderateMin}%.</p>
+            <p>Overall risk is the highest indicator level. Uncategorized historical revenue is excluded from concentration calculations and shown separately.</p>
+          </div>
         </div>
-        <div className="ai-revenue-settings__actions"><button type="button" className="ai-revenue-settings__primary" onClick={() => setSettingsOpen(false)}>Close</button></div>
+        <div className="ai-revenue-modal__footer">
+          <button type="button" className="ai-revenue-settings__primary" onClick={() => setSettingsOpen(false)}>Close</button>
+        </div>
       </section>
-    </div>}
+    </div></AdminModalPortal>}
 
-    {reportOpen && reportYear && reportQuarterNumber && <div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReportOpen(false); }}>
+    {reportOpen && reportYear && reportQuarterNumber && <AdminModalPortal><div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReportOpen(false); }}>
       <section className="ai-revenue-modal ai-revenue-report" role="dialog" aria-modal="true" aria-labelledby="ai-report-title">
-        <button type="button" className="ai-revenue-modal__close" aria-label="Close report" onClick={() => setReportOpen(false)}>×</button>
-        <p className="ai-revenue-modal__eyebrow">Export</p><h2 id="ai-report-title">Sales / Transactions — {quarterName(reportYear, reportQuarterNumber)}</h2>
+        <header className="ai-revenue-modal__header">
+          <div><p className="ai-revenue-modal__eyebrow">Export</p><h2 id="ai-report-title">Sales / Transactions — {quarterName(reportYear, reportQuarterNumber)}</h2></div>
+          <button type="button" className="ai-revenue-modal__close" aria-label="Close report" onClick={() => setReportOpen(false)}>×</button>
+        </header>
+        <div className="ai-revenue-modal__body">
         <div className="ai-revenue-report__summary">
           <strong>{reportMonth === null ? quarterName(reportYear, reportQuarterNumber) : `${monthNames[reportMonth]} ${reportYear}`} Business Records</strong>
           <span>Generated {new Date().toLocaleDateString('en-PH', { day: 'numeric', month: 'long', year: 'numeric' })} · Total: {peso.format(reportTotal)} ({peso.format(reportPaid)} paid, {peso.format(reportOutstanding)} outstanding)</span>
@@ -657,8 +669,28 @@ function AIRevenueAnalysis({ dashboardData }) {
         </div>
         <div className="ai-revenue-report__month-tabs" role="group" aria-label="Filter report by month">
           <button type="button" className={reportMonth === null ? 'is-active' : ''} aria-pressed={reportMonth === null} onClick={() => setReportMonth(null)}>Full quarter</button>
-          {monthNames.map((name, index) => <button type="button" className={reportMonth === index ? 'is-active' : ''} aria-pressed={reportMonth === index} key={name} onClick={() => setReportMonth(index)}>{name}</button>)}
+          {monthNames.map((name, index) => <button type="button" className={reportMonth === index ? 'is-active' : ''} aria-pressed={reportMonth === index} key={name} onClick={() => { setReportCardPage(1); setReportMonth(index); }}>{name}</button>)}
         </div>
+        <div className="ai-revenue-report-card-list" aria-label="Business record cards">
+          {isReportLoading
+            ? <p className="ai-revenue-report-card-state" role="status">Loading business records…</p>
+            : reportRows.length
+              ? visibleReportCards.map((row) => <article className="ai-revenue-report-card" key={`${row.id}-${row.date}`}>
+                <div className="ai-revenue-report-card__top">
+                  <strong>{row.customer}</strong>
+                  <div><span className={`transaction-type-badge ${row.type === 'Service' ? 'is-service' : 'is-item'}`}>{row.type}</span><span className="status-badge">{row.status}</span></div>
+                </div>
+                <p className="ai-revenue-report-card__items" title={row.items}>{row.items}</p>
+                <div className="ai-revenue-report-card__details"><span>{row.date}</span><span title={`Full record ID: ${row.id}`}>ID {row.id.length > 12 ? row.id.slice(-8) : row.id}</span>{row.mechanic !== '—' && <span>Mechanic: {row.mechanic}</span>}</div>
+                <strong className="ai-revenue-report-card__amount">Amount {peso.format(row.amount)}</strong>
+              </article>)
+              : <p className="ai-revenue-report-card-state" role={reportError ? 'alert' : 'status'}>{reportError ? 'Business records could not be loaded.' : 'No business records for this period.'}</p>}
+        </div>
+        {!isReportLoading && reportRows.length > reportCardPageSize && <nav className="ai-revenue-report-card-pagination" aria-label="Business record card pagination">
+          <button type="button" disabled={reportCardPage === 1} onClick={() => setReportCardPage((page) => page - 1)}>Previous</button>
+          <span>Page {reportCardPage} of {reportCardTotalPages}</span>
+          <button type="button" disabled={reportCardPage >= reportCardTotalPages} onClick={() => setReportCardPage((page) => page + 1)}>Next</button>
+        </nav>}
         <div className="ai-revenue-report__table-wrap">
           <table className="ai-revenue-report__table">
             <thead><tr><th>Record ID</th><th>Date</th><th>Type</th><th>Customer</th><th>Item / Service</th><th>Amount</th><th>Status</th><th>Mechanic</th></tr></thead>
@@ -671,34 +703,42 @@ function AIRevenueAnalysis({ dashboardData }) {
             </tbody>
           </table>
         </div>
-        <div className="ai-revenue-settings__actions ai-revenue-settings__actions--report"><button type="button" className="ai-revenue-settings__primary" onClick={() => window.print()} disabled={!reportRows.length}>Print / Save as PDF</button></div>
+        </div>
+        <div className="ai-revenue-modal__footer ai-revenue-settings__actions--report"><button type="button" className="ai-revenue-settings__primary" onClick={() => window.print()} disabled={!reportRows.length}>Print / Save as PDF</button></div>
       </section>
-    </div>}
+    </div></AdminModalPortal>}
 
-    {modalId && modalId !== 'risk' && modalId !== 'concentration' && modalId !== 'service' && <div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalId(null); }}>
+    {modalId && modalId !== 'risk' && modalId !== 'concentration' && modalId !== 'service' && <AdminModalPortal><div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalId(null); }}>
       <section className="ai-revenue-modal" role="dialog" aria-modal="true" aria-labelledby="ai-analysis-modal-title">
-        <button type="button" className="ai-revenue-modal__close" aria-label="Close analysis" onClick={() => setModalId(null)}>×</button>
-        <p className="ai-revenue-modal__eyebrow">{quarterName(current.year, current.quarter)} analysis</p>
-        <h2 id="ai-analysis-modal-title">{modalId === 'estimate' ? 'Quarterly forecast' : 'Revenue trend & growth'}</h2>
-        <strong className="ai-revenue-modal__headline">{modalId === 'estimate' ? estimate ? `${peso.format(estimate.expected)} estimate for ${estimate.target}` : 'Limited history' : `${peso.format(current.revenue)} revenue`}</strong>
-        <p className="ai-revenue-modal__detail">{modalId === 'estimate' ? estimate ? `Likely range: ${peso.format(estimate.low)} to ${peso.format(estimate.high)}.` : `At least ${riskThresholds.minimumCompletedQuarters} quarters are needed for an estimate.` : `QoQ change: ${signedPercent(qoq)} · YoY change: ${signedPercent(yoy)}`}</p>
-        <QuarterlyBarChart quarters={quarters.slice(0, selectedIndex + 1)} estimate={estimate} selectedKey={`${current.year}-Q${current.quarter}`} currentKey={currentQuarterKey} />
-        <div className="ai-revenue-callout is-normal">Estimate is a simple planning aid based on average observed quarter-over-quarter growth, not a target.</div>
+        <header className="ai-revenue-modal__header">
+          <div><p className="ai-revenue-modal__eyebrow">{quarterName(current.year, current.quarter)} analysis</p><h2 id="ai-analysis-modal-title">{modalId === 'estimate' ? 'Quarterly forecast' : 'Revenue trend & growth'}</h2></div>
+          <button type="button" className="ai-revenue-modal__close" aria-label="Close analysis" onClick={() => setModalId(null)}>×</button>
+        </header>
+        <div className="ai-revenue-modal__body">
+          <strong className="ai-revenue-modal__headline">{modalId === 'estimate' ? estimate ? `${peso.format(estimate.expected)} estimate for ${estimate.target}` : 'Limited history' : `${peso.format(current.revenue)} revenue`}</strong>
+          <p className="ai-revenue-modal__detail">{modalId === 'estimate' ? estimate ? `Likely range: ${peso.format(estimate.low)} to ${peso.format(estimate.high)}.` : `At least ${riskThresholds.minimumCompletedQuarters} quarters are needed for an estimate.` : `QoQ change: ${signedPercent(qoq)} · YoY change: ${signedPercent(yoy)}`}</p>
+          <QuarterlyBarChart quarters={quarters.slice(0, selectedIndex + 1)} estimate={estimate} selectedKey={`${current.year}-Q${current.quarter}`} currentKey={currentQuarterKey} />
+          <div className="ai-revenue-callout is-normal">Estimate is a simple planning aid based on average observed quarter-over-quarter growth, not a target.</div>
+        </div>
       </section>
-    </div>}
+    </div></AdminModalPortal>}
 
-    {(modalId === 'risk' || modalId === 'concentration' || modalId === 'service') && <div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalId(null); }}>
+    {(modalId === 'risk' || modalId === 'concentration' || modalId === 'service') && <AdminModalPortal><div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModalId(null); }}>
       <section className="ai-revenue-modal" role="dialog" aria-modal="true" aria-labelledby="ai-risk-modal-title">
-        <button type="button" className="ai-revenue-modal__close" aria-label="Close analysis" onClick={() => setModalId(null)}>×</button>
-        <p className="ai-revenue-modal__eyebrow">Revenue risk</p><h2 id="ai-risk-modal-title">{selectedAnalysis.title}</h2>
-        {selectedAnalysis.items.length ? <>
-          <div className="ai-revenue-tier-tabs">{['Normal', 'Moderate', 'High'].map((tier) => <span className={selectedTier === tier ? 'is-active' : ''} key={tier}>{tier}</span>)}</div>
-          <div className={`ai-revenue-callout is-${selectedTier.toLowerCase()}`}><strong>{selectedTier} concentration</strong><span>{selectedTop?.name} contributes {selectedTop?.share.toFixed(1)}% of the displayed revenue mix.</span></div>
-          <HorizontalBars items={selectedAnalysis.items} />
-          <div className="ai-revenue-thresholds__note">Threshold reference: Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate through {riskThresholds.topContributorShare.moderateMaxInclusive}%; High above {riskThresholds.topContributorShare.moderateMaxInclusive}%.</div>
-        </> : <p className="ai-revenue-empty">There is no backend data for this concentration view.</p>}
+        <header className="ai-revenue-modal__header">
+          <div><p className="ai-revenue-modal__eyebrow">Revenue risk</p><h2 id="ai-risk-modal-title">{selectedAnalysis.title}</h2></div>
+          <button type="button" className="ai-revenue-modal__close" aria-label="Close analysis" onClick={() => setModalId(null)}>×</button>
+        </header>
+        <div className="ai-revenue-modal__body">
+          {selectedAnalysis.items.length ? <>
+            <div className="ai-revenue-tier-tabs">{['Normal', 'Moderate', 'High'].map((tier) => <span className={selectedTier === tier ? 'is-active' : ''} key={tier}>{tier}</span>)}</div>
+            <div className={`ai-revenue-callout is-${selectedTier.toLowerCase()}`}><strong>{selectedTier} concentration</strong><span>{selectedTop?.name} contributes {selectedTop?.share.toFixed(1)}% of the displayed revenue mix.</span></div>
+            <HorizontalBars items={selectedAnalysis.items} />
+            <div className="ai-revenue-thresholds__note">Threshold reference: Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate through {riskThresholds.topContributorShare.moderateMaxInclusive}%; High above {riskThresholds.topContributorShare.moderateMaxInclusive}%.</div>
+          </> : <p className="ai-revenue-empty">There is no backend data for this concentration view.</p>}
+        </div>
       </section>
-    </div>}
+    </div></AdminModalPortal>}
   </section>
   <AskRevenueAIPanel />
   </>;

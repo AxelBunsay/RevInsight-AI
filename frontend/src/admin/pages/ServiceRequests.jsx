@@ -193,8 +193,20 @@ function ServiceRequests() {
         <AdminDialog
           title={transitionDraft.status === "declined" ? "Decline service booking" : "Cancel service booking"}
           onClose={() => setTransitionDraft(null)}
+          footer={<div className="admin-dialog-actions">
+            <button className="btn-small" type="button" onClick={() => setTransitionDraft(null)}>Cancel</button>
+            <button
+              className="btn-small btn-delete"
+              type="submit"
+              form="service-request-transition-form"
+              disabled={savingId === transitionDraft.request._id
+                || (transitionDraft.requiresRefund && !transitionRefund)
+                || (transitionDraft.requiresReason && transitionReason.trim().length < 3)}
+            >{savingId === transitionDraft.request._id ? "Saving..." : "Save"}</button>
+          </div>}
         >
           <form
+            id="service-request-transition-form"
             className="admin-dialog-form"
             onSubmit={async (event) => {
               event.preventDefault();
@@ -218,18 +230,6 @@ function ServiceRequests() {
                 <label><input type="radio" name="service-refund-decision" value="forfeited" checked={transitionRefund === "forfeited"} onChange={(event) => setTransitionRefund(event.target.value)} /> Forfeit</label>
               </fieldset>
             )}
-            <div className="admin-dialog-actions">
-              <button className="btn-small" type="button" onClick={() => setTransitionDraft(null)}>Cancel</button>
-              <button
-                className="btn-small btn-delete"
-                type="submit"
-                disabled={savingId === transitionDraft.request._id
-                  || (transitionDraft.requiresRefund && !transitionRefund)
-                  || (transitionDraft.requiresReason && transitionReason.trim().length < 3)}
-              >
-                {savingId === transitionDraft.request._id ? "Saving..." : "Save"}
-              </button>
-            </div>
           </form>
         </AdminDialog>
       )}

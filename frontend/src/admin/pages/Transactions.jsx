@@ -7,6 +7,8 @@ import { getServicePaymentSummary, getServiceBookingStatus } from "../../utils/s
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import TransactionsPageActions from "./TransactionsPageActions";
 import { getItemsPageData, getItemsRequest, itemFilterOptions } from "./itemsTransactionView";
+import TransactionCards from "./TransactionCards";
+import { formatTransactionMoney as formatMoney } from "./transactionCardData";
 
 const reservationItemName = (item) => item.variantLabel && !String(item.name || "").includes(item.variantLabel)
   ? `${item.name || item.productName || "Product"} - ${item.variantLabel}`
@@ -68,11 +70,6 @@ const reservationStatuses = [
 ];
 
 const transactionStatuses = ["completed", "pending", "cancelled", "Paid", "Payment Submitted", "Payment Pending", "Confirmed", "Paid at shop"];
-
-const formatMoney = (value) => `₱${Number(value || 0).toLocaleString("en-PH", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})}`;
 
 function formatReservationRecord(reservation) {
   const customer = reservation.customerId;
@@ -397,6 +394,50 @@ function Transactions() {
     } catch (detailError) {
       setError(detailError.message || "Failed to load transaction details");
     }
+  };
+
+  const renderTransactionActions = (transaction, includeView = true) => {
+    if (transaction.isServiceRequest && ["pending", "assigned", "confirmed", "accepted", "in-progress"].includes(transaction.bookingStatus)) {
+      return <>
+        {transaction.paymentStatus === "Payment Submitted" && (
+          <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
+        )}
+        {["Payment Pending", "Confirmed"].includes(transaction.paymentStatus) && transaction.balance > 0 && (
+          <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : transaction.paid > 0 ? "Mark balance paid at shop" : "Mark paid at shop"}</button>
+        )}
+        <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel-service")}>Cancel booking</button>
+        {["assigned", "confirmed"].includes(transaction.bookingStatus) && (
+          <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "decline-service")}>Decline</button>
+        )}
+      </>;
+    }
+    if (transaction.isServiceRequest && transaction.status === "Payment Submitted") {
+      return <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>;
+    }
+    if (transaction.isReservation && transaction.status === "Payment Submitted") {
+      return <>
+        <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
+        <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button>
+      </>;
+    }
+    if (transaction.isReservation && transaction.status === "Reserved") {
+      return <>
+        <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "complete")}>Complete pickup</button>
+        <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button>
+      </>;
+    }
+    if (transaction.isReservation && transaction.status === "Pending Down Payment") {
+      return <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button>;
+    }
+    if (transaction.isReservation && transaction.status === "Expired") {
+      return <>
+        {transaction.amountPaid > 0 && !transaction.refundDecision && <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "refund")}>Record refund decision</button>}
+        <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Close expired reservation</button>
+      </>;
+    }
+    return includeView
+      ? <button className="btn-small btn-edit" type="button" onClick={() => viewTransaction(transaction)}>View</button>
+      : null;
   };
 
   const markServicePaidAtShop = async (transaction) => {
@@ -764,6 +805,14 @@ function Transactions() {
             </select>
           </div>
           <div id="transactions-panel" role="tabpanel" aria-labelledby={`transactions-tab-${activeTab}`}>
+            <TransactionCards
+              transactions={transactions}
+              activeTab={activeTab}
+              isLoading={isLoading}
+              emptyMessage={emptyMessage}
+              onView={viewTransaction}
+              renderActions={(transaction) => renderTransactionActions(transaction, false)}
+            />
             <div className="transactions-table-scroll">
             <table className="transactions-table">
               <thead>
@@ -934,8 +983,16 @@ function Transactions() {
         </div>
       </section>
       {settingsOpen && (
-        <AdminDialog title="Payment & reservation settings" onClose={() => setSettingsOpen(false)}>
-          <form className="admin-dialog-form reservation-settings-form" onSubmit={saveSettings}>
+        <AdminDialog
+          title="Payment & reservation settings"
+          onClose={() => setSettingsOpen(false)}
+          footer={<div className="admin-dialog-actions">
+            <button className="btn-small" type="button" onClick={() => setSettingsOpen(false)}>Cancel</button>
+            <button className="btn-primary admin-dialog-gcash-save-mobile" type="button" onClick={saveGcashSettings} disabled={isSavingGcash}>{isSavingGcash ? "Saving GCash settings..." : "Save GCash settings"}</button>
+            <button className="btn-primary" type="submit" form="reservation-settings-form" disabled={isSavingSettings}>{isSavingSettings ? "Saving..." : "Save"}</button>
+          </div>}
+        >
+          <form id="reservation-settings-form" className="admin-dialog-form reservation-settings-form" onSubmit={saveSettings}>
             {settingsError && <p className="admin-dialog-error" role="alert">{settingsError}</p>}
             <label>
               Down payment percent
@@ -1009,7 +1066,7 @@ function Transactions() {
                     </button>
                     <small>PNG, JPG or WEBP; up to 2 MB. Select a new image to replace the current QR.</small>
                   </div>
-                  <button className="btn-primary" type="button" onClick={saveGcashSettings} disabled={isSavingGcash}>
+                  <button className="btn-primary admin-dialog-gcash-save-body" type="button" onClick={saveGcashSettings} disabled={isSavingGcash}>
                     {isSavingGcash ? "Saving GCash settings..." : "Save GCash settings"}
                   </button>
                 </div>
@@ -1048,10 +1105,6 @@ function Transactions() {
               />
               {settingsFieldErrors.contactNumber && <small className="inventory-field-error" role="alert">{settingsFieldErrors.contactNumber}</small>}
             </label>
-            <div className="admin-dialog-actions">
-              <button className="btn-small" type="button" onClick={() => setSettingsOpen(false)}>Cancel</button>
-              <button className="btn-primary" type="submit" disabled={isSavingSettings}>{isSavingSettings ? "Saving..." : "Save"}</button>
-            </div>
           </form>
         </AdminDialog>
       )}
@@ -1064,8 +1117,37 @@ function Transactions() {
               setReservationActionError("");
             }
           }}
+          footer={<div className="admin-dialog-actions">
+            {reservationAction.action === "review" && (rejectingPayment ? <>
+              <button className="btn-small" type="button" onClick={() => setRejectingPayment(false)}>Back</button>
+              <button className="btn-small btn-delete" type="submit" form="reservation-action-form" disabled={isPerformingReservationAction}>{isPerformingReservationAction ? "Rejecting..." : "Reject payment"}</button>
+            </> : <>
+              <button className="btn-small btn-delete" type="button" onClick={() => setRejectingPayment(true)}>Reject</button>
+              <button className="btn-primary" type="button" disabled={isPerformingReservationAction} onClick={(event) => performReservationAction(event, "confirm")}>{isPerformingReservationAction ? "Confirming..." : "Confirm payment"}</button>
+            </>)}
+            {reservationAction.action === "complete" && <>
+              <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Cancel</button>
+              <button className="btn-primary" type="submit" form="reservation-action-form" disabled={!balanceReceived || isPerformingReservationAction}>{isPerformingReservationAction ? "Completing..." : "Complete"}</button>
+            </>}
+            {reservationAction.action === "refund" && <>
+              <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Cancel</button>
+              <button className="btn-primary" type="submit" form="reservation-action-form" disabled={!refundDecision || isPerformingReservationAction}>{isPerformingReservationAction ? "Saving..." : "Save decision"}</button>
+            </>}
+            {reservationAction.action === "cancel" && <>
+              <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Keep reservation</button>
+              <button className="btn-small btn-delete" type="submit" form="reservation-action-form" disabled={isPerformingReservationAction || (reservationAction.transaction.amountPaid > 0 && (reservationAction.transaction.status === "Reserved" || !reservationAction.transaction.refundDecision) && !refundDecision)}>{isPerformingReservationAction ? "Cancelling..." : "Cancel reservation"}</button>
+            </>}
+            {["cancel-service", "decline-service"].includes(reservationAction.action) && <>
+              <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Keep booking</button>
+              <button className="btn-small btn-delete" type="submit" form="reservation-action-form" disabled={isPerformingReservationAction
+                || (reservationAction.transaction.paid > 0 && ["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && !refundDecision)
+                || (reservationAction.transaction.bookingStatus === "in-progress" && reservationAction.action === "cancel-service" && actionReason.trim().length < 3)}>
+                {isPerformingReservationAction ? "Saving..." : "Confirm"}
+              </button>
+            </>}
+          </div>}
         >
-          <form className="admin-dialog-form reservation-transaction-action" onSubmit={(event) => performReservationAction(event, rejectingPayment ? "reject" : undefined)}>
+          <form id="reservation-action-form" className="admin-dialog-form reservation-transaction-action" onSubmit={(event) => performReservationAction(event, rejectingPayment ? "reject" : undefined)}>
             {reservationActionError && <p className="admin-dialog-error" role="alert">{reservationActionError}</p>}
             <p><strong>Customer:</strong> {reservationAction.transaction.customer}</p>
             <p><strong>{reservationAction.transaction.isServiceRequest ? "Booking" : "Reservation"}:</strong> {reservationAction.transaction.code || reservationAction.transaction.id}</p>
@@ -1099,19 +1181,8 @@ function Transactions() {
                       Rejection reason
                       <textarea minLength="3" maxLength="300" required value={actionReason} onChange={(event) => setActionReason(event.target.value)} />
                     </label>
-                    <div className="admin-dialog-actions">
-                      <button className="btn-small" type="button" onClick={() => setRejectingPayment(false)}>Back</button>
-                      <button className="btn-small btn-delete" type="submit" disabled={isPerformingReservationAction}>{isPerformingReservationAction ? "Rejecting..." : "Reject payment"}</button>
-                    </div>
                   </>
-                ) : (
-                  <div className="admin-dialog-actions">
-                    <button className="btn-small btn-delete" type="button" onClick={() => setRejectingPayment(true)}>Reject</button>
-                    <button className="btn-primary" type="button" disabled={isPerformingReservationAction} onClick={(event) => performReservationAction(event, "confirm")}>
-                      {isPerformingReservationAction ? "Confirming..." : "Confirm payment"}
-                    </button>
-                  </div>
-                )}
+                ) : null}
               </>
             )}
             {reservationAction.action === "complete" && (
@@ -1121,10 +1192,6 @@ function Transactions() {
                   <input type="checkbox" checked={balanceReceived} onChange={(event) => setBalanceReceived(event.target.checked)} />
                   Balance received
                 </label>
-                <div className="admin-dialog-actions">
-                  <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Cancel</button>
-                  <button className="btn-primary" type="submit" disabled={!balanceReceived || isPerformingReservationAction}>{isPerformingReservationAction ? "Completing..." : "Complete"}</button>
-                </div>
               </>
             )}
             {reservationAction.action === "refund" && (
@@ -1135,10 +1202,6 @@ function Transactions() {
                   <label><input type="radio" name="refund-decision" value="refunded" checked={refundDecision === "refunded"} onChange={(event) => setRefundDecision(event.target.value)} /> Refund</label>
                   <label><input type="radio" name="refund-decision" value="forfeited" checked={refundDecision === "forfeited"} onChange={(event) => setRefundDecision(event.target.value)} /> Forfeit</label>
                 </fieldset>
-                <div className="admin-dialog-actions">
-                  <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Cancel</button>
-                  <button className="btn-primary" type="submit" disabled={!refundDecision || isPerformingReservationAction}>{isPerformingReservationAction ? "Saving..." : "Save decision"}</button>
-                </div>
               </>
             )}
             {reservationAction.action === "cancel" && (
@@ -1154,10 +1217,6 @@ function Transactions() {
                     <label><input type="radio" name="refund-decision" value="forfeited" checked={refundDecision === "forfeited"} onChange={(event) => setRefundDecision(event.target.value)} /> Forfeit</label>
                   </fieldset>
                 )}
-                <div className="admin-dialog-actions">
-                  <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Keep reservation</button>
-                  <button className="btn-small btn-delete" type="submit" disabled={isPerformingReservationAction || (reservationAction.transaction.amountPaid > 0 && (reservationAction.transaction.status === "Reserved" || !reservationAction.transaction.refundDecision) && !refundDecision)}>{isPerformingReservationAction ? "Cancelling..." : "Cancel reservation"}</button>
-                </div>
               </>
             )}
             {["cancel-service", "decline-service"].includes(reservationAction.action) && (
@@ -1179,18 +1238,6 @@ function Transactions() {
                     <label><input type="radio" name="service-refund-decision" value="forfeited" checked={refundDecision === "forfeited"} onChange={(event) => setRefundDecision(event.target.value)} /> Forfeit</label>
                   </fieldset>
                 )}
-                <div className="admin-dialog-actions">
-                  <button className="btn-small" type="button" onClick={() => setReservationAction(null)}>Keep booking</button>
-                  <button
-                    className="btn-small btn-delete"
-                    type="submit"
-                    disabled={isPerformingReservationAction
-                      || (reservationAction.transaction.paid > 0 && ["Confirmed", "Paid at shop"].includes(reservationAction.transaction.paymentStatus) && !refundDecision)
-                      || (reservationAction.transaction.bookingStatus === "in-progress" && reservationAction.action === "cancel-service" && actionReason.trim().length < 3)}
-                  >
-                    {isPerformingReservationAction ? "Saving..." : "Confirm"}
-                  </button>
-                </div>
               </>
             )}
           </form>
@@ -1208,7 +1255,7 @@ function Transactions() {
             </p>
             <p>
               <strong>Date:</strong>{" "}
-              {new Date(
+              {selectedTransaction.date || new Date(
                 selectedTransaction.completedAt ||
                   selectedTransaction.createdAt,
               ).toLocaleString("en-PH")}
@@ -1219,6 +1266,8 @@ function Transactions() {
                 selectedTransaction.customer ||
                 "Unknown"}
             </p>
+            {selectedTransaction.customerPhone && <p><strong>Customer phone:</strong> {selectedTransaction.customerPhone}</p>}
+            {selectedTransaction.recordLabel && <p><strong>Type:</strong> {selectedTransaction.recordLabel}</p>}
             {selectedTransaction.recordType === "service" || selectedTransaction.code ? (
               <p>
                 <strong>Status:</strong>{" "}
@@ -1250,13 +1299,27 @@ function Transactions() {
                   0,
               ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
             </p>
+            {selectedTransaction.recordType === "service" && <p><strong>Mechanic:</strong> {selectedTransaction.mechanicName || selectedTransaction.mechanic || "N/A"}</p>}
+            {selectedTransaction.paymentMethod && <p><strong>Payment method:</strong> {selectedTransaction.paymentMethod}</p>}
+            {selectedTransaction.paymentReference && <p><strong>Payment reference:</strong> {selectedTransaction.paymentReference}</p>}
+            {selectedTransaction.reservedUntil && <p><strong>Hold until:</strong> {new Date(selectedTransaction.reservedUntil).toLocaleString("en-PH")}</p>}
+            {selectedTransaction.rejectionReason && <p><strong>Last rejection:</strong> {selectedTransaction.rejectionReason}</p>}
+            {selectedTransaction.refundDecision && <p><strong>Refund decision:</strong> {selectedTransaction.refundDecision}</p>}
             {selectedTransaction.isServiceRequest && (
               <>
+                <ServicePriceBreakdown
+                  servicePriceTotal={selectedTransaction.servicePriceTotal}
+                  mechanicFeeTotal={selectedTransaction.mechanicFeeTotal}
+                  estimatedPrice={selectedTransaction.estimatedPrice}
+                />
                 <p><strong>Down payment ({selectedTransaction.downPaymentPercent}%):</strong> {formatMoney(selectedTransaction.downPaymentAmount)}</p>
                 <p><strong>Down payment paid:</strong> {formatMoney(selectedTransaction.paid)}</p>
                 <p><strong>Balance to collect:</strong> {formatMoney(selectedTransaction.balance)}</p>
                 {selectedTransaction.balance > 0 && <p><strong>At service completion:</strong> Collect balance of {formatMoney(selectedTransaction.balance)} at the shop.</p>}
                 <p><strong>Payment reference:</strong> {selectedTransaction.paymentReference || "Not provided"}</p>
+                <p><strong>Payment status:</strong> {selectedTransaction.paymentStatus || "Payment Pending"}</p>
+                {selectedTransaction.bookingStatus && <p><strong>Booking status:</strong> {selectedTransaction.bookingStatus}</p>}
+                <p><strong>Mechanic:</strong> {selectedTransaction.mechanic || "Unassigned"}</p>
               </>
             )}
             <p>
@@ -1275,6 +1338,14 @@ function Transactions() {
                   selectedTransaction.items ||
                   "N/A"}
             </p>
+            {Array.isArray(selectedTransaction.items) && selectedTransaction.items.length > 0 && (
+              <ul className="transaction-details__line-items">
+                {selectedTransaction.items.map((item, index) => <li key={item._id || item.productId || item.variantId || index}>
+                  <span>{reservationItemName(item)} × {item.qty}</span>
+                  <strong>{formatMoney(item.lineTotal)}</strong>
+                </li>)}
+              </ul>
+            )}
           </div>
         </AdminDialog>
       )}
