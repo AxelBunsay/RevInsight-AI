@@ -6,6 +6,7 @@ import Cart from './Customer/react/Cart';
 import { CustomerLogin, CustomerRegister } from './Customer/react/CustomerAuth';
 import CustomerProfile from './Customer/react/Profile';
 import MyPurchases from './Customer/react/MyPurchases';
+import Landing from './Customer/react/Landing';
 import { getLegacyProfilePurchaseRedirect } from './Customer/react/customerPurchases';
 import { CustomerAuthGuard, CustomerAuthLayout, CustomerRouteLayout } from './Customer/react/CustomerLayout';
 import Shop from './Customer/react/Shop';
@@ -63,7 +64,9 @@ function App() {
             <Routes>
           <Route path="/admin/*" element={<AdminApp />} />
         <Route element={<CustomerRouteLayout />}>
-          <Route path="/" element={<Shop />} />
+          <Route path="/" element={<Landing />} />
+        <Route path="/customer" element={<Navigate to="/" replace />} />
+        <Route path="/customer/home" element={<Navigate to="/" replace />} />
         <Route path="/customer/shop" element={<Shop />} />
         <Route element={<CustomerAuthLayout />}>
           <Route path="/customer/login" element={<CustomerLogin />} />

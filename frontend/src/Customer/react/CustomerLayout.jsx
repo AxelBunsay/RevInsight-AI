@@ -19,6 +19,7 @@ function getCustomerDocumentTitle(title) {
   const titlesByHeading = {
     'Motorcycle Shop': "Shop | Manoy's Motorcycle",
     'Motorcycle Services': "Services | Manoy's Motorcycle",
+    Home: "Home | Manoy's Motorcycle",
     Cart: "Cart | Manoy's Motorcycle",
     'My purchases': "My purchases | Manoy's Motorcycle",
     'My Purchases': "My purchases | Manoy's Motorcycle",
@@ -195,8 +196,8 @@ export function CustomerHeader() {
   };
 
   const currentPath = location.pathname;
+  const isHomePage = currentPath === '/';
   const isShopPage = currentPath === '/customer/shop'
-    || currentPath === '/'
     || currentPath.startsWith('/customer/products/');
   const isServicesPage = currentPath.startsWith('/customer/services');
   const isAccountPage = currentPath === '/customer/profile' || currentPath.startsWith('/my-purchases');
@@ -206,7 +207,7 @@ export function CustomerHeader() {
   };
 
   return <header ref={headerRef} className="customer-header">
-    <Link className="customer-brand" to="/customer/shop"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="44" height="44" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
+    <Link className="customer-brand" to="/"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="44" height="44" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
     <div className="customer-header-actions">
       <Link className="customer-header-icon-button customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
         <svg viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(0.5 -0.1)"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></g></svg>
@@ -242,6 +243,7 @@ export function CustomerHeader() {
       </button>
     </div>
     <nav ref={menuRef} id="customer-navigation" aria-label="Customer navigation" className={`customer-nav${isMenuOpen ? ' is-open' : ''}`}>
+      <Link onClick={closeNavigation} className={isHomePage ? 'active' : ''} aria-current={isHomePage ? 'page' : undefined} to="/">Home</Link>
       <Link onClick={closeNavigation} className={isShopPage ? 'active' : ''} aria-current={isShopPage ? 'page' : undefined} to="/customer/shop">Shop</Link>
       <Link onClick={closeNavigation} className={isServicesPage ? 'active' : ''} aria-current={isServicesPage ? 'page' : undefined} to="/customer/services">Services</Link>
       {hasCustomerAccount && <div className="customer-account-menu-area" ref={accountAreaRef}>
@@ -328,7 +330,8 @@ export function CustomerPage({ title, description, children, preserveScrollOnMou
 export function CustomerRouteLayout() {
   const { pathname } = useLocation();
   const routeClasses = [
-    pathname === '/' || pathname === '/customer/shop' ? 'shop-page' : '',
+    pathname === '/' ? 'home-page' : '',
+    pathname === '/customer/shop' || pathname.startsWith('/customer/products/') ? 'shop-page' : '',
     pathname === '/customer/services' ? 'services-page' : '',
     pathname.startsWith('/my-purchases') ? 'orders-page reservations-page' : '',
     pathname === '/customer/profile' ? 'profile-page' : ''

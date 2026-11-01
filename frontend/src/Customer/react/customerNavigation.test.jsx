@@ -144,11 +144,15 @@ describe('customer account menu', () => {
     const nav = markup.indexOf('id="customer-navigation"');
     expect(actions).toBeGreaterThan(-1);
     expect(markup).toContain('<strong>MANOY&#x27;S</strong>');
+    expect(markup).toContain('class="customer-brand" href="/"');
+    expect(markup).toContain('aria-current="page" href="/"');
+    expect(markup).toContain('>Home</a>');
     expect(cart).toBeGreaterThan(actions);
     expect(bell).toBeGreaterThan(cart);
     expect(toggle).toBeGreaterThan(bell);
     expect(nav).toBeGreaterThan(toggle);
     expect(markup).toContain('>Register</a>');
+    expect(customerLayoutSource).toContain("const isHomePage = currentPath === '/';");
     expect(markup.match(/customer-header-icon-button/g)).toHaveLength(3);
     expect(markup).not.toContain('customer-header-cart-count');
     expect(markup).not.toContain('customer-notification-count');
