@@ -7,6 +7,7 @@ import ReservationPaymentForm from './ReservationPaymentForm';
 import { serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
+import { getServiceCartPaymentSummary } from './serviceCart';
 import { calculateServicePayment, getServicePaymentSummary } from '../../utils/servicePayment';
 import '../styles/customer-flow.css';
 
@@ -36,7 +37,7 @@ export default function Checkout() {
   const serviceTotal = serviceItems.reduce((total, item) => total + Number(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)), 0);
   const downPaymentAmount = Math.round((productSubtotal * (settings?.downPaymentPercent ?? 30) / 100 + Number.EPSILON) * 100) / 100;
   const serviceDownPaymentPercent = settings?.serviceDownPaymentPercent ?? settings?.downPaymentPercent ?? 30;
-  const servicePaymentEstimate = calculateServicePayment(serviceTotal, serviceDownPaymentPercent);
+  const servicePaymentEstimate = getServiceCartPaymentSummary(serviceItems, serviceDownPaymentPercent);
 
   useEffect(() => {
     let isMounted = true;
@@ -134,6 +135,7 @@ export default function Checkout() {
       const response = await api.createServiceBookings(serviceItems.map((item) => ({
         cartKey: item.key,
         serviceId: item.serviceId || item.id,
+        partsSource: item.partsSource || 'shop',
         date: item.bookingDate,
         startTime: item.startTime,
         ...(item.units ? { units: item.units } : {}),
@@ -206,6 +208,7 @@ export default function Checkout() {
               {bookingResults.map((result, index) => <article className={result.ok ? 'is-success' : 'has-error'} key={`${result.cartKey}-${index}`}>
                 <div>
                   <strong>{result.cartItem?.name || result.serviceRequest?.serviceType || 'Service booking'}</strong>
+                  {result.cartItem?.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}
                   <small>{result.cartItem?.units ? `${serviceUnitSummary(result.cartItem.units, result.cartItem.unitLabel)} · ` : ''}{result.cartItem?.bookingDate} · {result.cartItem?.timeSlot}</small>
                   {result.ok && <>
                     <ServicePriceBreakdown
@@ -229,6 +232,7 @@ export default function Checkout() {
               const itemPaymentEstimate = calculateServicePayment(itemTotal, serviceDownPaymentPercent);
               return <div key={item.key}><span>
                 <strong>{item.name}</strong>
+                {item.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}
                 <small>{item.units ? `${serviceUnitSummary(item.units, item.unitLabel)} · ` : ''}{item.bookingDate} · {item.timeSlot} · {item.vehicle}</small>
                 <ServicePriceBreakdown servicePriceTotal={item.servicePriceTotal} mechanicFeeTotal={item.mechanicFeeTotal} estimatedPrice={itemTotal} />
                 <ServicePaymentBreakdown booking={itemPaymentEstimate} />

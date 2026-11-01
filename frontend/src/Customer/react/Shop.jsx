@@ -8,6 +8,9 @@ import ShopProductCard from './ShopProductCard';
 import ProductDetailModal from './ProductDetailModal';
 import { getProductModalId, getProductModalSearch, removeProductModalSearch } from './productDetailHelpers';
 import { clearCustomerAuthAction, readCustomerAuthAction } from './customerAuthAction';
+import CustomerPagination from './CustomerPagination.jsx';
+import { CUSTOMER_PAGE_SIZES, getCustomerPageItems } from './customerPagination';
+import { useCustomerPagination } from './useCustomerPagination';
 import '../styles/shop.css';
 
 const MOTORCYCLE_FILTER_KEY = 'revinsightShopMotorcycle';
@@ -82,6 +85,7 @@ export default function Shop() {
   const { addCartItem } = useCustomerPrototype();
   const resumedActionRef = useRef('');
   const productCardOpenerRef = useRef(null);
+  const productsListRef = useRef(null);
   const locationReturnPath = `${location.pathname}${location.search}`;
   const productModalId = getProductModalId(location.search);
 
@@ -266,11 +270,21 @@ export default function Shop() {
         - Math.min(...(left.variants || []).map((variant) => Number(variant.price)), Number(left.price))
       : left.name.localeCompare(right.name)), [category, motorcycle, products, search, sort]);
 
+  const shopPageSize = CUSTOMER_PAGE_SIZES.shop;
+  const { page, pageCount, setPage, resetPage } = useCustomerPagination({
+    itemCount: visibleProducts.length,
+    pageSize: shopPageSize,
+    isReady: !isLoading,
+    listRef: productsListRef
+  });
+  const pageProducts = getCustomerPageItems(visibleProducts, page, shopPageSize);
+
   const clearFilters = () => {
     setSearch('');
     setCategory('All');
     setSort('featured');
     setMotorcycle({ brand: '', model: '' });
+    resetPage();
   };
 
   const downPaymentPercent = Number(settings?.downPaymentPercent);
@@ -304,8 +318,8 @@ export default function Shop() {
       </section>
 
       <div className="shop-toolbar">
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search parts, accessories..." aria-label="Search products" />
-        <select value={sort} onChange={(event) => setSort(event.target.value)} aria-label="Sort products">
+        <input value={search} onChange={(event) => { setSearch(event.target.value); resetPage(); }} placeholder="Search parts, accessories..." aria-label="Search products" />
+        <select value={sort} onChange={(event) => { setSort(event.target.value); resetPage(); }} aria-label="Sort products">
           <option value="featured">Sort: Featured</option>
           <option value="price-low">Price: Low to high</option>
           <option value="price-high">Price: High to low</option>
@@ -318,7 +332,7 @@ export default function Shop() {
         <select
           value={motorcycle.brand}
           aria-label="Motorcycle brand"
-          onChange={(event) => setMotorcycle({ brand: event.target.value, model: '' })}
+          onChange={(event) => { setMotorcycle({ brand: event.target.value, model: '' }); resetPage(); }}
         >
           <option value="">All brands</option>
           {motorcycleBrands.map((brand) => <option value={brand} key={brand}>{brand}</option>)}
@@ -327,12 +341,12 @@ export default function Shop() {
           value={motorcycle.model}
           aria-label="Motorcycle model"
           disabled={!motorcycle.brand}
-          onChange={(event) => setMotorcycle((current) => ({ ...current, model: event.target.value }))}
+          onChange={(event) => { setMotorcycle((current) => ({ ...current, model: event.target.value })); resetPage(); }}
         >
           <option value="">All models</option>
           {motorcycleModels.map((model) => <option value={model} key={model}>{model}</option>)}
         </select>
-        <button type="button" onClick={() => setMotorcycle({ brand: '', model: '' })}>Clear</button>
+        <button type="button" onClick={() => { setMotorcycle({ brand: '', model: '' }); resetPage(); }}>Clear</button>
       </div>
 
       {settingsError && <div className="shop-settings-error" role="status">
@@ -341,7 +355,7 @@ export default function Shop() {
       </div>}
 
       <div className="customer-product-categories" role="group" aria-label="Product categories">
-        {productCategories.map((item) => <button type="button" className={category === item ? 'active' : ''} key={item} onClick={() => setCategory(item)}>
+        {productCategories.map((item) => <button type="button" className={category === item ? 'active' : ''} key={item} onClick={() => { setCategory(item); resetPage(); }}>
           {item}<small>{item === 'All' ? products.length : products.filter((product) => product.category === item).length}</small>
         </button>)}
       </div>
@@ -351,6 +365,15 @@ export default function Shop() {
         <span>{isLoading ? 'Loading products' : `${visibleProducts.length} items`}</span>
       </div>
 
+      {!isLoading && !error && <CustomerPagination
+        page={page}
+        pageCount={pageCount}
+        totalItems={visibleProducts.length}
+        pageSize={shopPageSize}
+        onPageChange={setPage}
+        label="Products"
+      />}
+
       {isLoading
         ? <div className="product-grid" aria-label="Loading products">{Array.from({ length: 8 }, (_, index) => <ProductSkeleton key={index} />)}</div>
         : error
@@ -359,8 +382,8 @@ export default function Shop() {
             <button type="button" onClick={retryShopData}>Try again</button>
           </div>
           : visibleProducts.length
-            ? <div className="product-grid">
-              {visibleProducts.map((product) => {
+            ? <div className="product-grid" ref={productsListRef}>
+              {pageProducts.map((product) => {
                 const variants = product.variants || [];
                 const availableStock = Math.max(0, Number(product.quantity || 0));
                 const availableVariants = variants.filter((variant) => variantAvailable(variant) > 0);

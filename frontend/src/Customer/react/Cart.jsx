@@ -30,8 +30,8 @@ export default function Cart() {
   const productEntries = JSON.stringify(products.map(({ key, id, variantId }) => ({
     key, id, variantId
   })));
-  const serviceEntries = JSON.stringify(serviceItems.map(({ key, id, serviceId, units }) => ({
-    key, id: serviceId || id, units
+  const serviceEntries = JSON.stringify(serviceItems.map(({ key, id, serviceId, units, partsSource }) => ({
+    key, id: serviceId || id, units, partsSource
   })));
 
   useEffect(() => {
@@ -103,12 +103,18 @@ export default function Cart() {
             const response = await api.getService(item.id);
             const service = response.service;
             const units = service.pricePerUnit ? Number(item.units || 1) : 1;
-            const amounts = calculateServiceAmounts(service.price, service.mechanicFee, units);
+            if (item.partsSource === 'customer' && service.laborOnlyPrice == null) {
+              if (isMounted) updateCartItemDetails(item.key, { pricingUnavailable: true });
+              return;
+            }
+            const unitPrice = Number(item.partsSource === 'customer' ? service.laborOnlyPrice : service.price);
+            const amounts = calculateServiceAmounts(unitPrice, service.mechanicFee, units);
             if (isMounted) {
               updateCartItemDetails(item.key, {
                 name: formatServiceName(service.name, units, service.unitLabel),
                 serviceId: service._id,
-                unitPrice: Number(service.price),
+                partsSource: item.partsSource || 'shop',
+                unitPrice,
                 unitMechanicFee: Number(service.mechanicFee || 0),
                 price: amounts.servicePriceTotal,
                 mechanicFee: amounts.mechanicFeeTotal,
@@ -143,8 +149,8 @@ export default function Cart() {
             <div className={`customer-cart-item-art${item.kind === 'service' ? ' is-service' : ''}${item.kind === 'product' && item.imageUrl ? ' has-image' : ''}`} aria-hidden="true">{item.kind === 'product'
               ? <ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" loading="lazy" fallback={<span>{item.icon || '▣'}</span>} />
               : item.icon || '🔧'}</div>
-            <div className="customer-cart-item-copy"><span className="customer-cart-item-kind">{item.kind === 'service' ? 'SERVICE BOOKING' : 'ITEM RESERVATION'}</span><h2>{item.name}</h2><p>{item.kind === 'service' ? `${item.units ? `${serviceUnitSummary(item.units, item.unitLabel)} · ` : ''}${item.bookingDate} · ${item.timeSlot} · ${item.vehicle}` : isRefreshingProducts ? 'Checking current price and stock...' : item.unavailable ? 'This option is no longer available. Remove it and choose another.' : `${money(item.price)} each · Only ${item.stock} left`}</p>{item.kind === 'service' && (isRefreshingServices ? <small>Refreshing service price...</small> : item.pricingUnavailable ? <small>Service pricing is unavailable.</small> : <ServicePriceBreakdown servicePriceTotal={item.servicePriceTotal} mechanicFeeTotal={item.mechanicFeeTotal} estimatedPrice={item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)} />)} {item.notes && <small>Note: {item.notes}</small>}</div>
-            <div className="customer-cart-item-actions">{item.kind === 'product' && <div className="customer-quantity-control"><div><button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1 || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity - 1)}>−</button><output>{item.quantity}</output><button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity + 1)}>+</button></div></div>}<strong>{item.kind === 'product' && (isRefreshingProducts || item.unavailable) || item.kind === 'service' && (isRefreshingServices || item.pricingUnavailable) ? '—' : item.kind === 'service' ? money(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)) : money(item.price * item.quantity)}</strong>{item.kind === 'service' && <Link className="customer-edit-item" to={`/customer/services/${item.serviceId || item.id}`} state={{ editCartKey: item.key }}>Edit</Link>}<button type="button" className="customer-remove-item" onClick={() => removeCartItem(item.key)}>Remove</button></div>
+            <div className="customer-cart-item-copy"><span className="customer-cart-item-kind">{item.kind === 'service' ? 'SERVICE BOOKING' : 'ITEM RESERVATION'}</span>{item.kind === 'service' && item.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}<h2>{item.name}</h2><p>{item.kind === 'service' ? `${item.units ? `${serviceUnitSummary(item.units, item.unitLabel)} · ` : ''}${item.bookingDate} · ${item.timeSlot} · ${item.vehicle}` : isRefreshingProducts ? 'Checking current price and stock...' : item.unavailable ? 'This option is no longer available. Remove it and choose another.' : `${money(item.price)} each · Only ${item.stock} left`}</p>{item.kind === 'service' && (isRefreshingServices ? <small>Refreshing service price...</small> : item.pricingUnavailable ? <small>Service pricing is unavailable.</small> : <ServicePriceBreakdown servicePriceTotal={item.servicePriceTotal} mechanicFeeTotal={item.mechanicFeeTotal} estimatedPrice={item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)} />)} {item.notes && <small>Note: {item.notes}</small>}</div>
+            <div className="customer-cart-item-actions">{item.kind === 'product' && <div className="customer-quantity-control"><div><button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1 || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity - 1)}>−</button><output>{item.quantity}</output><button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity + 1)}>+</button></div></div>}<strong>{item.kind === 'product' && (isRefreshingProducts || item.unavailable) || item.kind === 'service' && (isRefreshingServices || item.pricingUnavailable) ? '—' : item.kind === 'service' ? money(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)) : money(item.price * item.quantity)}</strong>{item.kind === 'service' && <Link className="customer-edit-item" to={`/customer/services/${item.serviceId || item.id}${item.partsSource === 'customer' ? '?parts=own' : ''}`} state={{ editCartKey: item.key }}>Edit</Link>}<button type="button" className="customer-remove-item" onClick={() => removeCartItem(item.key)}>Remove</button></div>
           </article>)}
           <Link className="customer-continue-link" to="/customer/shop">← Continue shopping</Link>
         </section>

@@ -31,6 +31,7 @@ export default function TransactionCards({
             {activeTab === 'all' && <span className={`transaction-type-badge ${isService ? 'is-service' : 'is-item'}`}>
               {isService ? 'Service' : 'Item'}
             </span>}
+            {isService && transaction.partsSource === 'customer' && <span className="transaction-parts-source-badge">Own parts</span>}
             <span className={`status-badge status-${statusClass}`}>{transaction.status || 'completed'}</span>
           </div>
         </div>

@@ -13,6 +13,7 @@ import {
   getDateChangeState
 } from './serviceBookingTime';
 import ServiceBookingTimeSelect from './ServiceBookingTimeSelect';
+import { getServicePartsSource } from './servicePartsMode';
 import '../styles/customer-flow.css';
 
 function formatDuration(minutes) {
@@ -77,6 +78,7 @@ export default function ServiceDetail() {
   const { addCartItem, replaceCartItem, vehicles, addVehicle, cart } = useCustomerPrototype();
   const editCartKey = location.state?.editCartKey || location.state?.replaceBookingKey;
   const editingCartItem = cart.find((item) => item.key === editCartKey);
+  const partsSource = editingCartItem?.partsSource || getServicePartsSource(location.search);
   const [service, setService] = useState(null);
   const [serviceError, setServiceError] = useState('');
   const [loadedServiceId, setLoadedServiceId] = useState('');
@@ -168,7 +170,7 @@ export default function ServiceDetail() {
       }
       if (resumeRequestedRef.current) {
         const action = readCustomerAuthAction();
-        if (action?.type === 'service' && action.serviceId === serviceId && action.date === date && action.returnPath === location.pathname) {
+        if (action?.type === 'service' && action.serviceId === serviceId && action.date === date && action.returnPath === `${location.pathname}${location.search}`) {
           const actionKey = `${action.createdAt}:${action.serviceId}:${action.date}:${action.time}`;
           if (resumedActionRef.current !== actionKey) {
             resumedActionRef.current = actionKey;
@@ -183,12 +185,12 @@ export default function ServiceDetail() {
             }
             clearCustomerAuthAction();
             resumeRequestedRef.current = false;
-            navigate(location.pathname, { replace: true, state: null });
+            navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
           }
         } else {
           clearCustomerAuthAction();
           resumeRequestedRef.current = false;
-          navigate(location.pathname, { replace: true, state: null });
+          navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
         }
       }
     } catch (error) {
@@ -200,7 +202,7 @@ export default function ServiceDetail() {
       if (resumeRequestedRef.current) {
         clearCustomerAuthAction();
         resumeRequestedRef.current = false;
-        navigate(location.pathname, { replace: true, state: null });
+        navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
       }
     } finally {
       if (requestId === slotRequestRef.current) setIsLoadingSlots(false);
@@ -234,7 +236,10 @@ export default function ServiceDetail() {
 
   const durationMinutes = Number(service.durationMinutes || 60) * (service.pricePerUnit && service.scaleDuration !== false ? units : 1);
   const durationLabel = formatDuration(durationMinutes);
-  const serviceAmounts = calculateServiceAmounts(service.price, service.mechanicFee, units);
+  const laborOnlyUnavailable = partsSource === 'customer'
+    && (service.laborOnlyPrice === null || service.laborOnlyPrice === undefined || service.laborOnlyPrice === '');
+  const unitPrice = partsSource === 'customer' ? Number(service.laborOnlyPrice || 0) : Number(service.price || 0);
+  const serviceAmounts = calculateServiceAmounts(unitPrice, service.mechanicFee, units);
   const unitPromptLabel = (service.unitLabel || 'unit').endsWith('s')
     ? service.unitLabel
     : `${service.unitLabel || 'unit'}s`;
@@ -299,12 +304,12 @@ export default function ServiceDetail() {
   };
 
   const addBooking = async () => {
-    if (!canAddBooking || !selectedSlot) return;
+    if (!canAddBooking || !selectedSlot || laborOnlyUnavailable) return;
     const customerToken = getAuthToken('customer');
     if (!customerToken || customerToken === 'prototype-guest') {
       saveCustomerAuthAction({
         type: 'service',
-        returnPath: location.pathname,
+        returnPath: `${location.pathname}${location.search}`,
         serviceId: service._id,
         date: bookingDate,
         time: timeSlot,
@@ -327,9 +332,10 @@ export default function ServiceDetail() {
         kind: 'service',
         id: service._id,
         serviceId: service._id,
+        partsSource,
         name: formatServiceName(service.name, service.pricePerUnit ? units : 1, service.unitLabel),
         price: serviceAmounts.servicePriceTotal,
-        unitPrice: Number(service.price),
+        unitPrice,
         mechanicFee: serviceAmounts.mechanicFeeTotal,
         unitMechanicFee: Number(service.mechanicFee),
         ...serviceAmounts,
@@ -367,16 +373,22 @@ export default function ServiceDetail() {
 
   return <CustomerPage title={service.name} description="Service details and booking availability.">
     <div className="customer-flow-page">
+      {partsSource === 'customer' && <p className="customer-labor-only-note">
+        Labor only: you bring your own parts.{' '}
+        <Link to={`/customer/services/${service._id}`}>Switch to shop-parts version</Link>
+      </p>}
+      {laborOnlyUnavailable && <p className="customer-error" role="alert">Labor-only booking is not available for this service. <Link to={`/customer/services/${service._id}`}>Switch to shop parts</Link>.</p>}
       <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/services">Services</Link><span>/</span><span>{service.category || 'General'}</span><span>/</span><span>{service.name}</span></nav>
       <section className="customer-detail-layout customer-service-detail">
         <div className="customer-detail-art tone-sun" aria-label={`${service.name} service illustration`}><span aria-hidden="true">🔧</span><small>{durationLabel}</small></div>
-        <div className="customer-detail-copy"><p className="customer-eyebrow">{service.category || 'General'} · {durationLabel}</p><h1>{service.name}</h1><p>{service.description}</p><strong className="customer-detail-price">Total {`₱${Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}`}</strong>
+        <div className="customer-detail-copy"><p className="customer-eyebrow">{service.category || 'General'} · {durationLabel}</p><h1>{service.name}</h1><p>{service.description}</p><strong className="customer-detail-price">{partsSource === 'customer' ? 'Labor-only total' : 'Total'} {`₱${Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}`}</strong>
           <h2>What&apos;s included</h2><ul className="customer-inclusion-list"><li>{service.description || 'Service details available at the shop.'}</li></ul>
         </div>
       </section>
       <section className="customer-booking-panel">
         <div className="customer-flow-section-heading"><div><p className="customer-eyebrow">BOOK A SERVICE</p><h2>Book a time</h2></div><span>{durationLabel} · all times Manila time</span></div>
-        {service.pricePerUnit && <p className="customer-service-unit-price">{`₱${Number(service.price).toLocaleString('en-PH')} + ₱${Number(service.mechanicFee || 0).toLocaleString('en-PH')} mechanic fee per ${service.unitLabel}`}</p>}
+        {partsSource === 'shop' && service.laborOnlyPrice != null && <p className="customer-labor-only-switch"><Link to={`/customer/services/${service._id}?parts=own`}>Book labor only (I have my own parts)</Link></p>}
+        {service.pricePerUnit && <p className="customer-service-unit-price">{`${partsSource === 'customer' ? 'Labor-only ' : ''}₱${unitPrice.toLocaleString('en-PH')} + ₱${Number(service.mechanicFee || 0).toLocaleString('en-PH')} mechanic fee per ${service.unitLabel}`}</p>}
         <ServicePriceBreakdown {...serviceAmounts} />
         {service.pricePerUnit && <label className="customer-service-units">How many {unitPromptLabel}?
           <span className="customer-quantity-control">

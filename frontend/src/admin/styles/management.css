@@ -1088,6 +1088,17 @@
   background: #e8edf2;
   color: #44566a;
 }
+.admin-root .admin-management-page .transaction-parts-source-badge {
+  display: inline-flex;
+  min-height: 23px;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: #fff0e3;
+  color: #a9450d;
+  font-size: 11px;
+  font-weight: 800;
+}
 .admin-root .admin-management-page .status-pending-down-payment {
   background: #fde9b8;
   color: #7a4f00;

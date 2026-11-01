@@ -110,14 +110,46 @@
   padding: 7px 9px;
 }
 
-@media (max-width: 639px) {
+.mechanic-parts-source {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 22px;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fff0e3;
+  color: #a9450d;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+@media (max-width: 600px) {
   .mechanic-header .mechanic-notification-wrap .mechanic-notification-popover {
     position: fixed;
-    top: 82px;
-    right: 12px;
-    left: 12px;
-    width: auto;
+    top: calc(70px + env(safe-area-inset-top) + 8px);
+    left: calc(12px + env(safe-area-inset-left));
+    right: auto;
+    width: calc(100vw - 24px - env(safe-area-inset-left) - env(safe-area-inset-right));
     max-width: none;
-    max-height: 70vh;
+    max-height: calc(100vh - 70px - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100dvh - 70px - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overscroll-behavior: contain;
+  }
+
+  .mechanic-notification-popover-header {
+    flex: 0 0 auto;
+  }
+
+  .mechanic-notification-list {
+    max-height: 100%;
+    overscroll-behavior: contain;
+  }
+
+  .mechanic-notification-actions > button {
+    min-height: 44px;
+  }
+
+  .mechanic-notification .notification-timestamp {
+    font-size: 12px;
   }
 }

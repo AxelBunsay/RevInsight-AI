@@ -42,7 +42,7 @@ describe('customer account responsive layout', () => {
   });
 
   it('uses the navbar brand tagline and omits the duplicate eyebrow only on Account', () => {
-    expect(customerLayout).toContain('<strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small>');
+    expect(customerLayout).toContain('<strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small>');
     expect(customerLayout).toContain("{title !== 'Account' && <p className=\"customer-eyebrow\">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}");
     expect(accountStyles).toContain('font: 800 24px/1 \'Segoe UI\', sans-serif;');
     expect(accountStyles).toContain('font: 700 11px/1.2 \'Segoe UI\', sans-serif;');

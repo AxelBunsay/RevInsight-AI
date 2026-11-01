@@ -13,6 +13,42 @@
   padding: 0 var(--customer-wide-content-padding);
   box-sizing: border-box;
 }
+.services-parts-mode {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.services-parts-mode button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 48px;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 1px solid #e5e0dc;
+  border-radius: 10px;
+  background: #fff;
+  color: #5d544d;
+  font: 700 13px/1.3 'Segoe UI', sans-serif;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.services-parts-mode button.active {
+  border-color: #ff6811;
+  background: #ff6811;
+  color: #fff;
+}
+.service-labor-only-label {
+  color: #c64f12;
+  font-size: 12px;
+  font-weight: 800;
+}
+.services-parts-mode button.active .service-labor-only-label {
+  color: #fff;
+}
 .customer-page.services-page .customer-header {
   width: 100%;
   max-width: none;
@@ -443,5 +479,8 @@
   .service-card-grid {
     grid-template-columns: 1fr;
     gap: 14px;
+  }
+  .services-parts-mode {
+    flex-direction: column;
   }
 }

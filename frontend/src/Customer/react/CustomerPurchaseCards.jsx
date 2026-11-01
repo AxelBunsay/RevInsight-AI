@@ -111,6 +111,7 @@ export function ServiceBookingCard({ booking, prototype = false, showType = fals
           {showType && <span className="customer-purchase-type">Service</span>}
           SERVICE BOOKING · {reference}
         </span>
+        {booking.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}
         <h2>{serviceName(booking, prototype)}</h2>
         <p>{!prototype && booking.pricePerUnit ? `${serviceUnitSummary(booking.units || 1, booking.unitLabel)} · ` : ''}{formatDate(date)}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
         {!prototype && booking.description && <p>{booking.description}</p>}

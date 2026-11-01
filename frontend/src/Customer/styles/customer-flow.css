@@ -915,9 +915,38 @@
 }
 
 .customer-service-cart-summary h3 {
-  margin: 0 0 10px;
-  color: #2a231f;
+  margin: 0 0 8px;
+  color: #30271f;
   font-size: 13px;
+}
+
+.customer-labor-only-note,
+.customer-labor-only-switch {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-left: 3px solid #fa7117;
+  border-radius: 6px;
+  background: #fff1e5;
+  color: #49372f;
+  font: 600 13px/1.45 'Segoe UI', sans-serif;
+}
+
+.customer-labor-only-note a,
+.customer-labor-only-switch a {
+  color: #c64f12;
+  font-weight: 800;
+}
+
+.customer-parts-source-tag {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  margin: 4px 6px 4px 0;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #fff1e5;
+  color: #b94a0c;
+  font: 800 12px/1.2 'Segoe UI', sans-serif;
 }
 
 .customer-continue-link {
@@ -1011,6 +1040,7 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease;
 }
 
 .customer-account-menu-trigger:hover,
@@ -1027,16 +1057,50 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.6;
+  transition: transform 200ms ease;
 }
 
-.customer-account-menu {
+.customer-account-menu-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.customer-account-menu-collapse {
   position: absolute;
   z-index: 101;
   top: calc(100% + 6px);
   right: 0;
+  display: grid;
   box-sizing: border-box;
   width: min(220px, calc(100vw - 24px));
   min-width: min(180px, calc(100vw - 24px));
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  visibility: hidden;
+  transition: grid-template-rows 180ms ease-out, opacity 180ms ease-out, transform 180ms ease-out, visibility 0s linear 180ms;
+}
+
+.customer-account-menu-collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+  transition: grid-template-rows 180ms ease-out, opacity 180ms ease-out, transform 180ms ease-out, visibility 0s;
+}
+
+.customer-account-menu-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.customer-account-menu {
+  position: static;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   padding: 6px;
   border: 1px solid #eadfd5;
   border-radius: 8px;
@@ -1059,6 +1123,7 @@
   text-align: left;
   white-space: nowrap;
   cursor: pointer;
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease;
 }
 
 .customer-nav .customer-account-menu a:hover,
@@ -1092,6 +1157,25 @@
   background: #fffaf4;
   color: #4d3426;
   cursor: pointer;
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease;
+}
+
+.customer-header-cart,
+.customer-nav > a,
+.customer-menu-toggle {
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease;
+}
+
+.customer-header-cart:hover,
+.customer-notification-bell:hover,
+.customer-menu-toggle:hover {
+  background-color: #fff0e7;
+  color: #d94d22;
+}
+
+.customer-nav > a:hover,
+.customer-nav > a.active {
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease, opacity 200ms ease;
 }
 
 .customer-notification-bell svg {
@@ -2453,9 +2537,19 @@
 
 .customer-site-footer-details {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 6px 18px;
+  gap: 6px;
+  overflow-wrap: anywhere;
+}
+
+.customer-site-footer-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: anywhere;
 }
 
 .customer-site-footer-details a {
@@ -2470,6 +2564,88 @@
 
 .customer-site-footer-message {
   margin: 0;
+}
+
+.customer-pagination-region {
+  display: flex;
+  width: min(100%, 1280px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin: 10px auto 14px;
+  color: #766a61;
+  font: 12px/1.4 'Segoe UI', sans-serif;
+}
+
+.customer-pagination-summary {
+  margin: 0;
+  color: #766a61;
+  font: 12px/1.4 'Segoe UI', sans-serif;
+}
+
+.customer-pagination-desktop,
+.customer-pagination-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.customer-pagination button {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px !important;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 1px solid #eadfd6;
+  border-radius: 8px;
+  background: #fff7ed;
+  color: #49372f;
+  font: 700 13px 'Segoe UI', sans-serif;
+  cursor: pointer;
+}
+
+.customer-pagination button.is-active {
+  border-color: #fa7117;
+  background: #fa7117;
+  color: #fff;
+}
+
+.customer-pagination button:disabled {
+  color: #a89c92;
+  cursor: not-allowed;
+  opacity: .65;
+}
+
+.customer-pagination button:focus-visible {
+  outline: 2px solid #d4540a;
+  outline-offset: 2px;
+}
+
+.customer-pagination-ellipsis {
+  min-width: 16px;
+  color: #766a61;
+  text-align: center;
+}
+
+.customer-pagination-compact {
+  display: none;
+}
+
+.customer-page.shop-page .product-grid,
+.customer-page.services-page .service-card-grid,
+.customer-page.orders-page .customer-reservation-list {
+  scroll-margin-top: 84px;
+}
+
+@media (min-width: 600px) {
+  .customer-site-footer-meta {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: center;
+    gap: 24px;
+  }
 }
 
 .services-my-bookings {
@@ -2662,7 +2838,7 @@
 }
 
 .customer-page.orders-page .customer-header,
-.customer-page.orders-page > .customer-heading,
+.customer-page.orders-page .route-content-transition > .customer-heading,
 .customer-page.orders-page .customer-flow-page.customer-purchases-page {
   width: 100%;
   max-width: none;
@@ -2694,7 +2870,7 @@
 
 @media (max-width: 900px) {
   .customer-page.orders-page .customer-header,
-  .customer-page.orders-page > .customer-heading,
+  .customer-page.orders-page .route-content-transition > .customer-heading,
   .customer-page.orders-page .customer-flow-page.customer-purchases-page {
     padding-right: 16px;
     padding-left: 16px;
@@ -2758,7 +2934,7 @@
   box-sizing: border-box;
 }
 
-.customer-page.profile-page > .customer-heading {
+.customer-page.profile-page .route-content-transition > .customer-heading {
   width: 100%;
   max-width: none;
   padding-right: var(--customer-wide-content-padding);
@@ -2821,7 +2997,7 @@
 
 @media (max-width: 900px) {
   .customer-page.profile-page .customer-header,
-  .customer-page.profile-page > .customer-heading,
+  .customer-page.profile-page .route-content-transition > .customer-heading,
   .customer-page.profile-page .customer-flow-page.customer-account-page {
     padding-right: 16px;
     padding-left: 16px;
@@ -3235,4 +3411,61 @@
   .customer-reservation-detail-meta.customer-reservation-money {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@media (max-width: 600px) {
+  .customer-pagination-region {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .customer-pagination-desktop {
+    display: none;
+  }
+
+  .customer-pagination-compact {
+    display: flex;
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .customer-pagination-compact span {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    color: #49372f;
+    font-weight: 700;
+  }
+}
+
+.customer-notification-panel {
+  position: absolute;
+  z-index: 260;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(360px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(420px, calc(100dvh - 100px));
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-8px);
+  visibility: hidden;
+  transition: opacity 180ms ease-out, transform 180ms ease-out, visibility 0s linear 180ms;
+}
+
+.customer-notification-panel.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+  transition: opacity 180ms ease-out, transform 180ms ease-out, visibility 0s;
+}
+
+.customer-notification-panel .customer-notification-popover {
+  position: static;
+  width: 100%;
+  max-width: 100%;
+  max-height: inherit;
 }

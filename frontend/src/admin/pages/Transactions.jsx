@@ -9,6 +9,7 @@ import TransactionsPageActions from "./TransactionsPageActions";
 import { getItemsPageData, getItemsRequest, itemFilterOptions } from "./itemsTransactionView";
 import TransactionCards from "./TransactionCards";
 import { formatTransactionMoney as formatMoney } from "./transactionCardData";
+import { getPartsSourceExportValue, getPartsSourceQuery, SERVICE_TRANSACTION_EXPORT_HEADERS } from "./transactionPartsSource";
 
 const reservationItemName = (item) => item.variantLabel && !String(item.name || "").includes(item.variantLabel)
   ? `${item.name || item.productName || "Product"} - ${item.variantLabel}`
@@ -31,6 +32,7 @@ function formatBusinessRecord(record) {
       : [],
     amount: Number(record.amount || 0),
     status: record.status || "completed",
+    partsSource: record.recordType === "service" ? (record.partsSource === "customer" ? "customer" : "shop") : null,
     mechanic:
       record.mechanicName ||
       (record.recordType === "service" ? "Unassigned" : "N/A"),
@@ -107,6 +109,7 @@ function formatServiceRequestRecord(request) {
     isServiceRequest: true,
     recordType: "service",
     recordLabel: "Service",
+    partsSource: request.partsSource === "customer" ? "customer" : "shop",
     customer: customer.isDeleted ? "Deleted customer" : customerName || customer.email || "Unknown",
     date: request.scheduledDate
       ? new Date(request.scheduledDate).toLocaleDateString("en-PH")
@@ -138,6 +141,7 @@ function Transactions() {
     : "all";
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [partsSourceFilter, setPartsSourceFilter] = useState("All");
   const [transactions, setTransactions] = useState([]);
   const [totalAmount, setTotalAmount] = useState(0);
   const [recordCount, setRecordCount] = useState(0);
@@ -203,24 +207,41 @@ function Transactions() {
       if (!background) setIsLoading(true);
       try {
         if (activeTab === "items") {
-          const response = await api.getTransactions(getItemsRequest({
-            page,
-            limit: 10,
-            statusFilter,
-            search
-          }));
+          const [response, requestResponse] = await Promise.all([
+            api.getTransactions(getItemsRequest({
+              page,
+              limit: 10,
+              statusFilter,
+              search
+            })),
+            api.getAdminServiceRequests({
+              page: 1,
+              limit: 10,
+              activeOnly: true,
+              search: search.trim(),
+              status: statusFilter === "All" ? "" : statusFilter,
+            })
+          ]);
           if (!isMounted) return;
           const { rows, totalRecords, totalAmount: amount, totalPages: pages } = getItemsPageData(response, formatBusinessRecord);
           setTransactions(rows);
           setError("");
           setRecordCount(totalRecords);
-          setCounts((current) => ({ ...current, ...(response.counts || {}), items: totalRecords }));
-          setPaymentSubmittedCount(Number(response.counts?.paymentSubmitted || 0));
+          const serviceCount = Number(response.counts?.services || 0)
+            + Number(requestResponse.pagination?.totalRecords || requestResponse.requests?.length || 0);
+          setCounts({
+            all: totalRecords + serviceCount,
+            items: totalRecords,
+            services: serviceCount,
+            paymentSubmitted: Number(response.counts?.paymentSubmitted || 0) + Number(requestResponse.paymentSubmittedCount || 0)
+          });
+          setPaymentSubmittedCount(Number(response.counts?.paymentSubmitted || 0) + Number(requestResponse.paymentSubmittedCount || 0));
           setTotalAmount(amount);
           setTotalPages(pages);
           if (page > pages) setPage(pages);
         } else if (activeTab === "services") {
           const candidateLimit = page * 10;
+          const partsSource = getPartsSourceQuery(partsSourceFilter);
           const [response, requestResponse] = await Promise.all([
             api.getTransactions({
               page: 1,
@@ -228,6 +249,7 @@ function Transactions() {
               type: "service",
               search: search.trim(),
               status: statusFilter === "All" ? "" : statusFilter,
+              partsSource,
             }),
             api.getAdminServiceRequests({
               page: 1,
@@ -235,6 +257,7 @@ function Transactions() {
               activeOnly: true,
               search: search.trim(),
               status: statusFilter === "All" ? "" : statusFilter,
+              partsSource,
             })
           ]);
           if (!isMounted) return;
@@ -260,33 +283,62 @@ function Transactions() {
           setTransactions(combined.slice((page - 1) * 10, page * 10));
           setError("");
           setRecordCount(totalRecords);
-          setTotalAmount(Number(response.totalAmount || 0));
+          setTotalAmount(Number(response.totalAmount || 0) + Number(requestResponse.totalAmount || 0));
           setPaymentSubmittedCount(Number(requestResponse.paymentSubmittedCount ?? submittedPaymentCount));
-          setCounts((current) => ({ ...current, services: totalRecords }));
+          const itemCount = Number(response.counts?.items || 0);
+          setCounts({
+            all: itemCount + totalRecords,
+            items: itemCount,
+            services: totalRecords,
+            paymentSubmitted: Number(response.counts?.paymentSubmitted || 0) + Number(requestResponse.paymentSubmittedCount || 0)
+          });
           setTotalPages(Math.max(1, Math.ceil(totalRecords / 10)));
           if (page > Math.max(1, Math.ceil(totalRecords / 10))) setPage(Math.max(1, Math.ceil(totalRecords / 10)));
         } else {
-          const response = await api.getTransactions({
-            page,
-            limit: 10,
+          const candidateLimit = page * 10;
+          const [response, requestResponse] = await Promise.all([
+            api.getTransactions({
+            page: 1,
+            limit: candidateLimit,
             type: activeTab === "services" ? "service" : "",
             search: search.trim(),
             status: statusFilter === "All" ? "" : statusFilter,
-          });
+            }),
+            api.getAdminServiceRequests({
+              page: 1,
+              limit: candidateLimit,
+              activeOnly: true,
+              search: search.trim(),
+              status: statusFilter === "All" ? "" : statusFilter,
+            })
+          ]);
           if (!isMounted) return;
-          const data = (response.data || []).map(formatBusinessRecord);
-          setTransactions(data);
+          const completedRecords = (response.data || []).map(formatBusinessRecord);
+          const activeServiceRequests = (requestResponse.requests || []).map(formatServiceRequestRecord);
+          const combined = [...activeServiceRequests, ...completedRecords].sort((left, right) => {
+            const leftNeedsReview = left.status === "Payment Submitted" ? 0 : 1;
+            const rightNeedsReview = right.status === "Payment Submitted" ? 0 : 1;
+            return leftNeedsReview - rightNeedsReview
+              || new Date(right.completedAt || right.createdAt || 0) - new Date(left.completedAt || left.createdAt || 0);
+          });
+          const totalItems = Number(response.counts?.items || 0);
+          const totalServices = Number(response.counts?.services || 0) + Number(requestResponse.pagination?.totalRecords || activeServiceRequests.length);
+          const pages = Math.max(1, Math.ceil((totalItems + totalServices) / 10));
+          setTransactions(combined.slice((page - 1) * 10, page * 10));
           setError("");
-          setTotalAmount(Number(response.totalAmount || 0));
-          setRecordCount(Number(response.pagination?.totalRecords || 0));
-          setCounts(response.counts || { all: 0, items: 0, services: 0 });
+          setTotalAmount(Number(response.totalAmount || 0) + Number(requestResponse.totalAmount || 0));
+          setRecordCount(totalItems + totalServices);
+          setCounts({
+            all: totalItems + totalServices,
+            items: totalItems,
+            services: totalServices,
+            paymentSubmitted: Number(response.counts?.paymentSubmitted || 0) + Number(requestResponse.paymentSubmittedCount || 0)
+          });
           if (!search.trim() && statusFilter === "All") {
-            setPaymentSubmittedCount(Number(response.counts?.paymentSubmitted || 0));
+            setPaymentSubmittedCount(Number(response.counts?.paymentSubmitted || 0) + Number(requestResponse.paymentSubmittedCount || 0));
           }
-          setTotalPages(response.pagination?.totalPages || 1);
-          if (page > (response.pagination?.totalPages || 1)) {
-            setPage(response.pagination?.totalPages || 1);
-          }
+          setTotalPages(pages);
+          if (page > pages) setPage(pages);
         }
       } catch (fetchError) {
         if (isMounted) {
@@ -304,7 +356,7 @@ function Transactions() {
       isMounted = false;
       window.clearInterval(refreshInterval);
     };
-  }, [activeTab, page, refreshKey, search, statusFilter]);
+  }, [activeTab, page, partsSourceFilter, refreshKey, search, statusFilter]);
 
   useEffect(() => {
     const reviewId = searchParams.get("review");
@@ -353,6 +405,7 @@ function Transactions() {
   const changeTab = (tab) => {
     setPage(1);
     setStatusFilter("All");
+    setPartsSourceFilter("All");
     const nextParams = new URLSearchParams(searchParams);
     if (tab === "all") nextParams.delete("type");
     else nextParams.set("type", tab);
@@ -650,12 +703,14 @@ function Transactions() {
         }
       } else {
         const type = activeTab === "services" ? "service" : "";
+        const partsSource = activeTab === "services" ? getPartsSourceQuery(partsSourceFilter) : "";
         const firstPage = await api.getTransactions({
           page: 1,
           limit: 100,
           type,
           search: search.trim(),
           status: statusFilter === "All" ? "" : statusFilter,
+          partsSource,
         });
         allRows = [...(firstPage.data || [])];
         const pages = Number(firstPage.pagination?.totalPages || 1);
@@ -666,24 +721,48 @@ function Transactions() {
             type,
             search: search.trim(),
             status: statusFilter === "All" ? "" : statusFilter,
+            partsSource,
           });
           allRows.push(...(response.data || []));
         }
+        if (activeTab !== "items") {
+          const firstRequests = await api.getAdminServiceRequests({
+            page: 1,
+            limit: 100,
+            activeOnly: true,
+            search: search.trim(),
+            status: statusFilter === "All" ? "" : statusFilter,
+            partsSource
+          });
+          allRows.push(...(firstRequests.requests || []).map(formatServiceRequestRecord));
+          const requestPages = Number(firstRequests.pagination?.totalPages || 1);
+          for (let nextPage = 2; nextPage <= requestPages; nextPage += 1) {
+            const response = await api.getAdminServiceRequests({
+              page: nextPage,
+              limit: 100,
+              activeOnly: true,
+              search: search.trim(),
+              status: statusFilter === "All" ? "" : statusFilter,
+              partsSource
+            });
+            allRows.push(...(response.requests || []).map(formatServiceRequestRecord));
+          }
+        }
       }
       const headers = activeTab === "services"
-        ? ["Record ID", "Date", "Customer", "Service", "Mechanic", "Total", "Down payment paid", "Balance to collect", "Status"]
+        ? SERVICE_TRANSACTION_EXPORT_HEADERS
         : activeTab === "items"
           ? ["Record/Reservation ID", "Date", "Customer", "Item(s)", "Total", "Paid", "Balance", "Payment reference", "Status"]
-          : ["Record ID", "Date", "Type", "Customer", "Item / Service", "Amount", "Paid", "Balance", "Status", "Mechanic"];
+          : ["Record ID", "Date", "Type", "Customer", "Item / Service", "Amount", "Paid", "Balance", "Status", "Mechanic", "Parts source"];
       const exportRows = allRows.map((row) => {
-        const transaction = formatBusinessRecord(row);
+        const transaction = row.isServiceRequest ? row : formatBusinessRecord(row);
         if (activeTab === "services") {
-          return [transaction.id, transaction.date, transaction.customer, transaction.items, transaction.mechanic, transaction.amount, transaction.paid, transaction.balance, transaction.status];
+          return [transaction.id, transaction.date, transaction.customer, transaction.items, getPartsSourceExportValue(transaction), transaction.mechanic, transaction.amount, transaction.paid, transaction.balance, transaction.status];
         }
         if (activeTab === "items") {
           return [transaction.code || transaction.id, transaction.date, transaction.customer, transaction.items, transaction.amount, transaction.paid, transaction.balance, transaction.paymentReference || "", transaction.status];
         }
-        return [transaction.id, transaction.date, transaction.recordLabel, transaction.customer, transaction.items, transaction.amount, transaction.recordType === "product" ? transaction.paid : "", transaction.recordType === "product" ? transaction.balance : "", transaction.status, transaction.mechanic];
+        return [transaction.id, transaction.date, transaction.recordLabel, transaction.customer, transaction.items, transaction.amount, transaction.recordType === "product" ? transaction.paid : "", transaction.recordType === "product" ? transaction.balance : "", transaction.status, transaction.mechanic, getPartsSourceExportValue(transaction)];
       });
       const csvCell = (value) => {
         let cell = String(value ?? "");
@@ -725,6 +804,13 @@ function Transactions() {
       setStatusBeingSaved(false);
     }
   };
+
+  const selectedIsService = Boolean(selectedTransaction?.isServiceRequest || selectedTransaction?.recordType === "service");
+  const selectedServicePrice = Number(selectedTransaction?.servicePriceTotal
+    ?? (Number(selectedTransaction?.estimatedPrice ?? selectedTransaction?.amount ?? 0)
+      - Number(selectedTransaction?.mechanicFeeTotal ?? selectedTransaction?.laborFee ?? 0)));
+  const selectedMechanicFee = Number(selectedTransaction?.mechanicFeeTotal ?? selectedTransaction?.laborFee ?? 0);
+  const selectedServiceTotal = Number(selectedTransaction?.estimatedPrice ?? selectedTransaction?.amount ?? 0);
 
   return (
     <AdminPageFrame>
@@ -803,6 +889,18 @@ function Transactions() {
                 ? <option key={status} value={status}>{status}</option>
                 : <option key={status.value} value={status.value}>{status.label}</option>)}
             </select>
+            {activeTab === "services" && <select
+              aria-label="Parts source"
+              value={partsSourceFilter}
+              onChange={(event) => {
+                setPartsSourceFilter(event.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="All">Parts: All</option>
+              <option value="shop">With shop parts</option>
+              <option value="customer">Own parts (labor only)</option>
+            </select>}
           </div>
           <div id="transactions-panel" role="tabpanel" aria-labelledby={`transactions-tab-${activeTab}`}>
             <TransactionCards
@@ -876,6 +974,7 @@ function Transactions() {
                           {serviceUnitSummary(transaction.units || 1, transaction.unitLabel)} · {formatMoney(transaction.amount)} total
                         </small>
                       )}
+                      {(transaction.isServiceRequest || transaction.recordType === "service") && transaction.partsSource === "customer" && <span className="transaction-parts-source-badge">Own parts</span>}
                     </td>
                     {activeTab === "services" && <td className="transaction-col-mechanic">{transaction.mechanic}</td>}
                     <td className="price-text transaction-col-total">
@@ -1290,7 +1389,7 @@ function Transactions() {
                 </select>
               </label>
             )}
-            <p>
+            {!selectedIsService && <p>
               <strong>Total:</strong> ₱
               {Number(
                 selectedTransaction.amount ??
@@ -1298,20 +1397,19 @@ function Transactions() {
                   selectedTransaction.totalAmount ??
                   0,
               ).toLocaleString("en-PH", { minimumFractionDigits: 2 })}
-            </p>
+            </p>}
             {selectedTransaction.recordType === "service" && <p><strong>Mechanic:</strong> {selectedTransaction.mechanicName || selectedTransaction.mechanic || "N/A"}</p>}
             {selectedTransaction.paymentMethod && <p><strong>Payment method:</strong> {selectedTransaction.paymentMethod}</p>}
             {selectedTransaction.paymentReference && <p><strong>Payment reference:</strong> {selectedTransaction.paymentReference}</p>}
             {selectedTransaction.reservedUntil && <p><strong>Hold until:</strong> {new Date(selectedTransaction.reservedUntil).toLocaleString("en-PH")}</p>}
             {selectedTransaction.rejectionReason && <p><strong>Last rejection:</strong> {selectedTransaction.rejectionReason}</p>}
             {selectedTransaction.refundDecision && <p><strong>Refund decision:</strong> {selectedTransaction.refundDecision}</p>}
-            {selectedTransaction.isServiceRequest && (
+            {selectedIsService && (
               <>
-                <ServicePriceBreakdown
-                  servicePriceTotal={selectedTransaction.servicePriceTotal}
-                  mechanicFeeTotal={selectedTransaction.mechanicFeeTotal}
-                  estimatedPrice={selectedTransaction.estimatedPrice}
-                />
+                <p><strong>Parts:</strong> {selectedTransaction.partsSource === "customer" ? "Customer brings own parts" : "From the shop"}</p>
+                <p><strong>Service{selectedTransaction.partsSource === "customer" ? " (labor only)" : ""}:</strong> {formatMoney(selectedServicePrice)}</p>
+                <p><strong>Mechanic fee:</strong> {formatMoney(selectedMechanicFee)}</p>
+                <p><strong>Total:</strong> {formatMoney(selectedServiceTotal)}</p>
                 <p><strong>Down payment ({selectedTransaction.downPaymentPercent}%):</strong> {formatMoney(selectedTransaction.downPaymentAmount)}</p>
                 <p><strong>Down payment paid:</strong> {formatMoney(selectedTransaction.paid)}</p>
                 <p><strong>Balance to collect:</strong> {formatMoney(selectedTransaction.balance)}</p>

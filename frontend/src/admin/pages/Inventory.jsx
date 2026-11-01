@@ -72,6 +72,7 @@ const validateServiceForm = (form) => {
   const category = form.category.trim();
   const price = Number(form.price);
   const mechanicFee = Number(form.mechanicFee);
+  const laborOnlyPrice = Number(form.laborOnlyPrice);
   const durationMinutes = Number(form.durationMinutes);
   const maxUnits = Number(form.maxUnits);
 
@@ -85,6 +86,9 @@ const validateServiceForm = (form) => {
     errors.mechanicFee = "Mechanic fee must be from 0 to 999,999.99.";
   } else if (Number.isFinite(price) && mechanicFee > price) {
     errors.mechanicFee = "Mechanic fee cannot be greater than the service price.";
+  }
+  if (form.laborOnlyPrice !== "" && (!Number.isFinite(laborOnlyPrice) || laborOnlyPrice < 0 || laborOnlyPrice > 999999.99)) {
+    errors.laborOnlyPrice = "Labor-only price must be from 0 to 999,999.99.";
   }
   if (form.durationMinutes === "" || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
     errors.durationMinutes = "Duration must be a whole number from 1 to 1,440 minutes.";
@@ -134,6 +138,7 @@ function Inventory() {
     name: "",
     description: "",
     price: "",
+    laborOnlyPrice: "",
     mechanicFee: "",
     category: "General",
     durationMinutes: "60",
@@ -391,6 +396,7 @@ function Inventory() {
           name: service.name,
           description: service.description || "",
           price: String(service.price),
+          laborOnlyPrice: service.laborOnlyPrice == null ? "" : String(service.laborOnlyPrice),
           mechanicFee: String(service.mechanicFee ?? 0),
           category: service.category || "General",
           durationMinutes: String(service.durationMinutes || 60),
@@ -399,7 +405,7 @@ function Inventory() {
           maxUnits: String(service.maxUnits || 2),
           scaleDuration: service.scaleDuration !== false,
         }
-      : { name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
+      : { name: "", description: "", price: "", laborOnlyPrice: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
   };
 
   const saveService = async (event) => {
@@ -415,6 +421,7 @@ function Inventory() {
         name: serviceForm.name.trim(),
         description: serviceForm.description,
         price: Number(serviceForm.price),
+        laborOnlyPrice: serviceForm.laborOnlyPrice === "" ? null : Number(serviceForm.laborOnlyPrice),
         mechanicFee: Number(serviceForm.mechanicFee),
         category: serviceForm.category.trim(),
         durationMinutes: Number(serviceForm.durationMinutes),
@@ -427,7 +434,7 @@ function Inventory() {
       else await api.createService(payload);
       setIsAddingService(false);
       setEditingService(null);
-      setServiceForm({ name: "", description: "", price: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
+      setServiceForm({ name: "", description: "", price: "", laborOnlyPrice: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
       setServiceRefreshKey((key) => key + 1);
       setToast(editingService ? "Service updated successfully." : "Service added successfully.");
     } catch (saveError) {
@@ -1211,6 +1218,22 @@ function Inventory() {
                 }}
               />
               {serviceFormErrors.price && <small className="inventory-field-error">{serviceFormErrors.price}</small>}
+            </label>
+            <label>
+              Labor-only price (customer brings own parts)
+              <input
+                min="0"
+                max="999999.99"
+                step="0.01"
+                type="number"
+                aria-invalid={Boolean(serviceFormErrors.laborOnlyPrice)}
+                value={serviceForm.laborOnlyPrice}
+                onChange={(event) => {
+                  setServiceForm({ ...serviceForm, laborOnlyPrice: event.target.value });
+                  setServiceFormErrors((errors) => ({ ...errors, laborOnlyPrice: "" }));
+                }}
+              />
+              {serviceFormErrors.laborOnlyPrice && <small className="inventory-field-error">{serviceFormErrors.laborOnlyPrice}</small>}
             </label>
             <label>
               Mechanic fee (added to the price)

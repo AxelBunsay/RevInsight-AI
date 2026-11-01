@@ -13,6 +13,7 @@ describe('service schema fields', () => {
     expect(Service.schema.path('mechanicFee').options.validate.validator).toBeTypeOf('function');
     expect(service.category).toBe('General');
     expect(service.durationMinutes).toBe(60);
+    expect(service.laborOnlyPrice).toBeNull();
     expect(service.pricePerUnit).toBe(false);
     expect(service.maxUnits).toBe(2);
     expect(service.scaleDuration).toBe(true);
@@ -75,5 +76,27 @@ describe('service schema fields', () => {
       unitLabel: expect.any(String),
       maxUnits: expect.any(String)
     });
+  });
+
+  it('accepts empty labor-only pricing, including zero, and rejects invalid values', async () => {
+    const base = {
+      name: 'Brake check',
+      description: '',
+      price: 250,
+      mechanicFee: 100,
+      category: 'Maintenance',
+      durationMinutes: 45
+    };
+
+    expect(validateServiceInput({ ...base, laborOnlyPrice: '' })).toEqual({});
+    expect(validateServiceInput({ ...base, laborOnlyPrice: null })).toEqual({});
+    expect(validateServiceInput({ ...base, laborOnlyPrice: 0 })).toEqual({});
+    expect(validateServiceInput({ ...base, laborOnlyPrice: '125.50' })).toEqual({});
+    expect(validateServiceInput({ ...base, laborOnlyPrice: -1 })).toHaveProperty('laborOnlyPrice');
+    expect(validateServiceInput({ ...base, laborOnlyPrice: 'not a price' })).toHaveProperty('laborOnlyPrice');
+    expect(validateServiceInput({ ...base, laborOnlyPrice: 1000000 })).toHaveProperty('laborOnlyPrice');
+
+    const service = new Service({ name: 'Labor option', price: 250, laborOnlyPrice: 0 });
+    await expect(service.validate()).resolves.toBeUndefined();
   });
 });

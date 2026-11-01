@@ -85,7 +85,7 @@ describe('transaction cards', () => {
       transactions: [{
         id: 'service-1', customer: 'Service customer', items: 'Tune-up · 2 motorcycles', amount: 1800,
         paid: 500, balance: 1300, status: 'Confirmed', paymentStatus: 'Payment Submitted',
-        paymentReference: 'PAY-12345', mechanic: 'Morgan', recordType: 'service', isServiceRequest: true,
+        paymentReference: 'PAY-12345', mechanic: 'Morgan', recordType: 'service', isServiceRequest: true, partsSource: 'customer',
         servicePriceTotal: 1500, mechanicFeeTotal: 300, estimatedPrice: 1800
       }],
       activeTab: 'services', isLoading: false, emptyMessage: 'No services.', onView: vi.fn()
@@ -103,6 +103,7 @@ describe('transaction cards', () => {
     expect(serviceMarkup).toContain('Mechanic: Morgan');
     expect(serviceMarkup).toContain('Payment: Payment Submitted');
     expect(serviceMarkup).toContain('Ref PAY-12345');
+    expect(serviceMarkup).toContain('Own parts');
     expect(serviceMarkup).toContain('Amount</span><strong>₱1,800.00');
     expect(itemMarkup).toContain('Payment: GCash');
     expect(itemMarkup).toContain('Ref GCASH-123');

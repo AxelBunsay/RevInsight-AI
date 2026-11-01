@@ -223,6 +223,10 @@ const createServiceBookings = async (req, res) => {
         if (!booking || typeof booking !== 'object') {
           throw Object.assign(new Error('A booking must include service and schedule details.'), { status: 400 });
         }
+        const partsSource = booking.partsSource === undefined ? 'shop' : booking.partsSource;
+        if (!['shop', 'customer'].includes(partsSource)) {
+          throw Object.assign(new Error('Choose whether parts come from the shop or the customer.'), { status: 400 });
+        }
         if (!mongoose.Types.ObjectId.isValid(booking.serviceId)) {
           throw Object.assign(new Error('A selected service could not be found.'), { status: 400 });
         }
@@ -230,7 +234,6 @@ const createServiceBookings = async (req, res) => {
           _id: booking.serviceId,
           isActive: { $ne: false }
         }).lean();
-        if (!service) throw Object.assign(new Error('A selected service could not be found.'), { status: 400 });
         const requestedUnits = validateServiceUnits(service, booking.units);
         const dateValidation = validateDateForSchedule(booking.date, schedule);
         if (dateValidation.error) {
@@ -272,8 +275,13 @@ const createServiceBookings = async (req, res) => {
             if (!configuredService) {
               throw Object.assign(new Error('This service is no longer available.'), { status: 400 });
             }
+            if (partsSource === 'customer' && configuredService.laborOnlyPrice == null) {
+              throw Object.assign(new Error('This service is not available as labor only.'), { status: 400 });
+            }
             const units = validateServiceUnits(configuredService, booking.units);
-            const unitPrice = Number(configuredService.price) || 0;
+            const unitPrice = Number(partsSource === 'customer'
+              ? configuredService.laborOnlyPrice
+              : configuredService.price) || 0;
             const unitMechanicFee = Number(configuredService.mechanicFee) || 0;
             const servicePriceTotal = unitPrice * units;
             const mechanicFeeTotal = unitMechanicFee * units;
@@ -303,6 +311,7 @@ const createServiceBookings = async (req, res) => {
               user: req.user.userId,
               customerId: req.user.userId,
               serviceId: booking.serviceId,
+              partsSource,
               serviceType: configuredService.name,
               description: typeof booking.notes === 'string' && booking.notes.trim()
                 ? booking.notes.trim()

@@ -39,6 +39,9 @@ const validateServiceInput = (input, current = {}) => {
   const name = typeof input.name === 'string' ? input.name.trim() : current.name;
   const description = input.description ?? current.description ?? '';
   const priceValue = input.price ?? current.price;
+  const laborOnlyPriceValue = input.laborOnlyPrice !== undefined
+    ? input.laborOnlyPrice
+    : current.laborOnlyPrice ?? null;
   const mechanicFeeValue = input.mechanicFee ?? current.mechanicFee;
   const categoryValue = input.category ?? current.category ?? 'General';
   const durationMinutesValue = input.durationMinutes ?? current.durationMinutes ?? 60;
@@ -63,6 +66,11 @@ const validateServiceInput = (input, current = {}) => {
   }
   if (!hasNumber(priceValue) || price < 0.01 || price > 999999.99) {
     fieldErrors.price = 'Price must be between 0.01 and 999,999.99.';
+  }
+  const laborOnlyPriceText = typeof laborOnlyPriceValue === 'string' ? laborOnlyPriceValue.trim() : laborOnlyPriceValue;
+  if (laborOnlyPriceText !== null && laborOnlyPriceText !== ''
+    && (!hasNumber(laborOnlyPriceText) || Number(laborOnlyPriceText) < 0 || Number(laborOnlyPriceText) > 999999.99)) {
+    fieldErrors.laborOnlyPrice = 'Labor-only price must be between 0 and 999,999.99.';
   }
   if (
     !hasNumber(mechanicFeeValue) ||
