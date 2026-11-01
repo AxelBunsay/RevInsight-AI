@@ -31,9 +31,9 @@ function getCustomerDocumentTitle(title) {
 export function CustomerAccountMenu({ isOpen, onSelect, onSignOut, canSignOut = false }) {
   if (!isOpen) return null;
   return <div className="customer-account-menu" id="customer-account-menu" role="menu" aria-label="Account options">
-    <Link role="menuitem" to="/customer/profile" onClick={onSelect}>My profile</Link>
-    <Link role="menuitem" to="/my-purchases?tab=all" onClick={onSelect}>My purchases</Link>
     {canSignOut && <>
+      <Link role="menuitem" to="/customer/profile" onClick={onSelect}>My profile</Link>
+      <Link role="menuitem" to="/my-purchases?tab=all" onClick={onSelect}>My purchases</Link>
       <div className="customer-account-menu-divider" role="separator" />
       <button type="button" className="customer-account-menu-signout" role="menuitem" onClick={() => { onSelect?.(); onSignOut?.(); }}>Sign out</button>
     </>}
@@ -72,6 +72,8 @@ export function CustomerHeader() {
     accountOpen: false,
     notificationsOpen: false
   });
+  const menuRef = useRef(null);
+  const menuToggleRef = useRef(null);
   const accountAreaRef = useRef(null);
   const notificationAreaRef = useRef(null);
   const [notificationError, setNotificationError] = useState('');
@@ -82,12 +84,18 @@ export function CustomerHeader() {
 
   useEffect(() => {
     const closeOnOutsideClick = (event) => {
+      const outsideNavigation = !menuRef.current?.contains(event.target)
+        && !menuToggleRef.current?.contains(event.target);
+      if (outsideNavigation) setIsMenuOpen(false);
       if (isOutsideCustomerMenus(event.target, accountAreaRef.current, notificationAreaRef.current)) {
         dispatchCustomerMenu({ type: 'close' });
       }
     };
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') dispatchCustomerMenu({ type: 'close' });
+      if (event.key === 'Escape') {
+        setIsMenuOpen(false);
+        dispatchCustomerMenu({ type: 'close' });
+      }
     };
     document.addEventListener('pointerdown', closeOnOutsideClick);
     document.addEventListener('keydown', closeOnEscape);
@@ -157,16 +165,44 @@ export function CustomerHeader() {
     || currentPath.startsWith('/customer/products/');
   const isServicesPage = currentPath.startsWith('/customer/services');
   const isAccountPage = currentPath === '/customer/profile' || currentPath.startsWith('/my-purchases');
+  const closeNavigation = () => {
+    setIsMenuOpen(false);
+    dispatchCustomerMenu({ type: 'close' });
+  };
 
   return <header className="customer-header">
     <Link className="customer-brand" to="/customer/shop"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="44" height="44" decoding="async" /><span className="customer-brand__copy"><strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
-    <button type="button" className="customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => setIsMenuOpen((open) => !open)}>
-      <span /><span /><span />
-    </button>
-    <nav id="customer-navigation" aria-label="Customer navigation" className={`customer-nav${isMenuOpen ? ' is-open' : ''}`}>
-      <Link onClick={() => setIsMenuOpen(false)} className={isShopPage ? 'active' : ''} aria-current={isShopPage ? 'page' : undefined} to="/customer/shop">Shop</Link>
-      <Link onClick={() => setIsMenuOpen(false)} className={isServicesPage ? 'active' : ''} aria-current={isServicesPage ? 'page' : undefined} to="/customer/services">Services</Link>
-      <div className="customer-account-menu-area" ref={accountAreaRef}>
+    <div className="customer-header-actions">
+      <Link className="customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></svg>
+        {cartCount > 0 && <span className="customer-header-cart-count">{cartCount}</span>}
+      </Link>
+      <div className="customer-notification-area" ref={notificationAreaRef}>
+        <button type="button" className="customer-notification-bell" aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`} aria-expanded={customerMenus.notificationsOpen} onClick={() => dispatchCustomerMenu({ type: 'toggle-notifications' })}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
+          {unreadNotificationCount > 0 && <span className="customer-notification-count">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}
+        </button>
+        {customerMenus.notificationsOpen && (hasCustomerAccount ? <NotificationDropdown
+          className="customer-notification-popover"
+          notifications={notifications}
+          error={notificationError}
+          isClearing={isClearingNotifications}
+          onClearAll={clearCustomerNotifications}
+          renderNotification={(notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
+            <Link to={getLegacyCustomerPurchaseLink(notification.link) || `/customer/reservations/${notification.recordId}`} state={{ showPayment: notification.type === 'payment_rejected' }} onClick={() => openCustomerNotification(notification)}>
+              <NotificationContent message={notification.message} timestamp={notification.createdAt} />
+            </Link>
+          </li>}
+        /> : <div className="customer-notification-popover customer-notification-guest" role="status">Sign in to view notifications.</div>)}
+      </div>
+      <button ref={menuToggleRef} type="button" className="customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => { dispatchCustomerMenu({ type: 'close' }); setIsMenuOpen((open) => !open); }}>
+        <span /><span /><span />
+      </button>
+    </div>
+    <nav ref={menuRef} id="customer-navigation" aria-label="Customer navigation" className={`customer-nav${isMenuOpen ? ' is-open' : ''}`}>
+      <Link onClick={closeNavigation} className={isShopPage ? 'active' : ''} aria-current={isShopPage ? 'page' : undefined} to="/customer/shop">Shop</Link>
+      <Link onClick={closeNavigation} className={isServicesPage ? 'active' : ''} aria-current={isServicesPage ? 'page' : undefined} to="/customer/services">Services</Link>
+      {hasCustomerAccount && <div className="customer-account-menu-area" ref={accountAreaRef}>
         <CustomerAccountMenuTrigger
           isActive={isAccountPage}
           isExpanded={customerMenus.accountOpen}
@@ -174,34 +210,15 @@ export function CustomerHeader() {
         />
         <CustomerAccountMenu
           isOpen={customerMenus.accountOpen}
-          onSelect={() => { dispatchCustomerMenu({ type: 'close' }); setIsMenuOpen(false); }}
+          onSelect={closeNavigation}
           onSignOut={logout}
-          canSignOut={hasCustomerAccount}
+          canSignOut
         />
-      </div>
-      {hasCustomerAccount && <Link onClick={() => setIsMenuOpen(false)} className="customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></svg>
-        {cartCount > 0 && <span className="customer-header-cart-count">{cartCount}</span>}
-      </Link>}
-      {hasCustomerAccount && <div className="customer-notification-area" ref={notificationAreaRef}>
-        <button type="button" className="customer-notification-bell" aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`} aria-expanded={customerMenus.notificationsOpen} onClick={() => dispatchCustomerMenu({ type: 'toggle-notifications' })}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
-          {unreadNotificationCount > 0 && <span className="customer-notification-count">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}
-        </button>
-        {customerMenus.notificationsOpen && <NotificationDropdown
-          className="customer-notification-popover"
-          notifications={notifications}
-          error={notificationError}
-          isClearing={isClearingNotifications}
-          onClearAll={clearCustomerNotifications}
-          renderNotification={(notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
-              <Link to={getLegacyCustomerPurchaseLink(notification.link) || `/customer/reservations/${notification.recordId}`} state={{ showPayment: notification.type === 'payment_rejected' }} onClick={() => openCustomerNotification(notification)}>
-                <NotificationContent message={notification.message} timestamp={notification.createdAt} />
-              </Link>
-            </li>}
-        />}
       </div>}
-      {!hasCustomerAccount && <Link onClick={() => setIsMenuOpen(false)} className={currentPath.startsWith('/customer/login') || currentPath.startsWith('/customer/register') ? 'active' : ''} aria-current={currentPath.startsWith('/customer/login') || currentPath.startsWith('/customer/register') ? 'page' : undefined} to="/customer/login">Sign in</Link>}
+      {!hasCustomerAccount && <div className="customer-guest-links">
+        <Link onClick={closeNavigation} className={currentPath.startsWith('/customer/login') ? 'active' : ''} aria-current={currentPath.startsWith('/customer/login') ? 'page' : undefined} to="/customer/login">Sign in</Link>
+        <Link onClick={closeNavigation} className={currentPath.startsWith('/customer/register') ? 'active' : ''} aria-current={currentPath.startsWith('/customer/register') ? 'page' : undefined} to="/customer/register">Register</Link>
+      </div>}
     </nav>
   </header>;
 }
@@ -256,7 +273,7 @@ export function CustomerPage({ title, description, children, includeHeader = tru
 
   return (
     <main className={`customer-page ${title === 'Motorcycle Shop' ? 'shop-page' : ''} ${title === 'Motorcycle Services' ? 'services-page' : ''} ${['My purchases', 'My Purchases', 'My Reservations'].includes(title) ? 'orders-page reservations-page' : ''} ${title === 'Profile' || title === 'Account' ? 'profile-page' : ''}`}>
-      {includeHeader && <CustomerHeader />}
+      {includeHeader && <CustomerHeader key={location.pathname} />}
       <section className="customer-heading">
         {title !== 'Account' && <p className="customer-eyebrow">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}
         <h1>{title}</h1>

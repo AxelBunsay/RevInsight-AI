@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { api } from '../../services/api';
@@ -13,6 +14,7 @@ const formatPrice = (price) => `₱${Number(price || 0).toLocaleString('en-PH', 
 export default function ProductDetailContent({
   productId,
   isModal = false,
+  modalFooter = null,
   headingId = 'product-detail-title',
   onProductLoaded
 }) {
@@ -164,6 +166,11 @@ export default function ProductDetailContent({
     setActionNotice('Added to Reservation Cart');
   };
 
+  const detailActions = <div className="customer-detail-actions">
+    <button type="button" className="customer-primary-button" disabled={isOutOfStock} onClick={() => addProduct()}>Add to cart</button>
+    <button type="button" className="customer-secondary-button" disabled={isOutOfStock} onClick={() => addProduct(true)}>Reserve now</button>
+  </div>;
+
   if (!product) {
     return <section className="customer-product-detail-state" aria-live="polite">
       <h1 id={headingId}>{error ? 'Product unavailable' : 'Loading product details'}</h1>
@@ -226,10 +233,9 @@ export default function ProductDetailContent({
             <button type="button" aria-label="Increase quantity" disabled={isOutOfStock || quantity >= availableStock} onClick={() => setQuantity((value) => Math.min(availableStock, value + 1))}>+</button>
           </div>
         </div>
-        <div className="customer-detail-actions">
-          <button type="button" className="customer-primary-button" disabled={isOutOfStock} onClick={() => addProduct()}>Reserve</button>
-          <button type="button" className="customer-secondary-button" disabled={isOutOfStock} onClick={() => addProduct(true)}>Reserve now</button>
-        </div>
+        {isModal
+          ? modalFooter ? createPortal(detailActions, modalFooter) : null
+          : detailActions}
         {actionNotice === 'Added to Reservation Cart' && <div className={isModal ? 'customer-detail-success' : 'shop-added-toast'} role="status" aria-live="polite">
           <span>Added to Reservation Cart</span>
           <Link to="/customer/cart">View cart</Link>

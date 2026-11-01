@@ -5,13 +5,16 @@ import { describe, expect, it } from 'vitest';
 import {
   CustomerAccountMenu,
   CustomerAccountMenuTrigger,
-  CustomerAuthShell
+  CustomerAuthShell,
+  CustomerHeader
 } from './CustomerLayout';
+import { CustomerPrototypeProvider } from './CustomerPrototypeProvider';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
 
 const appSource = readFileSync(new URL('../../App.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const authStyles = readFileSync(new URL('../styles/auth.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const customerLayoutSource = readFileSync(new URL('./CustomerLayout.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const responsiveStyles = readFileSync(new URL('../styles/customer-responsive.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const initialMenuState = { accountOpen: false, notificationsOpen: false };
 
 describe('customer account menu', () => {
@@ -112,5 +115,51 @@ describe('customer account menu', () => {
 
     expect(markup).not.toContain('Sign out');
     expect(markup).not.toContain('role="separator"');
+    expect(markup).not.toContain('My profile');
+    expect(markup).not.toContain('My purchases');
+  });
+
+  it('keeps cart, notifications, and hamburger in the header outside the collapsible menu', () => {
+    const originalLocalStorage = globalThis.localStorage;
+    const originalSessionStorage = globalThis.sessionStorage;
+    const storage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+    globalThis.localStorage = storage;
+    globalThis.sessionStorage = storage;
+    let markup;
+    try {
+      markup = renderToStaticMarkup(<MemoryRouter><CustomerPrototypeProvider><CustomerHeader /></CustomerPrototypeProvider></MemoryRouter>);
+    } finally {
+      if (originalLocalStorage === undefined) delete globalThis.localStorage;
+      else globalThis.localStorage = originalLocalStorage;
+      if (originalSessionStorage === undefined) delete globalThis.sessionStorage;
+      else globalThis.sessionStorage = originalSessionStorage;
+    }
+
+    const actions = markup.indexOf('class="customer-header-actions"');
+    const cart = markup.indexOf('class="customer-header-cart"');
+    const bell = markup.indexOf('class="customer-notification-bell"');
+    const toggle = markup.indexOf('class="customer-menu-toggle"');
+    const nav = markup.indexOf('id="customer-navigation"');
+    expect(actions).toBeGreaterThan(-1);
+    expect(cart).toBeGreaterThan(actions);
+    expect(bell).toBeGreaterThan(cart);
+    expect(toggle).toBeGreaterThan(bell);
+    expect(nav).toBeGreaterThan(toggle);
+    expect(markup).toContain('>Register</a>');
+  });
+
+  it('closes the mobile menu on link taps and route changes', () => {
+    expect(customerLayoutSource).toContain('onClick={closeNavigation}');
+    expect(customerLayoutSource).toContain('<CustomerHeader key={location.pathname} />');
+    expect(customerLayoutSource).toContain('const outsideNavigation = !menuRef.current?.contains(event.target)');
+    expect(customerLayoutSource).toContain('if (outsideNavigation) setIsMenuOpen(false);');
+    expect(customerLayoutSource).toContain('if (event.key === \'Escape\') {\n        setIsMenuOpen(false);');
+  });
+
+  it('keeps Services bookings as a 44px pill and restores tablet product columns', () => {
+    expect(responsiveStyles).toContain('.customer-page .services-my-bookings {\n    display: inline-flex;');
+    expect(responsiveStyles).toContain('min-height: 44px;');
+    expect(responsiveStyles).toContain('@media (min-width: 600px) and (max-width: 900px)');
+    expect(responsiveStyles).toContain('grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));');
   });
 });

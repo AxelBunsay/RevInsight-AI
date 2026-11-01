@@ -24,6 +24,7 @@ import SessionBootstrap from './auth/SessionBootstrap';
 import { CustomerPrototypeProvider } from './Customer/react/CustomerPrototypeProvider';
 import { CustomerPage } from './Customer/react/CustomerLayout';
 import { syncPortalFavicon } from './utils/portalFavicon';
+import './Customer/styles/customer-responsive.css';
 
 function PortalFavicon() {
   const { pathname } = useLocation();

@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest';
 import ReservationPaymentForm from './ReservationPaymentForm';
 import PaymentSettingsDisplay from './PaymentSettingsDisplay';
 import { getPaymentDisplaySettings } from './paymentDisplaySettings';
+import { readFileSync } from 'node:fs';
+
+const paymentFormSource = readFileSync(new URL('./ReservationPaymentForm.jsx', import.meta.url), 'utf8');
 
 describe('service booking payment amount', () => {
   it('shows the saved down payment as the amount to pay', () => {
@@ -34,6 +37,13 @@ describe('service booking payment amount', () => {
     expect(markup).toMatch(/Amount to pay[\s\S]*?₱166\.50/);
     expect(markup).toContain('Total</span><strong>₱333.00');
     expect(markup).toContain('Down payment (50%)');
+    const bodyStart = markup.indexOf('class="gcash-payment-body"');
+    const bodyEnd = markup.indexOf('</div>', bodyStart);
+    const footer = markup.indexOf('class="gcash-payment-submit-row"');
+    expect(bodyEnd).toBeGreaterThan(bodyStart);
+    expect(footer).toBeGreaterThan(bodyEnd);
+    expect(paymentFormSource).toContain('useCustomerModalEffects(true, onClose)');
+    expect(paymentFormSource).toContain('CustomerModalPortal');
   });
 });
 

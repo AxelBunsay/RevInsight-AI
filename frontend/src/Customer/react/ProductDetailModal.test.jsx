@@ -10,8 +10,10 @@ const modalStyles = readFileSync(new URL('../styles/customer-flow.css', import.m
 const appSource = readFileSync(new URL('../../App.jsx', import.meta.url), 'utf8');
 const shopSource = readFileSync(new URL('./Shop.jsx', import.meta.url), 'utf8');
 const modalSource = readFileSync(new URL('./ProductDetailModal.jsx', import.meta.url), 'utf8');
+const modalEffectsSource = readFileSync(new URL('./useCustomerModalEffects.js', import.meta.url), 'utf8');
 const modalHelpersSource = readFileSync(new URL('./productDetailModalHelpers.js', import.meta.url), 'utf8');
 const contentSource = readFileSync(new URL('./ProductDetailContent.jsx', import.meta.url), 'utf8');
+const responsiveStyles = readFileSync(new URL('../styles/customer-responsive.css', import.meta.url), 'utf8');
 
 const renderModal = (productId) => renderToStaticMarkup(
   <MemoryRouter>
@@ -36,7 +38,8 @@ describe('product detail modal', () => {
     expect(modalHelpersSource).toContain("event.key !== 'Tab'");
     expect(modalHelpersSource).toContain('event.target !== event.currentTarget');
     expect(modalSource).toContain("document.addEventListener('keydown', handleKeyDown)");
-    expect(modalSource).toContain("body.style.overflow = 'hidden'");
+    expect(modalSource).toContain('useCustomerModalEffects(Boolean(visibleProductId)');
+    expect(modalEffectsSource).toContain("documentRef.body.style.overflow = 'hidden'");
     expect(modalSource).toContain('window.scrollTo(0, scrollY)');
     expect(modalSource).toContain('openerElement?.focus()');
   });
@@ -85,7 +88,15 @@ describe('product detail modal', () => {
     expect(modalStyles).toContain('grid-template-columns: minmax(0, 45%) minmax(0, 1fr);');
     expect(modalStyles).toContain('@media (max-width: 767px)');
     expect(modalStyles).toContain('max-height: 92dvh;');
+    expect(responsiveStyles).toContain('customer-product-modal-footer');
+    expect(modalSource).toContain('modalFooter={isCompactLayout ? modalFooter : null}');
     expect(modalStyles).toContain('@media (prefers-reduced-motion: no-preference)');
     expect(modalStyles).toContain('180ms ease-out');
+    expect(responsiveStyles).toContain('max-height: calc(100dvh - 24px);');
+    expect(responsiveStyles).toContain('position: sticky;');
+    expect(contentSource).toContain('onClick={() => addProduct()}')
+    expect(contentSource).toContain('onClick={() => addProduct(true)}');
+    expect(contentSource).toContain('>Add to cart</button>');
+    expect(contentSource).toContain('>Reserve now</button>');
   });
 });
