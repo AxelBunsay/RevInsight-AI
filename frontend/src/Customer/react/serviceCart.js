@@ -1,3 +1,5 @@
+import { calculateServicePayment } from '../../utils/servicePayment';
+
 function amount(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
 }
@@ -32,4 +34,17 @@ export function getCartSummary(cart, downPaymentPercent = 30) {
     balanceDueAtPickup: productSubtotal - downPayment,
     cartTotal: productSubtotal + serviceSubtotal
   };
+}
+
+export function getServiceCartPaymentSummary(serviceItems, downPaymentPercent) {
+  return serviceItems.reduce((summary, item) => {
+    const total = amount(item.estimatedPrice ?? amount(item.price) + amount(item.mechanicFee));
+    const payment = calculateServicePayment(total, downPaymentPercent);
+    return {
+      totalAmount: summary.totalAmount + payment.totalAmount,
+      downPaymentAmount: summary.downPaymentAmount + payment.downPaymentAmount,
+      balanceDue: summary.balanceDue + payment.balanceDue,
+      downPaymentPercent: payment.downPaymentPercent
+    };
+  }, { totalAmount: 0, downPaymentAmount: 0, balanceDue: 0, downPaymentPercent: Number(downPaymentPercent) });
 }

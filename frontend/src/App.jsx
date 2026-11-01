@@ -7,7 +7,7 @@ import { CustomerLogin, CustomerRegister } from './Customer/react/CustomerAuth';
 import CustomerProfile from './Customer/react/Profile';
 import MyPurchases from './Customer/react/MyPurchases';
 import { getLegacyProfilePurchaseRedirect } from './Customer/react/customerPurchases';
-import { CustomerAuthGuard, CustomerAuthLayout } from './Customer/react/CustomerLayout';
+import { CustomerAuthGuard, CustomerAuthLayout, CustomerRouteLayout } from './Customer/react/CustomerLayout';
 import Shop from './Customer/react/Shop';
 import Services from './Customer/react/Services';
 import ProductDetail from './Customer/react/ProductDetail';
@@ -24,6 +24,7 @@ import SessionBootstrap from './auth/SessionBootstrap';
 import { CustomerPrototypeProvider } from './Customer/react/CustomerPrototypeProvider';
 import { CustomerPage } from './Customer/react/CustomerLayout';
 import { syncPortalFavicon } from './utils/portalFavicon';
+import './Customer/styles/customer-responsive.css';
 
 function PortalFavicon() {
   const { pathname } = useLocation();
@@ -61,6 +62,7 @@ function App() {
           <CustomerPrototypeProvider>
             <Routes>
           <Route path="/admin/*" element={<AdminApp />} />
+        <Route element={<CustomerRouteLayout />}>
           <Route path="/" element={<Shop />} />
         <Route path="/customer/shop" element={<Shop />} />
         <Route element={<CustomerAuthLayout />}>
@@ -78,13 +80,14 @@ function App() {
         <Route path="/customer/checkout" element={<CustomerAuthGuard><Checkout /></CustomerAuthGuard>} />
         <Route path="/customer/profile" element={<CustomerAuthGuard><CustomerProfileRoute /></CustomerAuthGuard>} />
         <Route path="/my-purchases" element={<CustomerAuthGuard><MyPurchases /></CustomerAuthGuard>} />
+        <Route path="*" element={<NotFoundPage />} />
+        </Route>
         <Route path="/mechanic/login" element={<MechanicLogin />} />
         <Route element={<MechanicAuthGuard><MechanicLayout /></MechanicAuthGuard>}>
           <Route path="/mechanic/dashboard" element={<MechanicDashboard />} />
           <Route path="/mechanic/jobs" element={<MechanicJobs />} />
           <Route path="/mechanic/profile" element={<MechanicProfile />} />
         </Route>
-          <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </CustomerPrototypeProvider>
         </AuthProvider>

@@ -14,6 +14,7 @@ const exampleJob = {
   servicePriceTotal: 300,
   mechanicFeeTotal: 100,
   estimatedPrice: 400,
+  partsSource: 'customer',
   scheduledDate: '2026-10-30T00:00:00.000Z',
   startTime: '09:00',
   endTime: '10:00',
@@ -38,6 +39,7 @@ describe('mechanic job cards', () => {
     expect(markup).toContain('2024 Honda TMX 125');
     expect(markup).toContain('Bearing Replacement x2 wheel hubs');
     expect(markup).toContain('Service ₱300.00 + Mechanic fee ₱100.00 = Total ₱400.00');
+    expect(markup).toContain('Customer brings own parts');
     expect(markup).not.toContain('6ae25d269de2b06335b2fe68');
   });
 });

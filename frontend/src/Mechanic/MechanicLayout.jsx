@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { getMechanicNotifications, logoutMechanic, markMechanicNotificationsRead } from './mechanicService';
-import { getAuthUser } from '../auth/authSession';
+import { getAuthSessionLoginPath, getAuthUser } from '../auth/authSession';
 import NotificationContent from '../components/NotificationContent';
 import RouteContentTransition from '../components/RouteContentTransition';
 import useDocumentTitle from '../utils/useDocumentTitle';
@@ -91,7 +91,7 @@ export default function MechanicLayout() {
       </div>
 
       {showLogout && <div className="mechanic-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowLogout(false); }}>
-        <section className="mechanic-dialog" role="dialog" aria-modal="true" aria-labelledby="logout-title"><h2 id="logout-title">Log out?</h2><p>You will need to sign in again.</p><div className="mechanic-dialog-actions"><button className="button-secondary" type="button" onClick={() => setShowLogout(false)}>Cancel</button><button className="button-primary" type="button" onClick={() => { logoutMechanic(); navigate('/mechanic/login', { replace: true }); }}>Log out</button></div></section>
+        <section className="mechanic-dialog" role="dialog" aria-modal="true" aria-labelledby="logout-title"><h2 id="logout-title">Log out?</h2><p>You will need to sign in again.</p><div className="mechanic-dialog-actions"><button className="button-secondary" type="button" onClick={() => setShowLogout(false)}>Cancel</button><button className="button-primary" type="button" onClick={() => { logoutMechanic(); navigate(getAuthSessionLoginPath('mechanic'), { replace: true }); }}>Log out</button></div></section>
       </div>}
     </div>
   );

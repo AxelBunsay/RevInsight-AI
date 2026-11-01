@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import MechanicLogin from "./MechanicLogin";
 import {
+  getMechanicLoginDestination,
   getPasswordInputType,
   togglePasswordVisibility,
 } from "./mechanicLoginHelpers";
@@ -33,5 +34,16 @@ describe("mechanic login form", () => {
     const hidden = togglePasswordVisibility(visible);
     expect(hidden).toBe(false);
     expect(getPasswordInputType(hidden)).toBe("password");
+  });
+
+  it("keeps post-login navigation inside the mechanic portal", () => {
+    expect(getMechanicLoginDestination('/mechanic/jobs', '/admin'))
+      .toBe('/mechanic/jobs');
+    expect(getMechanicLoginDestination('/customer/services', '/admin'))
+      .toBe('/mechanic/dashboard');
+    expect(getMechanicLoginDestination(null, '/mechanic/profile'))
+      .toBe('/mechanic/profile');
+    expect(getMechanicLoginDestination(null, '//example.com'))
+      .toBe('/mechanic/dashboard');
   });
 });

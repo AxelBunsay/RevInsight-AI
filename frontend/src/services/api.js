@@ -4,7 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://l
 export async function request(path, options = {}) {
   const tokenKey = Object.prototype.hasOwnProperty.call(options, 'tokenKey')
     ? options.tokenKey
-    : 'adminToken';
+    : null;
   const token = tokenKey === 'customerToken'
     ? getAuthToken('customer')
     : tokenKey === 'mechanicToken'

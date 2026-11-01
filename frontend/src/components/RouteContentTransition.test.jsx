@@ -14,6 +14,8 @@ const transitionStyles = readFileSync(
 describe('route content transition', () => {
   it('keys the content wrapper by pathname', () => {
     expect(getRouteContentKey('/admin/inventory')).toBe('/admin/inventory');
+    expect(getRouteContentKey('/customer/shop', '?page=2'))
+      .toBe(getRouteContentKey('/customer/shop', '?sort=name'));
     const markup = renderToStaticMarkup(
       createElement(
         MemoryRouter,

@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import useAuth from '../../../context/useAuth';
+import { getAuthSessionLoginPath } from '../../../auth/authSession';
 import navigation from '../../config/navigation';
 
 const icons = {
@@ -19,7 +20,7 @@ function AdminSidebar({ badges, loading, isDrawerLayout, drawerOpen, drawerRef, 
   const navigate = useNavigate();
   const signOut = () => {
     logout();
-    navigate('/admin/login', { replace: true });
+    navigate(getAuthSessionLoginPath('admin'), { replace: true });
   };
   return (
     <>

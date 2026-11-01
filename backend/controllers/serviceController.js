@@ -34,6 +34,7 @@ const publicServicePayload = (service) => {
     name: value.name,
     description: value.description || '',
     price: value.price,
+    laborOnlyPrice: value.laborOnlyPrice ?? null,
     mechanicFee: value.mechanicFee ?? 0,
     category: value.category || 'General',
     durationMinutes: Number(value.durationMinutes) || 60,
@@ -109,6 +110,9 @@ const createService = async (req, res) => {
       name: req.body.name.trim(),
       description: req.body.description.trim(),
       price: Number(req.body.price),
+      laborOnlyPrice: req.body.laborOnlyPrice === '' || req.body.laborOnlyPrice == null
+        ? null
+        : Number(req.body.laborOnlyPrice),
       mechanicFee: Number(req.body.mechanicFee),
       category: (req.body.category || 'General').trim(),
       durationMinutes: Number(req.body.durationMinutes ?? 60),
@@ -142,6 +146,11 @@ const updateService = async (req, res) => {
     service.name = (req.body.name ?? service.name).trim();
     service.description = (req.body.description ?? service.description).trim();
     service.price = Number(req.body.price ?? service.price);
+    if (req.body.laborOnlyPrice !== undefined) {
+      service.laborOnlyPrice = req.body.laborOnlyPrice === '' || req.body.laborOnlyPrice === null
+        ? null
+        : Number(req.body.laborOnlyPrice);
+    }
     service.mechanicFee = Number(req.body.mechanicFee ?? service.mechanicFee);
     service.category = (req.body.category ?? service.category ?? 'General').trim();
     service.durationMinutes = Number(req.body.durationMinutes ?? service.durationMinutes ?? 60);

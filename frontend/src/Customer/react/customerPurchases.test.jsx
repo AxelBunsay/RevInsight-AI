@@ -34,6 +34,7 @@ const purchaseRecords = [
     value: {
       _id: 'service-1',
       code: 'SRV-B2FE68',
+      partsSource: 'customer',
       serviceType: 'Bearing',
       unitLabel: 'both hubs',
       vehicle: 'Honda TMX 125',
@@ -88,7 +89,7 @@ describe('customer purchases page data and cards', () => {
     expect(purchasesPage).toContain('setTimeout(() => setDebouncedSearchQuery(searchQuery), 200)');
     expect(purchasesPage).toContain('aria-label="Clear search"');
     expect(purchasesPage).toContain('No purchases match your search');
-    expect(purchasesPage).toContain("visibleRecords.length === 1 ? 'result' : 'results'");
+    expect(purchasesPage).toContain('totalItems={visibleRecords.length}');
   });
 
   it('filters by status and reference while preserving canceled and expired behavior', () => {
@@ -120,6 +121,7 @@ describe('customer purchases page data and cards', () => {
     expect(servicesMarkup).toContain('₱150.00');
     expect(servicesMarkup).toContain('₱350.00');
     expect(servicesMarkup).toContain('View booking');
+    expect(servicesMarkup).toContain('Own parts');
     expect(allMarkup).toContain('customer-purchase-type">Item');
     expect(allMarkup).toContain('customer-purchase-type">Service');
   });
@@ -139,7 +141,7 @@ describe('customer purchases page data and cards', () => {
   });
 
   it('keeps the purchases layout and dropdown within the desktop and phone breakpoints', () => {
-    expect(sharedStyles).toContain('.customer-page.orders-page');
+    expect(sharedStyles).toContain('--customer-wide-content-padding: clamp(16px, 3vw, 44px);');
     expect(customerFlowStyles).toContain('width: min(220px, calc(100vw - 24px));');
     expect(customerFlowStyles).toContain('min-width: min(180px, calc(100vw - 24px));');
     expect(customerFlowStyles).toContain('@media (max-width: 900px)');

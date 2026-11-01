@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../services/api';
 import PaymentSettingsDisplay from './PaymentSettingsDisplay';
 import { getPaymentDisplaySettings } from './paymentDisplaySettings';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
+import CustomerModalPortal from './CustomerModalPortal';
+import useCustomerModalEffects from './useCustomerModalEffects';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -17,6 +19,7 @@ export default function ReservationPaymentForm({ reservation, amount, settings, 
   const [fetchedPaymentSettings, setFetchedPaymentSettings] = useState(null);
   const [isLoadingPaymentSettings, setIsLoadingPaymentSettings] = useState(true);
   const [paymentSettingsError, setPaymentSettingsError] = useState('');
+  const bodyRef = useRef(null);
   const instructions = getPaymentDisplaySettings(settings, fetchedPaymentSettings);
   const paymentAmount = amount ?? reservation?.downPaymentAmount;
   const canSubmit = Boolean(
@@ -26,6 +29,20 @@ export default function ReservationPaymentForm({ reservation, amount, settings, 
     && /^\d{10,20}$/.test(reference)
     && proof
   );
+
+  useCustomerModalEffects(true, onClose);
+
+  useEffect(() => {
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) return undefined;
+    const keepFocusedFieldVisible = () => {
+      const focused = document.activeElement;
+      if (!bodyRef.current?.contains(focused)) return;
+      window.requestAnimationFrame(() => focused.scrollIntoView?.({ block: 'nearest' }));
+    };
+    visualViewport.addEventListener('resize', keepFocusedFieldVisible);
+    return () => visualViewport.removeEventListener('resize', keepFocusedFieldVisible);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -86,43 +103,49 @@ export default function ReservationPaymentForm({ reservation, amount, settings, 
     await onSubmit({ reference, proof });
   };
 
-  return <div className="customer-confirmation-backdrop gcash-payment-backdrop" role="presentation" onMouseDown={onClose}>
-    <form className="customer-confirmation-dialog gcash-payment-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="gcash-payment-title" onMouseDown={(event) => event.stopPropagation()}>
-      <header className="gcash-payment-header">
-        <h2 id="gcash-payment-title">Pay with GCash</h2>
-        <button type="button" className="gcash-payment-close" aria-label="Close payment dialog" onClick={onClose} disabled={isSaving}>×</button>
-      </header>
-      <div className="gcash-payment-body">
-        {showServiceBreakdown && <ServicePaymentBreakdown booking={reservation} className="gcash-service-payment-breakdown" />}
-        <PaymentSettingsDisplay
-          settings={instructions}
-          amount={money(paymentAmount)}
-          isLoading={isLoadingPaymentSettings}
-          loadError={paymentSettingsError}
-          onCopy={copy}
-        />
-        {copyMessage && <small className="gcash-payment-copy-message" role="status">{copyMessage}</small>}
-        <label className="gcash-payment-reference">GCash reference number
-          <input
-            required
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]{10,20}"
-            minLength={10}
-            maxLength={20}
-            value={reference}
-            onChange={(event) => setReference(event.target.value.replace(/\D/g, '').slice(0, 20))}
-            autoComplete="off"
+  return <CustomerModalPortal>
+    <div className="customer-confirmation-backdrop gcash-payment-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <form className="customer-confirmation-dialog gcash-payment-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="gcash-payment-title" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="gcash-payment-header">
+          <h2 id="gcash-payment-title">Pay with GCash</h2>
+          <button type="button" className="gcash-payment-close" aria-label="Close payment dialog" onClick={onClose} disabled={isSaving}>×</button>
+        </header>
+        <div ref={bodyRef} className="gcash-payment-body" onFocusCapture={(event) => {
+          const target = event.target;
+          if (!target.matches?.('input, textarea, select')) return;
+          window.requestAnimationFrame(() => target.scrollIntoView?.({ block: 'nearest' }));
+        }}>
+          {showServiceBreakdown && <ServicePaymentBreakdown booking={reservation} className="gcash-service-payment-breakdown" />}
+          <PaymentSettingsDisplay
+            settings={instructions}
+            amount={money(paymentAmount)}
+            isLoading={isLoadingPaymentSettings}
+            loadError={paymentSettingsError}
+            onCopy={copy}
           />
-        </label>
-        <input className="gcash-payment-file-input" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={selectReceipt} aria-label="Attach receipt file" />
-        <button className="customer-secondary-button gcash-payment-attach" type="button" onClick={(event) => event.currentTarget.previousElementSibling.click()}>Attach receipt</button>
-        {proof && <div className="gcash-payment-preview"><img src={previewUrl} alt="Receipt preview" /><span>{proof.name}</span><button type="button" onClick={() => { setProof(null); setPreviewUrl(''); }}>Remove</button></div>}
-        {fileError && <p className="customer-error" role="alert">{fileError}</p>}
-      </div>
-      <div className="gcash-payment-submit-row">
-        <button className="customer-primary-button" type="submit" disabled={!canSubmit || isSaving}>{isSaving ? 'Submitting...' : 'Submit payment'}</button>
-      </div>
-    </form>
-  </div>;
+          {copyMessage && <small className="gcash-payment-copy-message" role="status">{copyMessage}</small>}
+          <label className="gcash-payment-reference">GCash reference number
+            <input
+              required
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]{10,20}"
+              minLength={10}
+              maxLength={20}
+              value={reference}
+              onChange={(event) => setReference(event.target.value.replace(/\D/g, '').slice(0, 20))}
+              autoComplete="off"
+            />
+          </label>
+          <input className="gcash-payment-file-input" type="file" accept="image/png,image/jpeg,.png,.jpg,.jpeg" onChange={selectReceipt} aria-label="Attach receipt file" />
+          <button className="customer-secondary-button gcash-payment-attach" type="button" onClick={(event) => event.currentTarget.previousElementSibling.click()}>Attach receipt</button>
+          {proof && <div className="gcash-payment-preview"><img src={previewUrl} alt="Receipt preview" /><span>{proof.name}</span><button type="button" onClick={() => { setProof(null); setPreviewUrl(''); }}>Remove</button></div>}
+          {fileError && <p className="customer-error" role="alert">{fileError}</p>}
+        </div>
+        <div className="gcash-payment-submit-row">
+          <button className="customer-primary-button" type="submit" disabled={!canSubmit || isSaving}>{isSaving ? 'Submitting...' : 'Submit payment'}</button>
+        </div>
+      </form>
+    </div>
+  </CustomerModalPortal>;
 }

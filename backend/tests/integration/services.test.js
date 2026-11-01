@@ -186,6 +186,7 @@ describe('service booking business flow integration', () => {
     expect(listedLegacy).toMatchObject({
       serviceId: null,
       mechanic: null,
+      partsSource: 'shop',
       estimatedPrice: 500,
       paymentStatus: 'Confirmed'
     });
@@ -215,6 +216,7 @@ describe('service booking business flow integration', () => {
     const requestId = response.body.results[0].serviceRequest._id;
     const persisted = await ServiceRequest.findById(requestId).lean();
     expect(persisted).toMatchObject({
+      partsSource: 'shop',
       serviceType: fixtures.service.name,
       unitPrice: fixtures.service.price,
       unitMechanicFee: fixtures.service.mechanicFee,
@@ -227,6 +229,137 @@ describe('service booking business flow integration', () => {
       balanceDue: Math.round((fixtures.service.price + fixtures.service.mechanicFee) * 0.7 * 100) / 100,
       laborFee: fixtures.service.mechanicFee
     });
+  });
+
+  it('prices labor-only units from the saved option, leaves inventory unchanged, and records completion revenue once', async () => {
+    const service = await Service.create({
+      name: 'Customer Parts Brake Service',
+      description: 'Labor-only service for customer-supplied parts.',
+      price: 500,
+      laborOnlyPrice: 200,
+      mechanicFee: 75,
+      pricePerUnit: true,
+      unitLabel: 'wheel',
+      maxUnits: 2,
+      durationMinutes: 60
+    });
+    const productBefore = await Product.findById(fixtures.product._id).lean();
+    const created = await createBookings(customerToken, [booking(service._id, {
+      partsSource: 'customer',
+      units: 2,
+      estimatedPrice: 1,
+      price: 1,
+      mechanicFee: 0
+    })]);
+    const serviceRequest = created.body.results[0].serviceRequest;
+
+    expect(created.body.results[0].ok).toBe(true);
+    expect(serviceRequest).toMatchObject({
+      partsSource: 'customer',
+      unitPrice: 200,
+      unitMechanicFee: 75,
+      servicePriceTotal: 400,
+      mechanicFeeTotal: 150,
+      estimatedPrice: 550,
+      totalAmount: 550,
+      downPaymentPercent: 30,
+      downPaymentAmount: 165,
+      balanceDue: 385,
+      laborFee: 150
+    });
+    await Service.updateOne({ _id: service._id }, { $set: { laborOnlyPrice: 325 } });
+    expect(await Product.findById(fixtures.product._id).lean()).toMatchObject({
+      quantity: productBefore.quantity,
+      reservedQty: productBefore.reservedQty
+    });
+
+    const payment = await api.post(`/api/service-requests/${serviceRequest._id}/payment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .field('reference', '9876543210')
+      .attach('proof', png, { filename: 'labor-only-receipt.png', contentType: 'image/png' });
+    expect(payment.status).toBe(200);
+    const confirmed = await api.post(`/api/admin/service-requests/${serviceRequest._id}/confirm-payment`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(confirmed.status).toBe(200);
+    const accepted = await api.post(`/api/mechanic/jobs/${serviceRequest._id}/accept`)
+      .set('Authorization', `Bearer ${mechanicToken}`);
+    expect(accepted.status).toBe(200);
+    const started = await api.post(`/api/mechanic/jobs/${serviceRequest._id}/start`)
+      .set('Authorization', `Bearer ${mechanicToken}`);
+    expect(started.status).toBe(200);
+    const completed = await api.post(`/api/mechanic/jobs/${serviceRequest._id}/complete`)
+      .set('Authorization', `Bearer ${mechanicToken}`);
+    const repeatedCompletion = await api.post(`/api/mechanic/jobs/${serviceRequest._id}/complete`)
+      .set('Authorization', `Bearer ${mechanicToken}`);
+    const revenue = await BusinessRecord.find({ recordType: 'service', sourceId: serviceRequest._id }).lean();
+    const entries = await revenueUtils.getRevenueEntries({
+      Order: require('../../models/orderingModels/order'),
+      Reservation,
+      ServiceRequest,
+      Product
+    });
+    const mechanicsSummary = await api.get('/api/admin/mechanics/summary')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const ownPartsTransactions = await api.get('/api/dashboard/transactions?type=service&partsSource=customer&page=1&limit=100')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const shopPartsTransactions = await api.get('/api/dashboard/transactions?type=service&partsSource=shop&page=1&limit=100')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const allTransactions = await api.get('/api/dashboard/transactions?page=1&limit=100')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(started.status).toBe(200);
+    expect(completed.status).toBe(200);
+    expect(repeatedCompletion.status).toBe(400);
+    expect(revenue).toHaveLength(1);
+    expect(revenue[0]).toMatchObject({ amount: 550, laborFee: 150, partsSource: 'customer' });
+    expect(entries.filter((entry) => entry.recordId === String(serviceRequest._id))).toHaveLength(1);
+    expect(entries.find((entry) => entry.recordId === String(serviceRequest._id)).revenue).toBe(550);
+    expect(mechanicsSummary.body.totalLaborToday).toBe(150);
+    expect(ownPartsTransactions.body.data.map((record) => record.sourceId)).toContain(String(serviceRequest._id));
+    expect(shopPartsTransactions.body.data.map((record) => record.sourceId)).not.toContain(String(serviceRequest._id));
+    expect(allTransactions.body.counts.all).toBe(allTransactions.body.counts.items + allTransactions.body.counts.services);
+    expect(await Product.findById(fixtures.product._id).lean()).toMatchObject({
+      quantity: productBefore.quantity,
+      reservedQty: productBefore.reservedQty
+    });
+  });
+
+  it('rejects labor-only booking when the service has no labor-only price', async () => {
+    const response = await createBookings(customerToken, [booking(fixtures.service._id, { partsSource: 'customer' })]);
+    expect(response.status).toBe(200);
+    expect(response.body.results[0]).toMatchObject({ ok: false, status: 400 });
+    expect(response.body.results[0].message).toContain('not available as labor only');
+  });
+
+  it('filters active service requests by parts source and treats legacy requests as shop parts', async () => {
+    const service = await Service.create({
+      name: 'Parts Source Filter Service',
+      price: 250,
+      laborOnlyPrice: 100,
+      mechanicFee: 50,
+      durationMinutes: 60
+    });
+    const ownParts = await createBookings(customerToken, [booking(service._id, {
+      partsSource: 'customer',
+      startTime: '10:00'
+    })]);
+    const shopParts = await createBookings(secondCustomerToken, [booking(service._id, {
+      startTime: '12:00'
+    })]);
+    const legacyShopRequestId = shopParts.body.results[0].serviceRequest._id;
+    await ServiceRequest.updateOne({ _id: legacyShopRequestId }, { $unset: { partsSource: 1 } });
+    const ownRows = await api.get('/api/service-requests?activeOnly=true&partsSource=customer&page=1&limit=100')
+      .set('Authorization', `Bearer ${adminToken}`);
+    const shopRows = await api.get('/api/service-requests?activeOnly=true&partsSource=shop&page=1&limit=100')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(ownParts.body.results[0].ok).toBe(true);
+    expect(shopParts.body.results[0].ok).toBe(true);
+    expect(ownRows.body.requests.map((request) => request._id)).toContain(ownParts.body.results[0].serviceRequest._id);
+    expect(ownRows.body.requests.every((request) => request.partsSource === 'customer')).toBe(true);
+    expect(shopRows.body.requests.map((request) => request._id)).toContain(shopParts.body.results[0].serviceRequest._id);
+    expect(shopRows.body.requests.find((request) => request._id === legacyShopRequestId).partsSource).toBe('shop');
+    expect(shopRows.body.requests.every((request) => (request.partsSource || 'shop') === 'shop')).toBe(true);
   });
 
   it('creates zero-percent bookings without an upfront payment deadline', async () => {
@@ -547,6 +680,9 @@ describe('service booking business flow integration', () => {
     const closedDay = await createBookings(customerToken, [
       booking(fixtures.service._id, { date: nextSundayDate(), startTime: '10:00' })
     ]);
+    const settings = await ReservationSettings.getDefaults();
+    settings.openDays = [...settings.openDays, 'Sun'];
+    await settings.save();
     const pastTime = await createBookings(secondCustomerToken, [
       booking(fixtures.service._id, { date: dateOffset(0), startTime: '09:00' })
     ]);

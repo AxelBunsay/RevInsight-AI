@@ -28,6 +28,11 @@ const serviceRequestSchema = new mongoose.Schema({
     ref: 'Service',
     default: null
   },
+  partsSource: {
+    type: String,
+    enum: ['shop', 'customer'],
+    default: 'shop'
+  },
   mechanic: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Mechanic',

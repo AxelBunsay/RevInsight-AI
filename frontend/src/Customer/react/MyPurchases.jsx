@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { getServiceBookingStatus } from '../../utils/servicePayment';
 import { filterPurchaseRecords, getPurchaseTab, recordsForPurchaseTab } from './customerPurchases';
+import CustomerPagination from './CustomerPagination.jsx';
+import { CUSTOMER_PAGE_SIZES, getCustomerPageItems } from './customerPagination';
+import { useCustomerPagination } from './useCustomerPagination';
 import { ItemReservationCard, ServiceBookingCard } from './CustomerPurchaseCards';
 import '../styles/customer-flow.css';
 
@@ -25,8 +28,8 @@ function sortTimestamp(record) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-export function PurchaseRecordList({ records, showType }) {
-  return <div className="customer-reservation-list">
+export function PurchaseRecordList({ records, showType, listRef }) {
+  return <div className="customer-reservation-list" ref={listRef}>
     {records.map((record) => record.type === 'item'
       ? <ItemReservationCard key={`item-${record.reference}`} reservation={record.value} showType={showType} />
       : <ServiceBookingCard
@@ -49,6 +52,7 @@ export default function MyPurchases() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const purchasesListRef = useRef(null);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 200);
@@ -108,14 +112,26 @@ export default function MyPurchases() {
 
   const tabRecords = recordsForPurchaseTab(records, activeTab);
   const visibleRecords = filterPurchaseRecords(tabRecords, statusFilter, debouncedSearchQuery);
+  const pageSize = CUSTOMER_PAGE_SIZES.purchases;
+  const { page, pageCount, setPage, resetPage } = useCustomerPagination({
+    itemCount: visibleRecords.length,
+    pageSize,
+    isReady: !isLoading,
+    listRef: purchasesListRef
+  });
+  const pageRecords = getCustomerPageItems(visibleRecords, page, pageSize);
 
   const chooseTab = (tab) => {
-    setSearchParams({ tab });
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', tab);
+    nextParams.set('page', '1');
+    setSearchParams(nextParams);
   };
   const clearFilters = () => {
     setStatusFilter('all');
     setSearchQuery('');
     setDebouncedSearchQuery('');
+    resetPage();
   };
 
   const emptyCopy = activeTab === 'items'
@@ -139,12 +155,12 @@ export default function MyPurchases() {
           className={activeTab === tab ? 'is-active' : ''}
           key={tab}
           onClick={() => chooseTab(tab)}
-        >{label}</button>)}
+        >{label}<span className="customer-purchases-tab-count">{recordsForPurchaseTab(records, tab).length}</span></button>)}
       </div>
       <div className="customer-purchases-filters">
         <label>
           <span>Status</span>
-          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); resetPage(); }}>
             {statusOptions.map(([value, label]) => <option value={value} key={value}>{label}</option>)}
           </select>
         </label>
@@ -156,23 +172,21 @@ export default function MyPurchases() {
               role="searchbox"
               inputMode="search"
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => { setSearchQuery(event.target.value); resetPage(); }}
               placeholder="Search by name or reference"
             />
             {searchQuery && <button type="button" aria-label="Clear search" title="Clear search" onClick={() => {
               setSearchQuery('');
               setDebouncedSearchQuery('');
+              resetPage();
             }}>×</button>}
           </span>
         </label>
       </div>
-      {!isLoading && <p className="customer-purchases-result-count" aria-live="polite">
-        {visibleRecords.length} {visibleRecords.length === 1 ? 'result' : 'results'}
-      </p>}
       {isLoading
         ? <p className="customer-empty">Loading purchases and bookings...</p>
         : visibleRecords.length
-          ? <PurchaseRecordList records={visibleRecords} showType={activeTab === 'all'} />
+          ? <PurchaseRecordList records={pageRecords} showType={activeTab === 'all'} listRef={purchasesListRef} />
           : debouncedSearchQuery
             ? <section className="customer-empty-cart">
               <span aria-hidden="true">⌕</span>
@@ -180,6 +194,7 @@ export default function MyPurchases() {
               <button type="button" className="customer-secondary-button" onClick={() => {
                 setSearchQuery('');
                 setDebouncedSearchQuery('');
+                resetPage();
               }}>Clear search</button>
             </section>
           : tabRecords.length
@@ -200,6 +215,14 @@ export default function MyPurchases() {
                 </div>
                 : <Link className="customer-primary-button" to={emptyCopy.href}>{emptyCopy.label}</Link>}
             </section>}
+      {!isLoading && <CustomerPagination
+        page={page}
+        pageCount={pageCount}
+        totalItems={visibleRecords.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        label="Purchases and bookings"
+      />}
     </div>
   </CustomerPage>;
 }

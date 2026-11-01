@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCartSummary, replaceServiceCartItem } from './serviceCart';
+import { getCartSummary, getServiceCartPaymentSummary, replaceServiceCartItem } from './serviceCart';
 
 describe('service cart helpers', () => {
   const booking = {
@@ -55,6 +55,18 @@ describe('service cart helpers', () => {
       downPayment: 150,
       balanceDueAtPickup: 350,
       cartTotal: 1100
+    });
+  });
+
+  it('sums down payments after rounding each service booking independently', () => {
+    expect(getServiceCartPaymentSummary([
+      { estimatedPrice: 0.05 },
+      { estimatedPrice: 0.05 }
+    ], 30)).toEqual({
+      totalAmount: 0.1,
+      downPaymentAmount: 0.04,
+      balanceDue: 0.06,
+      downPaymentPercent: 30
     });
   });
 });

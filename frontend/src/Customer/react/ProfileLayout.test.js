@@ -9,7 +9,7 @@ const customerLayout = readSource('./CustomerLayout.jsx');
 
 describe('customer account responsive layout', () => {
   it('uses the shared wide-content padding for Account without widening other customer pages', () => {
-    expect(sharedStyles).toContain('.customer-page.shop-page,\n.customer-page.services-page,\n.customer-page.profile-page');
+    expect(sharedStyles).toContain('.customer-page {\n  --customer-wide-content-padding: clamp(16px, 3vw, 44px);');
     expect(accountStyles).toContain('.customer-page.profile-page .customer-header {\n  width: 100%;\n  max-width: none;');
     expect(accountStyles).toContain('.customer-page.profile-page .customer-flow-page.customer-account-page {\n  width: 100%;\n  max-width: none;');
   });
@@ -42,7 +42,7 @@ describe('customer account responsive layout', () => {
   });
 
   it('uses the navbar brand tagline and omits the duplicate eyebrow only on Account', () => {
-    expect(customerLayout).toContain('<strong>Manoy&apos;s</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small>');
+    expect(customerLayout).toContain('<strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small>');
     expect(customerLayout).toContain("{title !== 'Account' && <p className=\"customer-eyebrow\">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}");
     expect(accountStyles).toContain('font: 800 24px/1 \'Segoe UI\', sans-serif;');
     expect(accountStyles).toContain('font: 700 11px/1.2 \'Segoe UI\', sans-serif;');

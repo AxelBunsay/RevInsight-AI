@@ -5,6 +5,8 @@ import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { clearAuthSession } from '../../auth/authSession';
 import { clearCustomerAuthAction } from './customerAuthAction';
+import CustomerModalPortal from './CustomerModalPortal';
+import useCustomerModalEffects from './useCustomerModalEffects';
 import '../styles/customer-flow.css';
 
 const activeReservationStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved'];
@@ -66,6 +68,10 @@ export default function CustomerProfile() {
   const [hasBlockedRecords, setHasBlockedRecords] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const customerName = `${profileForm.firstName} ${profileForm.lastName}`.trim() || profile.name || 'Demo Rider';
+
+  useCustomerModalEffects(isDeleteModalOpen, () => {
+    if (!isDeletingAccount) setIsDeleteModalOpen(false);
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -286,25 +292,27 @@ export default function CustomerProfile() {
         </form>
       </section>}
 
-      {isDeleteModalOpen && <div className="customer-confirmation-backdrop" role="presentation">
+      {isDeleteModalOpen && <CustomerModalPortal><div className="customer-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingAccount) setIsDeleteModalOpen(false); }}>
         <section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
-          <h2 id="delete-account-title">Delete your account?</h2>
-          <p>This action cannot be undone. Enter your password and type DELETE to confirm.</p>
-          <form onSubmit={deleteAccount}>
-            <label className="customer-delete-field">Password<input type="password" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} /></label>
-            <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
-            {deleteError && <p className="customer-field-error" role="alert">{deleteError}</p>}
-            {hasBlockedRecords && <div className="customer-delete-record-links">
-              <Link to="/my-purchases?tab=items">View reservations</Link>
-              <Link to="/my-purchases?tab=services">View bookings</Link>
-            </div>}
-            <div>
-              <button type="button" className="customer-primary-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
-              <button type="submit" className="customer-danger-button" disabled={isDeletingAccount || !deletePassword || deleteConfirmation !== 'DELETE'}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
-            </div>
-          </form>
+          <header className="customer-modal-header"><h2 id="delete-account-title">Delete your account?</h2><button type="button" className="customer-modal-close" aria-label="Close delete account dialog" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>×</button></header>
+          <div className="customer-modal-body">
+            <p>This action cannot be undone. Enter your password and type DELETE to confirm.</p>
+            <form id="delete-account-form" onSubmit={deleteAccount}>
+              <label className="customer-delete-field">Password<input type="password" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} /></label>
+              <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
+              {deleteError && <p className="customer-field-error" role="alert">{deleteError}</p>}
+              {hasBlockedRecords && <div className="customer-delete-record-links">
+                <Link to="/my-purchases?tab=items">View reservations</Link>
+                <Link to="/my-purchases?tab=services">View bookings</Link>
+              </div>}
+            </form>
+          </div>
+          <footer className="customer-modal-footer">
+            <button type="button" className="customer-primary-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
+            <button type="submit" form="delete-account-form" className="customer-danger-button" disabled={isDeletingAccount || !deletePassword || deleteConfirmation !== 'DELETE'}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
+          </footer>
         </section>
-      </div>}
+      </div></CustomerModalPortal>}
     </div>
   </CustomerPage>;
 }

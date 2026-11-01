@@ -4,6 +4,8 @@ import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
+import CustomerModalPortal from './CustomerModalPortal';
+import useCustomerModalEffects from './useCustomerModalEffects';
 import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
@@ -41,6 +43,8 @@ export default function ReservationDetail() {
   const [showPaymentForm, setShowPaymentForm] = useState(Boolean(location.state?.showPayment));
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const expiryChecked = useRef(false);
+
+  useCustomerModalEffects(showCancelDialog, () => setShowCancelDialog(false));
 
   useEffect(() => {
     if (serviceReservation) return undefined;
@@ -143,7 +147,8 @@ export default function ReservationDetail() {
         {message && <p className="customer-success" role="status">{message}</p>}
         <section className="customer-reservation-detail-card">
           <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{formatServiceName(serviceBooking.serviceType, serviceBooking.units, serviceBooking.unitLabel)}</h1><p>{serviceBooking.pricePerUnit ? `${serviceUnitSummary(serviceBooking.units || 1, serviceBooking.unitLabel)} · ` : ''}{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
-          <div className="customer-reservation-detail-meta"><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /><div><span>Payment</span><strong>{serviceStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
+          {serviceBooking.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}
+          <div className="customer-reservation-detail-meta"><div><span>Parts</span><strong>{serviceBooking.partsSource === 'customer' ? 'Customer brings own parts' : 'From the shop'}</strong></div><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /><div><span>Payment</span><strong>{serviceStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
           {serviceBooking.paymentRejectionReason && <p className="customer-error" role="alert">Payment needs attention: {serviceBooking.paymentRejectionReason}</p>}
           {paymentPending && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
           {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={getServicePaymentSummary(serviceBooking).downPaymentAmount} settings={settings} showServiceBreakdown onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
@@ -199,7 +204,11 @@ export default function ReservationDetail() {
         {canCustomerCancel && <button className="customer-secondary-button" type="button" onClick={() => setShowCancelDialog(true)} disabled={isSaving}>Cancel reservation</button>}
         <Link className="customer-secondary-button" to="/my-purchases?tab=items">Back to My Purchases</Link>
       </section>
-      {showCancelDialog && <div className="customer-confirmation-backdrop" role="presentation"><section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-reservation-title"><h2 id="cancel-reservation-title">Cancel reservation?</h2><p>Cancel reservation {reservation.code}? This cannot be undone.</p><div><button type="button" className="customer-secondary-button" onClick={() => setShowCancelDialog(false)} disabled={isSaving}>Keep reservation</button><button type="button" className="customer-danger-button" onClick={cancelReservation} disabled={isSaving}>{isSaving ? 'Cancelling...' : 'Cancel reservation'}</button></div></section></div>}
+      {showCancelDialog && <CustomerModalPortal><div className="customer-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isSaving) setShowCancelDialog(false); }}><section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-reservation-title">
+        <header className="customer-modal-header"><h2 id="cancel-reservation-title">Cancel reservation?</h2><button type="button" className="customer-modal-close" aria-label="Close reservation cancellation dialog" onClick={() => setShowCancelDialog(false)} disabled={isSaving}>×</button></header>
+        <div className="customer-modal-body"><p>Cancel reservation {reservation.code}? This cannot be undone.</p></div>
+        <footer className="customer-modal-footer"><button type="button" className="customer-secondary-button" onClick={() => setShowCancelDialog(false)} disabled={isSaving}>Keep reservation</button><button type="button" className="customer-danger-button" onClick={cancelReservation} disabled={isSaving}>{isSaving ? 'Cancelling...' : 'Cancel reservation'}</button></footer>
+      </section></div></CustomerModalPortal>}
     </div>
   </CustomerPage>;
 }

@@ -236,7 +236,7 @@ const getProjectedRevenue = async (req, res) => {
 // Get All Transactions
 const getBusinessRecords = async (req, res) => {
   try {
-    const { recordType, status, startDate, endDate, mechanicId, type, itemView = 'all', search } = req.query;
+    const { recordType, status, startDate, endDate, mechanicId, type, itemView = 'all', search, partsSource } = req.query;
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
     await expireReservations();
@@ -297,6 +297,13 @@ const getBusinessRecords = async (req, res) => {
     const allQuery = withSearch(['customer', 'itemName', 'mechanicName']);
     const itemQuery = { ...withSearch(['customer', 'itemName']), recordType: 'product' };
     const serviceQuery = { ...withSearch(['customer', 'itemName', 'mechanicName']), recordType: 'service' };
+    if (type === 'service' && partsSource === 'customer') {
+      serviceQuery.partsSource = 'customer';
+    } else if (type === 'service' && partsSource === 'shop') {
+      serviceQuery.$and = [...(serviceQuery.$and || []), {
+        $or: [{ partsSource: 'shop' }, { partsSource: { $exists: false } }, { partsSource: null }]
+      }];
+    }
     const reservationQuery = { code: { $exists: true } };
     if (reservationStatusFilter) reservationQuery.status = reservationStatusFilter;
     if (searchPattern) {

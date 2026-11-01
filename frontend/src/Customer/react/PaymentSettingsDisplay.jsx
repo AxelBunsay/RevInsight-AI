@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { downloadQrImage, qrPreviewReducer } from './paymentQr';
+import CustomerModalPortal from './CustomerModalPortal';
+import useCustomerModalEffects from './useCustomerModalEffects';
 
 export default function PaymentSettingsDisplay({ settings, amount, isLoading, loadError, onCopy }) {
   const [loadedQrUrl, setLoadedQrUrl] = useState('');
@@ -10,14 +12,7 @@ export default function PaymentSettingsDisplay({ settings, amount, isLoading, lo
   const isQrLoaded = loadedQrUrl === qrUrl;
   const qrFailed = failedQrUrl === qrUrl;
 
-  useEffect(() => {
-    if (!isPreviewOpen) return undefined;
-    const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setIsPreviewOpen((open) => qrPreviewReducer(open, { type: 'escape' }));
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [isPreviewOpen]);
+  useCustomerModalEffects(isPreviewOpen, () => setIsPreviewOpen((open) => qrPreviewReducer(open, { type: 'escape' })));
 
   const saveQr = async (event) => {
     event.preventDefault();
@@ -87,18 +82,16 @@ export default function PaymentSettingsDisplay({ settings, amount, isLoading, lo
         </a>
         <small className="gcash-payment-qr-hint">On a phone? Save the QR and upload it in GCash &gt; Pay QR.</small>
         {downloadMessage && <small className="gcash-payment-fallback-note" role="status">{downloadMessage}</small>}
-        {isPreviewOpen && <div
-          className="gcash-qr-lightbox"
-          role="presentation"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setIsPreviewOpen((open) => qrPreviewReducer(open, { type: 'outside-click' }));
-            }
-          }}
-        >
-          <button type="button" className="gcash-qr-lightbox-close" aria-label="Close QR preview" onClick={() => setIsPreviewOpen((open) => qrPreviewReducer(open, { type: 'close' }))}>×</button>
-          <img src={qrUrl} alt="Shop GCash QR code enlarged" onClick={(event) => event.stopPropagation()} />
-        </div>}
+        {isPreviewOpen && <CustomerModalPortal>
+          <div className="gcash-qr-lightbox" role="presentation" onClick={(event) => {
+            if (event.target === event.currentTarget) setIsPreviewOpen((open) => qrPreviewReducer(open, { type: 'outside-click' }));
+          }}>
+            <section className="gcash-qr-lightbox-dialog" role="dialog" aria-modal="true" aria-label="GCash QR code preview">
+              <header className="gcash-qr-lightbox-header"><span className="customer-sr-only">GCash QR code preview</span><button type="button" className="gcash-qr-lightbox-close" aria-label="Close QR preview" onClick={() => setIsPreviewOpen((open) => qrPreviewReducer(open, { type: 'close' }))}>×</button></header>
+              <div className="gcash-qr-lightbox-body"><img src={qrUrl} alt="Shop GCash QR code enlarged" /></div>
+            </section>
+          </div>
+        </CustomerModalPortal>}
       </div>
       : <p className="customer-reservation-note">The shop has not added a GCash QR code yet. You can use the account details below.</p>}
     {settings.paymentInstructions && <p className="gcash-payment-instructions">{settings.paymentInstructions}</p>}

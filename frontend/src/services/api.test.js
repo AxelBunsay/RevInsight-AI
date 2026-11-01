@@ -1,6 +1,7 @@
 // Runtime validation coverage for multipart payment submission behavior.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, request } from './api';
+import { adminApi } from '../admin/services/adminApi';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -142,5 +143,36 @@ describe('request authentication expiry handling', () => {
 
     expect(removeItem).not.toHaveBeenCalled();
     expect(assign).not.toHaveBeenCalled();
+  });
+});
+
+describe('role-specific API authorization', () => {
+  it('attaches only the owning role token to each role API', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key) => ({
+        adminToken: 'admin-token',
+        customerToken: 'customer-token',
+        mechanicToken: 'mechanic-token'
+      })[key] || null),
+      removeItem: vi.fn()
+    });
+    vi.stubGlobal('sessionStorage', { getItem: () => null, removeItem: vi.fn() });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({})
+    }));
+
+    await adminApi.getDashboardStats();
+    await api.getCustomerReservations();
+    await api.getMechanicJobs();
+    await api.getProduct('part-id');
+
+    expect(fetch.mock.calls.map(([, options]) => options.headers.get('Authorization'))).toEqual([
+      'Bearer admin-token',
+      'Bearer customer-token',
+      'Bearer mechanic-token',
+      null
+    ]);
   });
 });

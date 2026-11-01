@@ -1,3 +1,21 @@
+.admin-root.admin-modal-portal {
+  display: contents;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  background: transparent;
+}
+.admin-root.admin-modal-portal .admin-management-page {
+  width: auto;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
 .admin-root .admin-management-page h1,
 .admin-root .admin-management-page h2 {
   color: var(--ink);
@@ -231,6 +249,224 @@
   width: 100%;
   min-width: 0;
 }
+.admin-root .admin-management-page .transaction-card-list {
+  display: none;
+}
+.admin-root .admin-management-page .inventory-card-list {
+  display: none;
+}
+.admin-root .admin-management-page .inventory-mobile-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.admin-root .admin-management-page .inventory-mobile-card__heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+.admin-root .admin-management-page .inventory-mobile-card__name {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .inventory-mobile-card__name strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .inventory-mobile-card__name span,
+.admin-root .admin-management-page .inventory-mobile-card__description {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .inventory-mobile-card__description {
+  margin: 0;
+}
+.admin-root .admin-management-page .inventory-mobile-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.admin-root .admin-management-page .inventory-mobile-card__metrics > div {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 4px;
+}
+.admin-root .admin-management-page .inventory-mobile-card__metrics span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.admin-root .admin-management-page .inventory-mobile-card__metrics strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .inventory-mobile-card__variants {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+.admin-root .admin-management-page .inventory-mobile-card__variant {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--soft);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.admin-root .admin-management-page .inventory-mobile-card__variant span {
+  color: var(--muted);
+}
+.admin-root .admin-management-page .inventory-mobile-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.admin-root .admin-management-page .inventory-mobile-card__actions > button,
+.admin-root .admin-management-page .inventory-mobile-card .inventory-variant-toggle {
+  min-width: 0;
+  min-height: 44px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .inventory-card-state {
+  margin: 0;
+  padding: 22px 12px;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .transaction-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.admin-root .admin-management-page .transaction-card__top,
+.admin-root .admin-management-page .transaction-card__badges {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.admin-root .admin-management-page .transaction-card__top {
+  justify-content: space-between;
+}
+.admin-root .admin-management-page .transaction-card__customer {
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
+  font-size: 14px;
+  font-weight: 800;
+}
+.admin-root .admin-management-page .transaction-card__badges {
+  flex: 0 0 49%;
+  min-width: 0;
+  max-width: 49%;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+.admin-root .admin-management-page .transaction-card__badges .status-badge {
+  max-width: calc(100% - 42px);
+  justify-content: center;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
+}
+.admin-root .admin-management-page .transaction-card__badges .transaction-type-badge {
+  padding-right: 6px;
+  padding-left: 6px;
+  font-size: 10px;
+}
+.admin-root .admin-management-page .transaction-card__items {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 10px 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 13px;
+  font-weight: 600;
+}
+.admin-root .admin-management-page .transaction-card__details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .transaction-card__payment-method {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.admin-root .admin-management-page .transaction-card__payment-method span {
+  color: var(--muted);
+}
+.admin-root .admin-management-page .transaction-card__money {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.admin-root .admin-management-page .transaction-card__money > div {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 4px;
+}
+.admin-root .admin-management-page .transaction-card__money span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .transaction-card__money strong {
+  font-size: 12px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .transaction-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.admin-root .admin-management-page .transaction-card__actions > button {
+  flex: 1 1 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.admin-root .admin-management-page .transaction-card-state {
+  padding: 24px 12px;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
 .admin-root .admin-management-page .inventory-table-scroll {
   max-height: min(52vh, 430px);
   overflow: auto;
@@ -253,17 +489,35 @@
   overflow-x: visible;
 }
 @media (max-width: 1024px) {
-  .admin-root .admin-management-page .transactions-table-scroll {
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-    scrollbar-color: var(--muted) transparent;
-    box-shadow: inset -10px 0 10px -12px rgba(43, 26, 18, .8);
+  .admin-root .admin-management-page .transactions-tabs button,
+  .admin-root .admin-management-page .transactions-page-actions .btn-small,
+  .admin-root .admin-management-page .transactions-container .search-filter input,
+  .admin-root .admin-management-page .transactions-container .search-filter select,
+  .admin-root .admin-management-page .transactions-container .pagination-button,
+  .admin-root .admin-management-page .inventory-view-toggle button,
+  .admin-root .admin-management-page .inventory-header input,
+  .admin-root .admin-management-page .inventory-container .pagination-button {
+    min-height: 44px;
   }
-
-  .admin-root .admin-management-page .transactions-table {
-    min-width: 1050px;
+  .admin-root .admin-management-page .inventory-container {
+    overflow-x: visible;
+  }
+  .admin-root .admin-management-page .inventory-container .inventory-table-scroll,
+  .admin-root .admin-management-page .inventory-container .inventory-service-table {
+    display: none;
+  }
+  .admin-root .admin-management-page .inventory-card-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .admin-root .admin-management-page .transactions-table-scroll {
+    display: none;
+  }
+  .admin-root .admin-management-page .transaction-card-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
 }
 .admin-root .admin-management-page .inventory-table th,
@@ -643,7 +897,7 @@
 }
 .admin-root .admin-management-page .admin-dialog-backdrop {
   position: fixed;
-  z-index: 10;
+  z-index: 1100;
   inset: 0;
   display: grid;
   place-items: center;
@@ -694,6 +948,9 @@
 .admin-root .admin-management-page .admin-dialog-actions {
   justify-content: flex-end;
   margin-top: 8px;
+}
+.admin-root .admin-management-page .admin-dialog-gcash-save-mobile {
+  display: none;
 }
 .admin-root .admin-management-page .reservation-admin-line-items li {
   display: flex;
@@ -831,6 +1088,17 @@
   background: #e8edf2;
   color: #44566a;
 }
+.admin-root .admin-management-page .transaction-parts-source-badge {
+  display: inline-flex;
+  min-height: 23px;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: #fff0e3;
+  color: #a9450d;
+  font-size: 11px;
+  font-weight: 800;
+}
 .admin-root .admin-management-page .status-pending-down-payment {
   background: #fde9b8;
   color: #7a4f00;
@@ -952,9 +1220,46 @@
     align-items: stretch;
     flex-direction: column;
   }
+  .admin-root .admin-management-page .transactions-page-actions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 2fr) minmax(76px, 1fr);
+  }
+  .admin-root .admin-management-page .transactions-page-actions .btn-small {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
   .admin-root .admin-management-page .transactions-tabs button {
     min-width: 0;
     flex: 1;
+  }
+}
+
+@media (max-width: 339px) {
+  .admin-root .admin-management-page .transaction-card__top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .admin-root .admin-management-page .transaction-card__badges {
+    width: 100%;
+    max-width: 100%;
+    flex: 0 0 auto;
+    justify-content: flex-end;
+  }
+  .admin-root .admin-management-page .transaction-card__badges .status-badge {
+    max-width: none;
+  }
+  html:has(.admin-root.admin-root--drawer-layout),
+  body:has(.admin-root.admin-root--drawer-layout),
+  #root:has(.admin-root.admin-root--drawer-layout) {
+    min-width: 0;
+  }
+  .admin-root .admin-management-page .transactions-page-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-root .admin-management-page .inventory-mobile-card__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1423,15 +1728,122 @@
   margin-top: 2px;
 }
 
-@media (max-width: 599px) {
+@media (max-width: 1024px) {
   .admin-root .admin-management-page .admin-dialog-backdrop {
-    padding: 8px;
+    z-index: 1100;
+    padding: 12px;
   }
 
-  .admin-root .admin-management-page .mechanic-form-dialog {
+  .admin-root .admin-management-page .admin-dialog {
+    display: flex;
+    width: min(560px, 100%);
+    max-height: calc(100vh - 24px);
+    max-height: calc(100dvh - 24px);
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-header {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 10px 12px 10px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .admin-root .admin-management-page .admin-dialog-header h2 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-close {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 44px;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-body {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding: 14px 16px;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-body > .admin-dialog-form {
+    min-height: 100%;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-footer {
+    flex: 0 0 auto;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  .admin-root .admin-management-page .admin-dialog-footer .admin-dialog-actions {
+    display: flex;
     width: 100%;
-    max-height: calc(100dvh - 16px);
-    padding: 16px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-footer .admin-dialog-actions > button {
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-footer .admin-dialog-gcash-save-mobile {
+    display: inline-flex;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-body .admin-dialog-gcash-save-body {
+    display: none;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-body input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .admin-root .admin-management-page .admin-dialog-body select,
+  .admin-root .admin-management-page .admin-dialog-body textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-body textarea {
+    min-height: 88px;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-body .reservation-payment-proof,
+  .admin-root .admin-management-page .admin-dialog-body img {
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .admin-root .admin-management-page .mechanic-form-dialog .mechanic-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-root .admin-management-page .admin-dialog-backdrop {
+    padding: 12px;
+  }
+
+  .admin-root .admin-management-page .admin-dialog {
+    width: 100%;
+  }
+
+  .admin-root .admin-management-page .admin-dialog-footer .admin-dialog-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-root .admin-management-page .admin-dialog-footer .admin-dialog-actions > button {
+    width: 100%;
   }
 
   .admin-root .admin-management-page .mechanic-form-grid {

@@ -108,12 +108,20 @@ const syncCompletedServiceBusinessRecord = async (serviceRequest, session = null
       ? `${serviceRequest.serviceType} x${serviceRequest.units} ${serviceRequest.unitLabel || "unit"}${String(serviceRequest.unitLabel || "").endsWith("s") ? "" : "s"}`
       : serviceRequest.serviceType,
     category: "Service Booking",
+    partsSource: serviceRequest.partsSource === 'customer' ? 'customer' : 'shop',
     mechanicId: serviceRequest.mechanicId || serviceRequest.mechanic || null,
     mechanicName: mechanic
       ? `${mechanic.firstName || ""} ${mechanic.lastName || ""}`.trim()
       : "",
     amount: Number(serviceRequest.estimatedPrice) || 0,
     laborFee: Number(serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
+    servicePriceTotal: Number(serviceRequest.servicePriceTotal) || 0,
+    mechanicFeeTotal: Number(serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
+    estimatedPrice: Number(serviceRequest.estimatedPrice) || 0,
+    downPaymentAmount: Number(serviceRequest.downPaymentAmount) || 0,
+    amountPaid: Number(serviceRequest.amountPaid) || 0,
+    balanceDue: Number(serviceRequest.balanceDue) || 0,
+    downPaymentPercent: Number(serviceRequest.downPaymentPercent ?? 100),
     status: serviceRequest.status,
     completedAt:
       serviceRequest.completedAt ||
@@ -583,6 +591,14 @@ const getAllServiceRequests = async (req, res) => {
         { paymentStatus: "Payment Submitted" },
         { paymentStatus: "Payment Pending", paymentRejectionReason: { $exists: true, $ne: "" } }
       ];
+    }
+
+    if (req.query.partsSource === 'customer') {
+      filter.$and = [...(filter.$and || []), { partsSource: 'customer' }];
+    } else if (req.query.partsSource === 'shop') {
+      filter.$and = [...(filter.$and || []), {
+        $or: [{ partsSource: 'shop' }, { partsSource: { $exists: false } }, { partsSource: null }]
+      }];
     }
 
     if (req.query.status) {

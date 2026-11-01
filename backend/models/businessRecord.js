@@ -6,6 +6,11 @@ const businessRecordSchema = new mongoose.Schema({
     enum: ['product', 'service'],
     required: true
   },
+  partsSource: {
+    type: String,
+    enum: ['shop', 'customer'],
+    default: 'shop'
+  },
   sourceId: {
     type: mongoose.Schema.Types.ObjectId,
     required: true
@@ -50,6 +55,13 @@ const businessRecordSchema = new mongoose.Schema({
     min: 0,
     default: 0
   },
+  servicePriceTotal: { type: Number, min: 0 },
+  mechanicFeeTotal: { type: Number, min: 0 },
+  estimatedPrice: { type: Number, min: 0 },
+  downPaymentAmount: { type: Number, min: 0 },
+  amountPaid: { type: Number, min: 0 },
+  balanceDue: { type: Number, min: 0 },
+  downPaymentPercent: { type: Number, min: 0, max: 100 },
   status: {
     type: String,
     default: 'completed'

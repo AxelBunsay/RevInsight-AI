@@ -5,13 +5,18 @@ import { describe, expect, it } from 'vitest';
 import {
   CustomerAccountMenu,
   CustomerAccountMenuTrigger,
-  CustomerAuthShell
+  CustomerAuthShell,
+  CustomerHeader
 } from './CustomerLayout';
+import { CustomerPrototypeProvider } from './CustomerPrototypeProvider';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
 
 const appSource = readFileSync(new URL('../../App.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const authStyles = readFileSync(new URL('../styles/auth.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const customerLayoutSource = readFileSync(new URL('./CustomerLayout.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const responsiveStyles = readFileSync(new URL('../styles/customer-responsive.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const flowStyles = readFileSync(new URL('../styles/customer-flow.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const sharedStyles = readFileSync(new URL('../styles/shared.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const initialMenuState = { accountOpen: false, notificationsOpen: false };
 
 describe('customer account menu', () => {
@@ -112,5 +117,106 @@ describe('customer account menu', () => {
 
     expect(markup).not.toContain('Sign out');
     expect(markup).not.toContain('role="separator"');
+    expect(markup).not.toContain('My profile');
+    expect(markup).not.toContain('My purchases');
+  });
+
+  it('keeps cart, notifications, and hamburger in the header outside the collapsible menu', () => {
+    const originalLocalStorage = globalThis.localStorage;
+    const originalSessionStorage = globalThis.sessionStorage;
+    const storage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+    globalThis.localStorage = storage;
+    globalThis.sessionStorage = storage;
+    let markup;
+    try {
+      markup = renderToStaticMarkup(<MemoryRouter><CustomerPrototypeProvider><CustomerHeader /></CustomerPrototypeProvider></MemoryRouter>);
+    } finally {
+      if (originalLocalStorage === undefined) delete globalThis.localStorage;
+      else globalThis.localStorage = originalLocalStorage;
+      if (originalSessionStorage === undefined) delete globalThis.sessionStorage;
+      else globalThis.sessionStorage = originalSessionStorage;
+    }
+
+    const actions = markup.indexOf('class="customer-header-actions"');
+    const cart = markup.indexOf('customer-header-cart');
+    const bell = markup.indexOf('customer-notification-bell');
+    const toggle = markup.indexOf('customer-menu-toggle');
+    const nav = markup.indexOf('id="customer-navigation"');
+    expect(actions).toBeGreaterThan(-1);
+    expect(markup).toContain('<strong>MANOY&#x27;S</strong>');
+    expect(cart).toBeGreaterThan(actions);
+    expect(bell).toBeGreaterThan(cart);
+    expect(toggle).toBeGreaterThan(bell);
+    expect(nav).toBeGreaterThan(toggle);
+    expect(markup).toContain('>Register</a>');
+    expect(markup.match(/customer-header-icon-button/g)).toHaveLength(3);
+    expect(markup).not.toContain('customer-header-cart-count');
+    expect(markup).not.toContain('customer-notification-count');
+  });
+
+  it('keeps customer chrome mounted while route content changes by pathname', () => {
+    expect(customerLayoutSource).toContain('onClick={closeNavigation}');
+    expect(customerLayoutSource).toContain('<CustomerHeader />');
+    expect(customerLayoutSource).toContain('<RouteContentTransition><Outlet /></RouteContentTransition>');
+    expect(customerLayoutSource).not.toContain('<CustomerHeader key={location.pathname} />');
+    expect(customerLayoutSource).toContain('const outsideNavigation = !menuRef.current?.contains(event.target)');
+    expect(customerLayoutSource).toContain('if (outsideNavigation) setMenuOpenPath(null);');
+    expect(customerLayoutSource).toContain('if (event.key === \'Escape\') {\n        setMenuOpenPath(null);');
+    expect(customerLayoutSource).toContain('className="customer-site-footer"');
+  });
+
+  it('uses the shared customer container for the header, routed page, and footer', () => {
+    const container = customerLayoutSource.indexOf('<div className="customer-layout-container">');
+    const header = customerLayoutSource.indexOf('<CustomerHeader />', container);
+    const route = customerLayoutSource.indexOf('<RouteContentTransition><Outlet /></RouteContentTransition>', container);
+    const footer = customerLayoutSource.indexOf('<CustomerFooter />', container);
+
+    expect(container).toBeGreaterThan(-1);
+    expect(header).toBeGreaterThan(container);
+    expect(route).toBeGreaterThan(header);
+    expect(footer).toBeGreaterThan(route);
+    expect(responsiveStyles).toContain('.customer-page .customer-layout-container');
+    expect(responsiveStyles).toContain('max-width: 1760px;');
+    expect(sharedStyles).toContain('.customer-page {\n  --customer-wide-content-padding: clamp(16px, 3vw, 44px);');
+  });
+
+  it('keeps menu panels mounted and animates them with reduced-motion support', () => {
+    expect(customerLayoutSource).toContain('customer-account-menu-collapse${isOpen ? \' is-open\' : \'\'}');
+    expect(customerLayoutSource).toContain('customer-notification-panel customer-notification-panel--viewport${customerMenus.notificationsOpen ? \' is-open\' : \'\'}');
+    expect(customerLayoutSource).toContain('inert={!isOpen}');
+    expect(customerLayoutSource).toContain('inert={!customerMenus.notificationsOpen}');
+    expect(flowStyles).toContain('grid-template-rows: 0fr;');
+    expect(flowStyles).toContain('grid-template-rows: 1fr;');
+    expect(flowStyles).toContain('transform: rotate(180deg);');
+    expect(responsiveStyles).toContain('transition: opacity 180ms ease-out, transform 180ms ease-out, visibility 0s linear 180ms;');
+    expect(responsiveStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?transition: none !important;/);
+    expect(responsiveStyles).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*?animation: none !important;/);
+  });
+
+  it('centers the notification panel on phones and closes it when the menu opens', () => {
+    expect(customerLayoutSource).toContain('customer-notification-panel customer-notification-panel--viewport');
+    expect(responsiveStyles).toMatch(/@media \(max-width: 600px\)[\s\S]*?\.customer-notification-panel--viewport \{[\s\S]*?position: fixed;[\s\S]*?left: calc\(12px \+ env\(safe-area-inset-left\)\);[\s\S]*?width: calc\(100vw - 24px - env\(safe-area-inset-left\) - env\(safe-area-inset-right\)\);/);
+    expect(responsiveStyles).toContain('max-height: calc(100dvh - var(--customer-header-height, 64px) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));');
+    expect(responsiveStyles).toContain('overflow-y: auto;\n    overscroll-behavior: contain;');
+    expect(customerLayoutSource).toContain("dispatchCustomerMenu({ type: 'close' }); setMenuOpenPath(isMenuOpen ? null : location.pathname);");
+    expect(customerLayoutSource).toContain('menuOpenPath === location.pathname');
+    expect(customerLayoutSource).toContain("setMenuOpenPath(null); dispatchCustomerMenu({ type: 'toggle-notifications' });");
+    expect(customerHeaderMenuReducer(
+      { accountOpen: false, notificationsOpen: true },
+      { type: 'close' }
+    )).toEqual(initialMenuState);
+  });
+
+  it('sets full-width mobile menu rows to 48px with 12px horizontal padding', () => {
+    expect(responsiveStyles).toContain('width: 100%;\n    min-width: 0;\n    height: 48px;\n    min-height: 48px !important;');
+    expect(responsiveStyles).toContain('padding: 0 12px;');
+    expect(responsiveStyles).toContain('.customer-page .customer-nav .customer-account-menu-collapse {\n    width: 100%;');
+  });
+
+  it('keeps Services bookings as a 44px pill and restores tablet product columns', () => {
+    expect(responsiveStyles).toContain('.customer-page .services-my-bookings {\n    display: inline-flex;');
+    expect(responsiveStyles).toContain('min-height: 44px;');
+    expect(responsiveStyles).toContain('@media (min-width: 600px) and (max-width: 900px)');
+    expect(responsiveStyles).toContain('grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));');
   });
 });
