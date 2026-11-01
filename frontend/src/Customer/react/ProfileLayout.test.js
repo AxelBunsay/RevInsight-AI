@@ -9,7 +9,7 @@ const customerLayout = readSource('./CustomerLayout.jsx');
 
 describe('customer account responsive layout', () => {
   it('uses the shared wide-content padding for Account without widening other customer pages', () => {
-    expect(sharedStyles).toContain('.customer-page.shop-page,\n.customer-page.services-page,\n.customer-page.profile-page');
+    expect(sharedStyles).toContain('.customer-page {\n  --customer-wide-content-padding: clamp(16px, 3vw, 44px);');
     expect(accountStyles).toContain('.customer-page.profile-page .customer-header {\n  width: 100%;\n  max-width: none;');
     expect(accountStyles).toContain('.customer-page.profile-page .customer-flow-page.customer-account-page {\n  width: 100%;\n  max-width: none;');
   });

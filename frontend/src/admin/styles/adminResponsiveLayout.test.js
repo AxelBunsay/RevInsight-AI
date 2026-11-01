@@ -35,13 +35,15 @@ describe('admin responsive layout styles', () => {
 
   it('feeds the same filtered, paginated rows to the transaction cards and table', () => {
     expect(transactionsPage).toContain('transactions={transactions}');
-    expect(transactionsPage).toContain('[activeTab, page, refreshKey, search, statusFilter]');
+    expect(transactionsPage).toContain('[activeTab, page, partsSourceFilter, refreshKey, search, statusFilter]');
     expect(transactionsPage).toContain('setSearch(event.target.value)');
     expect(transactionsPage).toContain('setStatusFilter(event.target.value)');
     expect(transactionsPage).toContain('transactions.map((transaction) => (');
-    expect(transactionsComponent).toContain('servicePriceTotal={selectedTransaction.servicePriceTotal}');
-    expect(transactionsComponent).toContain('mechanicFeeTotal={selectedTransaction.mechanicFeeTotal}');
-    expect(transactionsComponent).toContain('estimatedPrice={selectedTransaction.estimatedPrice}');
+    expect(transactionsComponent).toContain('selectedTransaction.partsSource === "customer" ? "Customer brings own parts" : "From the shop"');
+    expect(transactionsComponent).toContain('selectedTransaction.partsSource === "customer" ? " (labor only)" : ""');
+    expect(transactionsComponent).toContain('<p><strong>Mechanic fee:</strong> {formatMoney(selectedMechanicFee)}</p>');
+    expect(transactionsComponent).toContain('<p><strong>Down payment paid:</strong> {formatMoney(selectedTransaction.paid)}</p>');
+    expect(transactionsComponent).toContain('<p><strong>Balance to collect:</strong> {formatMoney(selectedTransaction.balance)}</p>');
   });
 
   it('switches inventory item and service tables to matching responsive cards', () => {

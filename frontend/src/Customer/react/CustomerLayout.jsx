@@ -208,12 +208,12 @@ export function CustomerHeader() {
   return <header ref={headerRef} className="customer-header">
     <Link className="customer-brand" to="/customer/shop"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="44" height="44" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
     <div className="customer-header-actions">
-      <Link className="customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></svg>
+      <Link className="customer-header-icon-button customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(0.5 -0.1)"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></g></svg>
         {cartCount > 0 && <span className="customer-header-cart-count">{cartCount}</span>}
       </Link>
       <div className="customer-notification-area" ref={notificationAreaRef}>
-        <button type="button" className="customer-notification-bell" aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`} aria-expanded={customerMenus.notificationsOpen} onClick={() => { setMenuOpenPath(null); dispatchCustomerMenu({ type: 'toggle-notifications' }); }}>
+        <button type="button" className="customer-header-icon-button customer-notification-bell" aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`} aria-expanded={customerMenus.notificationsOpen} onClick={() => { setMenuOpenPath(null); dispatchCustomerMenu({ type: 'toggle-notifications' }); }}>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
           {unreadNotificationCount > 0 && <span className="customer-notification-count">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}
         </button>
@@ -237,7 +237,7 @@ export function CustomerHeader() {
           /> : <div className="customer-notification-popover customer-notification-guest" role="status">Sign in to view notifications.</div>}
         </div>
       </div>
-      <button ref={menuToggleRef} type="button" className="customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => { dispatchCustomerMenu({ type: 'close' }); setMenuOpenPath(isMenuOpen ? null : location.pathname); }}>
+      <button ref={menuToggleRef} type="button" className="customer-header-icon-button customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => { dispatchCustomerMenu({ type: 'close' }); setMenuOpenPath(isMenuOpen ? null : location.pathname); }}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
       </button>
     </div>
@@ -335,9 +335,11 @@ export function CustomerRouteLayout() {
   ].filter(Boolean).join(' ');
 
   return <main className={`customer-page ${routeClasses}`}>
-    <CustomerHeader />
-    <RouteContentTransition><Outlet /></RouteContentTransition>
-    <CustomerFooter />
+    <div className="customer-layout-container">
+      <CustomerHeader />
+      <RouteContentTransition><Outlet /></RouteContentTransition>
+      <CustomerFooter />
+    </div>
   </main>;
 }
 

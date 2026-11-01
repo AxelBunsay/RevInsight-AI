@@ -16,6 +16,7 @@ const authStyles = readFileSync(new URL('../styles/auth.css', import.meta.url), 
 const customerLayoutSource = readFileSync(new URL('./CustomerLayout.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const responsiveStyles = readFileSync(new URL('../styles/customer-responsive.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const flowStyles = readFileSync(new URL('../styles/customer-flow.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+const sharedStyles = readFileSync(new URL('../styles/shared.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const initialMenuState = { accountOpen: false, notificationsOpen: false };
 
 describe('customer account menu', () => {
@@ -137,9 +138,9 @@ describe('customer account menu', () => {
     }
 
     const actions = markup.indexOf('class="customer-header-actions"');
-    const cart = markup.indexOf('class="customer-header-cart"');
-    const bell = markup.indexOf('class="customer-notification-bell"');
-    const toggle = markup.indexOf('class="customer-menu-toggle"');
+    const cart = markup.indexOf('customer-header-cart');
+    const bell = markup.indexOf('customer-notification-bell');
+    const toggle = markup.indexOf('customer-menu-toggle');
     const nav = markup.indexOf('id="customer-navigation"');
     expect(actions).toBeGreaterThan(-1);
     expect(markup).toContain('<strong>MANOY&#x27;S</strong>');
@@ -148,6 +149,9 @@ describe('customer account menu', () => {
     expect(toggle).toBeGreaterThan(bell);
     expect(nav).toBeGreaterThan(toggle);
     expect(markup).toContain('>Register</a>');
+    expect(markup.match(/customer-header-icon-button/g)).toHaveLength(3);
+    expect(markup).not.toContain('customer-header-cart-count');
+    expect(markup).not.toContain('customer-notification-count');
   });
 
   it('keeps customer chrome mounted while route content changes by pathname', () => {
@@ -159,6 +163,21 @@ describe('customer account menu', () => {
     expect(customerLayoutSource).toContain('if (outsideNavigation) setMenuOpenPath(null);');
     expect(customerLayoutSource).toContain('if (event.key === \'Escape\') {\n        setMenuOpenPath(null);');
     expect(customerLayoutSource).toContain('className="customer-site-footer"');
+  });
+
+  it('uses the shared customer container for the header, routed page, and footer', () => {
+    const container = customerLayoutSource.indexOf('<div className="customer-layout-container">');
+    const header = customerLayoutSource.indexOf('<CustomerHeader />', container);
+    const route = customerLayoutSource.indexOf('<RouteContentTransition><Outlet /></RouteContentTransition>', container);
+    const footer = customerLayoutSource.indexOf('<CustomerFooter />', container);
+
+    expect(container).toBeGreaterThan(-1);
+    expect(header).toBeGreaterThan(container);
+    expect(route).toBeGreaterThan(header);
+    expect(footer).toBeGreaterThan(route);
+    expect(responsiveStyles).toContain('.customer-page .customer-layout-container');
+    expect(responsiveStyles).toContain('max-width: 1760px;');
+    expect(sharedStyles).toContain('.customer-page {\n  --customer-wide-content-padding: clamp(16px, 3vw, 44px);');
   });
 
   it('keeps menu panels mounted and animates them with reduced-motion support', () => {

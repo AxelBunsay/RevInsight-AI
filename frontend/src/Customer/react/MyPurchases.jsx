@@ -183,14 +183,6 @@ export default function MyPurchases() {
           </span>
         </label>
       </div>
-      {!isLoading && <CustomerPagination
-        page={page}
-        pageCount={pageCount}
-        totalItems={visibleRecords.length}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        label="Purchases and bookings"
-      />}
       {isLoading
         ? <p className="customer-empty">Loading purchases and bookings...</p>
         : visibleRecords.length
@@ -223,6 +215,14 @@ export default function MyPurchases() {
                 </div>
                 : <Link className="customer-primary-button" to={emptyCopy.href}>{emptyCopy.label}</Link>}
             </section>}
+      {!isLoading && <CustomerPagination
+        page={page}
+        pageCount={pageCount}
+        totalItems={visibleRecords.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        label="Purchases and bookings"
+      />}
     </div>
   </CustomerPage>;
 }

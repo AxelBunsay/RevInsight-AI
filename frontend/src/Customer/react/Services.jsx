@@ -150,15 +150,6 @@ export default function Services() {
           <Link className="services-my-bookings" to="/my-purchases?tab=services">My bookings</Link>
         </div>
 
-        {!isLoading && !error && <CustomerPagination
-          page={page}
-          pageCount={pageCount}
-          totalItems={visibleServices.length}
-          pageSize={servicesPageSize}
-          onPageChange={setPage}
-          label="Services"
-        />}
-
         <div className="service-card-grid" ref={servicesListRef}>
           {isLoading
             ? Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)
@@ -211,6 +202,14 @@ export default function Services() {
         {!isLoading && !error && modeServices.length > 0 && !visibleServices.length && (
           <p className="customer-empty">No services match your search.</p>
         )}
+        {!isLoading && !error && <CustomerPagination
+          page={page}
+          pageCount={pageCount}
+          totalItems={visibleServices.length}
+          pageSize={servicesPageSize}
+          onPageChange={setPage}
+          label="Services"
+        />}
       </div>
     </CustomerPage>
   );

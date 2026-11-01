@@ -365,15 +365,6 @@ export default function Shop() {
         <span>{isLoading ? 'Loading products' : `${visibleProducts.length} items`}</span>
       </div>
 
-      {!isLoading && !error && <CustomerPagination
-        page={page}
-        pageCount={pageCount}
-        totalItems={visibleProducts.length}
-        pageSize={shopPageSize}
-        onPageChange={setPage}
-        label="Products"
-      />}
-
       {isLoading
         ? <div className="product-grid" aria-label="Loading products">{Array.from({ length: 8 }, (_, index) => <ProductSkeleton key={index} />)}</div>
         : error
@@ -420,6 +411,14 @@ export default function Shop() {
               <p>No products found</p>
               <button type="button" onClick={clearFilters}>Clear filters</button>
             </div>}
+      {!isLoading && !error && <CustomerPagination
+        page={page}
+        pageCount={pageCount}
+        totalItems={visibleProducts.length}
+        pageSize={shopPageSize}
+        onPageChange={setPage}
+        label="Products"
+      />}
     </div>
     {showAddedToast && <div className="shop-added-toast" role="status" aria-live="polite">
       <span>Added to Reservation Cart</span>

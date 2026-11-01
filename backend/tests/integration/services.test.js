@@ -267,6 +267,7 @@ describe('service booking business flow integration', () => {
       balanceDue: 385,
       laborFee: 150
     });
+    await Service.updateOne({ _id: service._id }, { $set: { laborOnlyPrice: 325 } });
     expect(await Product.findById(fixtures.product._id).lean()).toMatchObject({
       quantity: productBefore.quantity,
       reservedQty: productBefore.reservedQty
@@ -345,6 +346,8 @@ describe('service booking business flow integration', () => {
     const shopParts = await createBookings(secondCustomerToken, [booking(service._id, {
       startTime: '12:00'
     })]);
+    const legacyShopRequestId = shopParts.body.results[0].serviceRequest._id;
+    await ServiceRequest.updateOne({ _id: legacyShopRequestId }, { $unset: { partsSource: 1 } });
     const ownRows = await api.get('/api/service-requests?activeOnly=true&partsSource=customer&page=1&limit=100')
       .set('Authorization', `Bearer ${adminToken}`);
     const shopRows = await api.get('/api/service-requests?activeOnly=true&partsSource=shop&page=1&limit=100')
@@ -355,6 +358,7 @@ describe('service booking business flow integration', () => {
     expect(ownRows.body.requests.map((request) => request._id)).toContain(ownParts.body.results[0].serviceRequest._id);
     expect(ownRows.body.requests.every((request) => request.partsSource === 'customer')).toBe(true);
     expect(shopRows.body.requests.map((request) => request._id)).toContain(shopParts.body.results[0].serviceRequest._id);
+    expect(shopRows.body.requests.find((request) => request._id === legacyShopRequestId).partsSource).toBe('shop');
     expect(shopRows.body.requests.every((request) => (request.partsSource || 'shop') === 'shop')).toBe(true);
   });
 
