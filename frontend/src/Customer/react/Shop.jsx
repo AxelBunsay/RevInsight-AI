@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import heroImage from '../../assets/hero.png';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { api } from '../../services/api';
@@ -297,26 +296,13 @@ export default function Shop() {
     <div className="shop-content">
       {location.state?.message && <p className="customer-success" role="status">{location.state.message}</p>}
       {resumeError && <p className="customer-error" role="alert">{resumeError}</p>}
-      <section className="shop-market-hero" style={{ '--shop-hero-image': `url(${heroImage})` }} aria-label="Shop introduction">
-        <div className="shop-promo-primary">
-          <p>MANOY&apos;S MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>
+      <section className="customer-compact-banner shop-compact-banner" aria-label="Shop introduction">
+        <div>
           <h2>Everything your ride needs.</h2>
-          <span>Quality parts, trusted accessories, and expert service in one place.</span>
-          <Link to="/customer/services">Explore services</Link>
+          <p>Quality parts, trusted accessories, and expert service in one place.</p>
         </div>
-        <div className="shop-promo-stack">
-          <div><strong>Ride-ready essentials</strong><span>Parts selected for everyday maintenance.</span></div>
-          <div><strong>Expert service support</strong><span>Book a mechanic when you need one.</span></div>
-        </div>
+        <Link to="/customer/services">Explore services</Link>
       </section>
-
-      <section className="shop-how-it-works" aria-label="How item reservations work">
-        <div><strong>1. Reserve your item</strong></div>
-        <div><strong>2. Pay the down payment</strong></div>
-        <div><strong>3. Pick up at the shop and pay the balance</strong></div>
-        <div className="shop-pickup-only">Pickup only. No delivery.</div>
-      </section>
-
       <div className="shop-toolbar">
         <input value={search} onChange={(event) => { setSearch(event.target.value); resetPage(); }} placeholder="Search parts, accessories..." aria-label="Search products" />
         <select value={sort} onChange={(event) => { setSort(event.target.value); resetPage(); }} aria-label="Sort products">
@@ -359,6 +345,13 @@ export default function Shop() {
           {item}<small>{item === 'All' ? products.length : products.filter((product) => product.category === item).length}</small>
         </button>)}
       </div>
+
+      <section className="shop-how-it-works" aria-label="How item reservations work">
+        <div><strong>1. Reserve your item</strong></div>
+        <div><strong>2. Pay the down payment</strong></div>
+        <div><strong>3. Pick up at the shop and pay the balance</strong></div>
+        <div className="shop-pickup-only">Pickup only. No delivery.</div>
+      </section>
 
       <div className="customer-product-results">
         <h2>{category === 'All' ? 'All products' : category}</h2>

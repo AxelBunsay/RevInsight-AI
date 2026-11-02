@@ -7,6 +7,7 @@ import { clearAuthSession } from '../../auth/authSession';
 import { clearCustomerAuthAction } from './customerAuthAction';
 import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from '../../../../shared/mobileNumber.mjs';
 import CustomerModalPortal from './CustomerModalPortal';
+import PasswordInput from '../../components/PasswordInput';
 import useCustomerModalEffects from './useCustomerModalEffects';
 import '../styles/customer-flow.css';
 
@@ -45,7 +46,6 @@ export default function CustomerProfile() {
   const [isSaving, setIsSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
-  const [showPasswords, setShowPasswords] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
@@ -248,12 +248,11 @@ export default function CustomerProfile() {
         <section className="customer-account-subsection">
           <div className="customer-flow-section-heading">
             <div><p className="customer-eyebrow">ACCOUNT ACCESS</p><h2>Security</h2></div>
-            <button type="button" className="customer-password-toggle" onClick={() => setShowPasswords((visible) => !visible)}>{showPasswords ? 'Hide passwords' : 'Show passwords'}</button>
           </div>
           <form className="customer-account-form" onSubmit={changePassword} noValidate>
-            <label>Current password<input type={showPasswords ? 'text' : 'password'} autoComplete="current-password" value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} /></label>
-            <label>New password<input type={showPasswords ? 'text' : 'password'} autoComplete="new-password" value={passwordForm.newPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, newPassword: event.target.value }); setPasswordError(''); }} /><small className="customer-field-hint">At least 8 characters, including a letter and a number.</small></label>
-            <label>Confirm new password<input type={showPasswords ? 'text' : 'password'} autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, confirmPassword: event.target.value }); setPasswordError(''); }} /></label>
+            <label>Current password<PasswordInput autoComplete="current-password" value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} /></label>
+            <label>New password<PasswordInput autoComplete="new-password" value={passwordForm.newPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, newPassword: event.target.value }); setPasswordError(''); }} /><small className="customer-field-hint">At least 8 characters, including a letter and a number.</small></label>
+            <label>Confirm new password<PasswordInput autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, confirmPassword: event.target.value }); setPasswordError(''); }} /></label>
             <button type="submit" className="customer-primary-button" disabled={isChangingPassword}>{isChangingPassword ? 'Updating...' : 'Change password'}</button>
             {passwordError && <small className="customer-field-error customer-form-error" role="alert">{passwordError}</small>}
           </form>
@@ -284,7 +283,7 @@ export default function CustomerProfile() {
           <div className="customer-modal-body">
             <p>This action cannot be undone. Enter your password and type DELETE to confirm.</p>
             <form id="delete-account-form" onSubmit={deleteAccount}>
-              <label className="customer-delete-field">Password<input type="password" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} /></label>
+              <label className="customer-delete-field">Password<PasswordInput autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} /></label>
               <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
               {deleteError && <p className="customer-field-error" role="alert">{deleteError}</p>}
               {hasBlockedRecords && <div className="customer-delete-record-links">

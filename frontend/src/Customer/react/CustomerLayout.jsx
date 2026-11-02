@@ -4,14 +4,14 @@ import { api } from '../../services/api';
 import { CUSTOMER_SHOP_MAPS_URL, hasCustomerFooterDetails } from './customerFooterSettings';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
 import { getLegacyCustomerPurchaseLink } from './customerPurchases';
-import { getCustomerAuthRedirect } from './customerAuthAction';
+import { getCustomerAuthRedirect, hasCustomerSession } from './customerAuthAction';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import NotificationDropdown from '../../components/NotificationDropdown';
 import NotificationContent from '../../components/NotificationContent';
 import { clearNotificationList } from '../../utils/notificationActions';
 import RouteContentTransition from '../../components/RouteContentTransition';
 import useDocumentTitle from '../../utils/useDocumentTitle';
-import { clearAuthSession, getAuthSessionLoginPath, getAuthToken } from '../../auth/authSession';
+import { clearAuthSession, getAuthToken } from '../../auth/authSession';
 import { clearCustomerAuthAction } from './customerAuthAction';
 import '../styles/shared.css';
 import '../styles/customer-flow.css';
@@ -97,7 +97,7 @@ export function CustomerHeader() {
   const [notificationError, setNotificationError] = useState('');
   const [isClearingNotifications, setIsClearingNotifications] = useState(false);
   const customerToken = getAuthToken('customer');
-  const hasCustomerAccount = Boolean(customerToken && customerToken !== 'prototype-guest');
+  const hasCustomerAccount = hasCustomerSession(customerToken);
   const cartCount = cart.reduce((total, item) => total + Number(item.quantity || 1), 0);
 
   useEffect(() => {
@@ -197,7 +197,7 @@ export function CustomerHeader() {
     clearAuthSession('customer');
     clearCustomerAuthAction();
     clearCustomerData();
-    window.location.href = getAuthSessionLoginPath('customer');
+    window.location.href = '/';
   };
 
   const currentPath = location.pathname;
@@ -212,7 +212,7 @@ export function CustomerHeader() {
   };
 
   return <header ref={headerRef} className="customer-header">
-    <Link className="customer-brand" to="/"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="44" height="44" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
+    <Link className="customer-brand" to={hasCustomerAccount ? '/customer/shop' : '/'} aria-label="Manoy's Motorcycle Parts, Accessories & Services"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="40" height="40" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
     <div className="customer-header-actions">
       <Link className="customer-header-icon-button customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
         <svg viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(0.5 -0.1)"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></g></svg>
@@ -248,7 +248,7 @@ export function CustomerHeader() {
       </button>
     </div>
     <nav ref={menuRef} id="customer-navigation" aria-label="Customer navigation" className={`customer-nav${isMenuOpen ? ' is-open' : ''}`}>
-      <Link onClick={closeNavigation} className={isHomePage ? 'active' : ''} aria-current={isHomePage ? 'page' : undefined} to="/">Home</Link>
+      {!hasCustomerAccount && <Link onClick={closeNavigation} className={isHomePage ? 'active' : ''} aria-current={isHomePage ? 'page' : undefined} to="/">Home</Link>}
       <Link onClick={closeNavigation} className={isShopPage ? 'active' : ''} aria-current={isShopPage ? 'page' : undefined} to="/customer/shop">Shop</Link>
       <Link onClick={closeNavigation} className={isServicesPage ? 'active' : ''} aria-current={isServicesPage ? 'page' : undefined} to="/customer/services">Services</Link>
       {hasCustomerAccount && <div className="customer-account-menu-area" ref={accountAreaRef}>
@@ -359,18 +359,20 @@ export function CustomerAuthShell({ activeTab, children }) {
 
   return <main className="customer-auth-page">
     <section className="customer-auth-showcase">
-      <Link className="customer-auth-brand" to="/customer/shop" aria-label="Go to Manoy's Motorcycle shop">
-        <img className="customer-auth-logo" src="/logo.svg" alt="Manoy's Motorcycle logo" width="96" height="96" decoding="async" />
-        <span><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span>
-      </Link>
-      <div className="customer-auth-copy">
-        <h1>Everything your ride needs.</h1>
-        <p>Browse genuine motorcycle parts and accessories. Fast, reliable, and trusted by riders.</p>
-        <ul>
-          <li><span>▤</span><span><strong>Wide product selection</strong><small>Parts, accessories &amp; more</small></span></li>
-          <li><span>▣</span><span><strong>Track purchases and bookings</strong><small>Item pickup and service booking progress</small></span></li>
-          <li><span>⌁</span><span><strong>Trusted service</strong><small>Quality parts and expert mechanics</small></span></li>
-        </ul>
+      <div className="customer-auth-showcase-inner">
+        <Link className="customer-auth-brand" to="/" aria-label="Go to Manoy's Motorcycle home">
+          <img className="customer-auth-logo" src="/logo.svg" alt="Manoy's Motorcycle logo" width="120" height="120" decoding="async" />
+          <span><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS,</small><small>ACCESSORIES &amp; SERVICES</small></span>
+        </Link>
+        <div className="customer-auth-copy">
+          <h1>Learn it. Live it. Love it.</h1>
+          <p>Browse genuine motorcycle parts and accessories. Fast, reliable, and trusted by riders.</p>
+          <ul>
+            <li><span>▤</span><span><strong>Wide product selection</strong><small>Parts, accessories &amp; more</small></span></li>
+            <li><span>▣</span><span><strong>Track purchases and bookings</strong><small>Item pickup and service booking progress</small></span></li>
+            <li><span>⌁</span><span><strong>Trusted service</strong><small>Quality parts and expert mechanics</small></span></li>
+          </ul>
+        </div>
       </div>
     </section>
     <section className="customer-auth-panel">

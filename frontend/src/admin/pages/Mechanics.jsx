@@ -3,6 +3,7 @@ import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import { getMechanicFormError } from "./mechanicFormValidation";
 import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from "../../../../shared/mobileNumber.mjs";
+import PasswordInput from "../../components/PasswordInput";
 
 function Mechanics() {
   const [mechanics, setMechanics] = useState([]);
@@ -16,7 +17,6 @@ function Mechanics() {
   const [editingMechanic, setEditingMechanic] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [phoneNumberError, setPhoneNumberError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [form, setForm] = useState({
@@ -65,7 +65,6 @@ function Mechanics() {
   }, [refreshKey]);
 
   const openMechanicDialog = (mechanic = null) => {
-    setShowPassword(false);
     setEditingMechanic(mechanic);
     setIsAdding(!mechanic);
     setForm(
@@ -330,26 +329,16 @@ function Mechanics() {
               </label>
               <label className="mechanic-form-field mechanic-password-field">
                 {editingMechanic ? "New password (optional)" : "Password"}
-                <span className="mechanic-password-control">
-                  <input
-                    required={!editingMechanic}
-                    minLength="8"
-                    autoComplete="new-password"
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(event) =>
-                      setForm({ ...form, password: event.target.value })
-                    }
-                  />
-                  <button
-                    className="mechanic-password-toggle"
-                    type="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    onClick={() => setShowPassword((visible) => !visible)}
-                  >
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
-                </span>
+                <PasswordInput
+                  className="mechanic-password-control"
+                  required={!editingMechanic}
+                  minLength="8"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={(event) =>
+                    setForm({ ...form, password: event.target.value })
+                  }
+                />
               </label>
               <label className="mechanic-form-field">
                 Phone number

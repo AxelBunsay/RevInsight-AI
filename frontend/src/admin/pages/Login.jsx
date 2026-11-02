@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import useAuth from '../../context/useAuth';
+import PasswordInput from '../../components/PasswordInput';
 import '../styles/admin.css';
 
 const GAUGE_CENTER_X = 210;
@@ -89,7 +90,6 @@ function AdminLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   if (isAuthenticated) return <Navigate to="/admin" replace />;
 
@@ -140,26 +140,15 @@ function AdminLogin() {
               </div>
               <div className="admin-login__field">
                 <label htmlFor="admin-password">Password</label>
-                <div className="admin-login__password-wrap">
-                  <input
+                <PasswordInput
+                    className="admin-login__password-wrap"
                     id="admin-password"
-                    type={isPasswordVisible ? 'text' : 'password'}
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Enter your password"
                     autoComplete="current-password"
                     required
                   />
-                  <button
-                    className="admin-login__password-toggle"
-                    type="button"
-                    aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
-                    aria-pressed={isPasswordVisible}
-                    onClick={() => setIsPasswordVisible((visible) => !visible)}
-                  >
-                    {isPasswordVisible ? 'Hide' : 'Show'}
-                  </button>
-                </div>
               </div>
               {error && (
                 <p className="admin-login__error" role="alert">

@@ -114,31 +114,13 @@ export default function Services() {
           <button type="button" role="tab" aria-selected={partsSource === "shop"} className={partsSource === "shop" ? "active" : ""} onClick={() => choosePartsSource("shop")}>With shop parts</button>
           <button type="button" role="tab" aria-selected={partsSource === "customer"} className={partsSource === "customer" ? "active" : ""} onClick={() => choosePartsSource("customer")}>Labor only (I have my own parts)</button>
         </div>
-        <section
-          className="services-hero"
-          aria-label="Mechanic services introduction"
-        >
+        <section className="customer-compact-banner services-compact-banner" aria-label="Services introduction">
           <div>
-            <p className="services-hero-eyebrow">
-              MANOY&apos;S MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES
-            </p>
-            <h2>
-              Mechanic Services <span aria-hidden="true">🔧</span>
-            </h2>
-            <p>
-              Book a service and our skilled mechanics will handle the rest.
-            </p>
-            <div className="services-hero-stats">
-              <span>{modeServices.length} Services</span>
-              <span>Expert Mechanics</span>
-              <span>Quality Guaranteed</span>
-            </div>
+            <h2>Everything your ride needs.</h2>
+            <p>Quality parts, trusted accessories, and expert service in one place.</p>
           </div>
-          <div className="services-hero-wheel" aria-hidden="true">
-            ◉
-          </div>
+          <Link to="/customer/shop">Explore shop</Link>
         </section>
-
         <div className="services-toolbar">
           <label className="services-search">
             <span aria-hidden="true">⌕</span>

@@ -9,7 +9,7 @@ import {
   CustomerHeader
 } from './CustomerLayout';
 import { CustomerPrototypeProvider } from './CustomerPrototypeProvider';
-import { getCustomerAuthRedirect } from './customerAuthAction';
+import { getCustomerAuthRedirect, getCustomerLandingRedirect } from './customerAuthAction';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
 
 const appSource = readFileSync(new URL('../../App.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
@@ -21,6 +21,12 @@ const sharedStyles = readFileSync(new URL('../styles/shared.css', import.meta.ur
 const initialMenuState = { accountOpen: false, notificationsOpen: false };
 
 describe('customer route authentication', () => {
+  it('redirects signed-in customers from the root to Shop and leaves guest landing public', () => {
+    expect(getCustomerLandingRedirect('customer-token')).toBe('/customer/shop');
+    expect(getCustomerLandingRedirect('prototype-guest')).toBeNull();
+    expect(getCustomerLandingRedirect(null)).toBeNull();
+  });
+
   it('redirects guests from protected routes to login with the requested path', () => {
     const redirect = getCustomerAuthRedirect(null, {
       pathname: '/customer/shop',

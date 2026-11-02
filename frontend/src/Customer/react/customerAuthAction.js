@@ -5,8 +5,16 @@ export function getSafeCustomerRedirectPath(path) {
   return typeof path === 'string' && path.startsWith('/customer') ? path : null;
 }
 
+export function hasCustomerSession(customerToken) {
+  return Boolean(customerToken && customerToken !== 'prototype-guest');
+}
+
+export function getCustomerLandingRedirect(customerToken) {
+  return hasCustomerSession(customerToken) ? '/customer/shop' : null;
+}
+
 export function getCustomerAuthRedirect(customerToken, location) {
-  if (customerToken && customerToken !== 'prototype-guest') return null;
+  if (hasCustomerSession(customerToken)) return null;
 
   const requestedPath = location.pathname.startsWith('/my-purchases')
     ? `/customer/purchases${location.search || ''}${location.hash || ''}`

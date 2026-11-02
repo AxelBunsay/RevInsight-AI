@@ -22,6 +22,8 @@ import MechanicJobs from './Mechanic/MechanicJobs';
 import MechanicProfile from './Mechanic/MechanicProfile';
 import MechanicAuthGuard from './Mechanic/MechanicAuthGuard';
 import SessionBootstrap from './auth/SessionBootstrap';
+import { getAuthToken } from './auth/authSession';
+import { getCustomerLandingRedirect } from './Customer/react/customerAuthAction';
 import { CustomerPrototypeProvider } from './Customer/react/CustomerPrototypeProvider';
 import { CustomerPage } from './Customer/react/CustomerLayout';
 import { syncPortalFavicon } from './utils/portalFavicon';
@@ -41,6 +43,11 @@ function CustomerProfileRoute() {
   const location = useLocation();
   const legacyRedirect = getLegacyProfilePurchaseRedirect(location.search);
   return legacyRedirect ? <Navigate to={legacyRedirect} replace /> : <CustomerProfile />;
+}
+
+function CustomerLandingRoute() {
+  const redirect = getCustomerLandingRedirect(getAuthToken('customer'));
+  return redirect ? <Navigate to={redirect} replace /> : <Landing />;
 }
 
 function NotFoundPage() {
@@ -63,14 +70,14 @@ function App() {
           <CustomerPrototypeProvider>
             <Routes>
           <Route path="/admin/*" element={<AdminApp />} />
+          <Route element={<CustomerAuthLayout />}>
+            <Route path="/customer/login" element={<CustomerLogin />} />
+            <Route path="/customer/register" element={<CustomerRegister />} />
+          </Route>
         <Route element={<CustomerRouteLayout />}>
-          <Route path="/" element={<Landing />} />
+          <Route path="/" element={<CustomerLandingRoute />} />
         <Route path="/customer" element={<Navigate to="/" replace />} />
         <Route path="/customer/home" element={<Navigate to="/" replace />} />
-        <Route element={<CustomerAuthLayout />}>
-          <Route path="/customer/login" element={<CustomerLogin />} />
-          <Route path="/customer/register" element={<CustomerRegister />} />
-        </Route>
         <Route element={<CustomerAuthGuard />}>
           <Route path="/customer/shop" element={<Shop />} />
           <Route path="/customer/cart" element={<Cart />} />
