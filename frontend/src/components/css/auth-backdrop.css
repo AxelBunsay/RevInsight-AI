@@ -33,13 +33,55 @@
   background: radial-gradient(ellipse at center, rgba(23, 16, 11, 0.55) 0%, rgba(23, 16, 11, 0.2) 48%, transparent 82%);
 }
 
+.auth-backdrop__gears {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.auth-backdrop__gear {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: auth-backdrop-gear-turn var(--gear-duration) linear infinite;
+  animation-direction: var(--gear-direction);
+}
+
+.auth-backdrop__gear-tooth {
+  fill: rgba(242, 107, 29, 0.09);
+  stroke: rgba(242, 107, 29, 0.28);
+  stroke-width: 2px;
+}
+
+.auth-backdrop__gear-ring {
+  fill: none;
+  stroke: rgba(242, 107, 29, 0.16);
+  stroke-width: 2px;
+}
+
+.auth-backdrop__gear-hub {
+  fill: rgba(20, 10, 4, 0.6);
+  stroke: rgba(242, 107, 29, 0.3);
+  stroke-width: 2px;
+}
+
 @keyframes auth-backdrop-drift {
   from { transform: translateX(calc(-600px - 8vw)); }
   to { transform: translateX(calc(100vw + 560px)); }
 }
 
+@keyframes auth-backdrop-gear-turn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 700px) {
   .auth-backdrop__line:nth-child(n + 13) {
+    display: none;
+  }
+
+  .auth-backdrop__gear--small {
     display: none;
   }
 }
@@ -49,5 +91,9 @@
     animation: none;
     transform: translateX(0);
     will-change: auto;
+  }
+
+  .auth-backdrop__gear {
+    animation: none;
   }
 }
