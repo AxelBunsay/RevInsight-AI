@@ -65,7 +65,7 @@
   display: block;
 }
 
-.customer-auth-brand strong {
+.customer-auth-page.customer-auth-page .customer-auth-brand strong {
   color: #fff;
   font-size: 56px;
   font-weight: 800;
@@ -74,7 +74,7 @@
   text-transform: none;
 }
 
-.customer-auth-brand small {
+.customer-auth-page.customer-auth-page .customer-auth-brand small {
   color: #f26b1d;
   font-size: 22px;
   font-weight: 700;
@@ -737,5 +737,385 @@
 
   .customer-auth-showcase-inner > .customer-auth-copy > p {
     margin-bottom: 24px;
+  }
+}
+
+.customer-auth-page.customer-auth-page {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  height: auto;
+  min-width: 0;
+  min-height: 100dvh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  overflow-x: clip;
+  overflow-y: visible;
+  padding: 32px 16px;
+  box-sizing: border-box;
+  background: #17100B;
+  color: #2B1608;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.customer-auth-layout {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  width: min(100%, 440px);
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+  margin-block: auto;
+}
+
+.customer-auth-brand-group {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.customer-auth-brand {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 0;
+  color: #ffffff;
+  text-align: left;
+  text-decoration: none;
+  text-transform: none;
+}
+
+.customer-auth-brand:visited,
+.customer-auth-brand:hover,
+.customer-auth-brand:active {
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.customer-auth-brand:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid #ffffff;
+  outline-offset: 6px;
+}
+
+.customer-auth-logo {
+  display: block;
+  width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
+  border-radius: 24%;
+  object-fit: contain;
+}
+
+.customer-auth-brand > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+}
+
+.customer-auth-brand strong {
+  display: block;
+  color: #ffffff;
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.customer-auth-brand small {
+  display: block;
+  color: #F2893F;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.3;
+}
+
+.customer-auth-slogan {
+  margin: 0;
+  color: #E8D6C4;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-content {
+  width: 100%;
+  max-width: 440px;
+  margin: 0;
+  padding: 28px 34px 30px;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  color: #2B1608;
+  box-sizing: border-box;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0 0 24px;
+  padding: 5px;
+  border-radius: 14px;
+  background: #F3EBE2;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-tab-indicator {
+  position: absolute;
+  z-index: 0;
+  top: 5px;
+  bottom: 5px;
+  left: 5px;
+  width: calc(50% - 5px);
+  border-radius: 10px;
+  background: #C2410C;
+  box-shadow: none;
+}
+
+.customer-auth-tabs.is-register .customer-auth-tab-indicator {
+  transform: translateX(100%);
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-tabs a {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-height: 42px;
+  place-items: center;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: #6B5444;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-tabs a.active {
+  color: #ffffff;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-heading h2 {
+  margin: 0 0 7px;
+  color: #2B1608;
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-heading p {
+  margin: 0 0 24px;
+  color: #76665A;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.customer-auth-form-content {
+  width: 100%;
+  min-height: 0;
+}
+
+.customer-auth-form-content > * {
+  max-width: 100%;
+}
+
+.customer-auth-form {
+  display: grid;
+  gap: 16px;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-form label {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  color: #4B392C;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-form input:not([type="checkbox"]) {
+  width: 100%;
+  height: 50px;
+  min-width: 0;
+  padding: 0 14px;
+  border: 1px solid #E6D6C6;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #2B1608;
+  font: 14px 'Segoe UI', sans-serif;
+  box-sizing: border-box;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-form input:not([type="checkbox"]):focus-visible {
+  border-color: #C2410C;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.14);
+}
+
+.customer-auth-form .customer-auth-remember {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 10px;
+  margin-top: -6px;
+  color: #4B392C;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.customer-auth-form .customer-auth-remember input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  margin: 0;
+  padding: 0;
+  accent-color: #C2410C;
+  cursor: pointer;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-form > button {
+  display: inline-flex;
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 3px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: #C2410C;
+  color: #ffffff;
+  font: 700 14px 'Segoe UI', sans-serif;
+  cursor: pointer;
+}
+
+.customer-auth-page.customer-auth-page .customer-auth-form > button:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.customer-auth-spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+}
+
+.customer-auth-content .customer-link {
+  margin: 16px 0 0;
+  color: #76665A;
+  font-size: 13px;
+  text-align: center;
+}
+
+.customer-auth-content .customer-link a,
+.customer-auth-content .customer-link button {
+  color: #C2410C;
+  font-weight: 700;
+}
+
+.customer-auth-content .customer-link button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.customer-auth-action-message {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #F3EBE2;
+  color: #6B5444;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.customer-auth-page .customer-error,
+.customer-auth-page .customer-success {
+  margin: 0 0 16px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .customer-auth-tab-indicator {
+    transition: transform 250ms ease-in-out;
+  }
+
+  .customer-auth-tabs a {
+    transition: color 200ms ease;
+  }
+
+  .customer-auth-form-content {
+    animation: customer-auth-form-enter 250ms ease-out both;
+  }
+
+  .customer-auth-spinner {
+    animation: customer-auth-spin 800ms linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .customer-auth-tab-indicator {
+    transition: transform 120ms ease-in-out;
+  }
+}
+
+@media (max-width: 700px) {
+  .customer-auth-page.customer-auth-page {
+    padding: 32px 16px;
+  }
+
+  .customer-auth-layout {
+    gap: 24px;
+  }
+
+  .customer-auth-brand {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+
+  .customer-auth-logo {
+    width: 64px;
+    height: 64px;
+    flex-basis: 64px;
+  }
+
+  .customer-auth-brand > span {
+    align-items: center;
+    text-align: center;
+  }
+
+  .customer-auth-page.customer-auth-page .customer-auth-brand strong {
+    font-size: 32px;
+  }
+
+  .customer-auth-page.customer-auth-page .customer-auth-brand small {
+    font-size: 13px !important;
+  }
+
+  .customer-auth-page.customer-auth-page .customer-auth-content {
+    width: 100%;
+    padding: 22px 18px;
+  }
+}
+
+@media (max-width: 400px) {
+  .customer-auth-content .form-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

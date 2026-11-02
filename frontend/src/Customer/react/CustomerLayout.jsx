@@ -8,6 +8,7 @@ import { getCustomerAuthRedirect, hasCustomerSession } from './customerAuthActio
 import { useCustomerPrototype } from './useCustomerPrototype';
 import NotificationDropdown from '../../components/NotificationDropdown';
 import NotificationContent from '../../components/NotificationContent';
+import AuthBackdrop from '../../components/AuthBackdrop';
 import { clearNotificationList } from '../../utils/notificationActions';
 import RouteContentTransition from '../../components/RouteContentTransition';
 import useDocumentTitle from '../../utils/useDocumentTitle';
@@ -358,33 +359,27 @@ export function CustomerAuthShell({ activeTab, children }) {
     : "Sign in | Manoy's Motorcycle");
 
   return <main className="customer-auth-page">
-    <section className="customer-auth-showcase">
-      <div className="customer-auth-showcase-inner">
+    <AuthBackdrop variant="streaks" />
+    <div className="customer-auth-layout">
+      <div className="customer-auth-brand-group">
         <Link className="customer-auth-brand" to="/" aria-label="Go to Manoy's Motorcycle home">
-          <img className="customer-auth-logo" src="/logo.svg" alt="Manoy's Motorcycle logo" width="120" height="120" decoding="async" />
-          <span><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS,</small><small>ACCESSORIES &amp; SERVICES</small></span>
+          <img className="customer-auth-logo" src="/logo.svg" alt="Manoy's Motorcycle logo" width="88" height="88" decoding="async" />
+          <span>
+            <strong>MANOY&apos;S</strong>
+            <small>MOTORCYCLE PARTS,<br />ACCESSORIES &amp; SERVICES</small>
+          </span>
         </Link>
-        <div className="customer-auth-copy">
-          <h1>Learn it. Live it. Love it.</h1>
-          <p>Browse genuine motorcycle parts and accessories. Fast, reliable, and trusted by riders.</p>
-          <ul>
-            <li><span>▤</span><span><strong>Wide product selection</strong><small>Parts, accessories &amp; more</small></span></li>
-            <li><span>▣</span><span><strong>Track purchases and bookings</strong><small>Item pickup and service booking progress</small></span></li>
-            <li><span>⌁</span><span><strong>Trusted service</strong><small>Quality parts and expert mechanics</small></span></li>
-          </ul>
-        </div>
+        <p className="customer-auth-slogan">Learn it. Live it. Love it.</p>
       </div>
-    </section>
-    <section className="customer-auth-panel">
-      <div className="customer-auth-content">
+      <section className="customer-auth-content" aria-label="Customer account">
         <nav className={`customer-auth-tabs${activeTab === 'register' ? ' is-register' : ''}`} role="tablist" aria-label="Customer account">
           <span className="customer-auth-tab-indicator" aria-hidden="true" />
           <Link className={activeTab === 'login' ? 'active' : ''} role="tab" aria-selected={activeTab === 'login'} to="/customer/login">Sign In</Link>
           <Link className={activeTab === 'register' ? 'active' : ''} role="tab" aria-selected={activeTab === 'register'} to="/customer/register">Register</Link>
         </nav>
         <div className="customer-auth-form-content"><RouteContentTransition>{children}</RouteContentTransition></div>
-      </div>
-    </section>
+      </section>
+    </div>
   </main>;
 }
 
