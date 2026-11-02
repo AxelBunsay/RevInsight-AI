@@ -469,15 +469,16 @@ const updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, phoneNumber, preferences } = req.body;
     const userId = req.user.userId;
+    const update = {
+      ...(firstName && { firstName }),
+      ...(lastName && { lastName }),
+      ...(preferences && { preferences })
+    };
+    if (phoneNumber && !req.phoneNumberUnchanged) update.phoneNumber = phoneNumber;
 
     const user = await User.findByIdAndUpdate(
       userId,
-      {
-        ...(firstName && { firstName }),
-        ...(lastName && { lastName }),
-        ...(phoneNumber && { phoneNumber }),
-        ...(preferences && { preferences })
-      },
+      update,
       { new: true, runValidators: true }
     );
 
@@ -503,15 +504,16 @@ const updateProfile = async (req, res) => {
 
 const updateMyProfile = async (req, res) => {
   try {
+    const update = {
+      firstName: req.body.firstName.trim(),
+      lastName: req.body.lastName.trim()
+    };
+    if (req.body.phoneNumber !== undefined && !req.phoneNumberUnchanged) {
+      update.phoneNumber = req.body.phoneNumber;
+    }
     const user = await User.findByIdAndUpdate(
       req.user.userId,
-      {
-        $set: {
-          firstName: req.body.firstName.trim(),
-          lastName: req.body.lastName.trim(),
-          phoneNumber: req.body.phoneNumber.trim()
-        }
-      },
+      { $set: update },
       { new: true, runValidators: true }
     );
     if (!user || user.isDeleted) {

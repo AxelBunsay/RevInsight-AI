@@ -6,8 +6,9 @@ import Cart from './Customer/react/Cart';
 import { CustomerLogin, CustomerRegister } from './Customer/react/CustomerAuth';
 import CustomerProfile from './Customer/react/Profile';
 import MyPurchases from './Customer/react/MyPurchases';
+import Landing from './Customer/react/Landing';
 import { getLegacyProfilePurchaseRedirect } from './Customer/react/customerPurchases';
-import { CustomerAuthGuard, CustomerAuthLayout, CustomerRouteLayout } from './Customer/react/CustomerLayout';
+import { CustomerAuthGuard, CustomerAuthLayout, CustomerPurchasesRedirect, CustomerRouteLayout } from './Customer/react/CustomerLayout';
 import Shop from './Customer/react/Shop';
 import Services from './Customer/react/Services';
 import ProductDetail from './Customer/react/ProductDetail';
@@ -21,10 +22,13 @@ import MechanicJobs from './Mechanic/MechanicJobs';
 import MechanicProfile from './Mechanic/MechanicProfile';
 import MechanicAuthGuard from './Mechanic/MechanicAuthGuard';
 import SessionBootstrap from './auth/SessionBootstrap';
+import { getAuthToken } from './auth/authSession';
+import { getCustomerLandingRedirect } from './Customer/react/customerAuthAction';
 import { CustomerPrototypeProvider } from './Customer/react/CustomerPrototypeProvider';
 import { CustomerPage } from './Customer/react/CustomerLayout';
 import { syncPortalFavicon } from './utils/portalFavicon';
 import './Customer/styles/customer-responsive.css';
+import './Customer/styles/customer-theme.css';
 
 function PortalFavicon() {
   const { pathname } = useLocation();
@@ -40,6 +44,11 @@ function CustomerProfileRoute() {
   const location = useLocation();
   const legacyRedirect = getLegacyProfilePurchaseRedirect(location.search);
   return legacyRedirect ? <Navigate to={legacyRedirect} replace /> : <CustomerProfile />;
+}
+
+function CustomerLandingRoute() {
+  const redirect = getCustomerLandingRedirect(getAuthToken('customer'));
+  return redirect ? <Navigate to={redirect} replace /> : <Landing />;
 }
 
 function NotFoundPage() {
@@ -62,24 +71,28 @@ function App() {
           <CustomerPrototypeProvider>
             <Routes>
           <Route path="/admin/*" element={<AdminApp />} />
+          <Route element={<CustomerAuthLayout />}>
+            <Route path="/customer/login" element={<CustomerLogin />} />
+            <Route path="/customer/register" element={<CustomerRegister />} />
+          </Route>
         <Route element={<CustomerRouteLayout />}>
-          <Route path="/" element={<Shop />} />
-        <Route path="/customer/shop" element={<Shop />} />
-        <Route element={<CustomerAuthLayout />}>
-          <Route path="/customer/login" element={<CustomerLogin />} />
-          <Route path="/customer/register" element={<CustomerRegister />} />
+          <Route path="/" element={<CustomerLandingRoute />} />
+        <Route path="/customer" element={<Navigate to="/" replace />} />
+        <Route path="/customer/home" element={<Navigate to="/" replace />} />
+        <Route element={<CustomerAuthGuard />}>
+          <Route path="/customer/shop" element={<Shop />} />
+          <Route path="/customer/cart" element={<Cart />} />
+          <Route path="/customer/services" element={<Services />} />
+          <Route path="/customer/services/:serviceId" element={<ServiceDetail />} />
+          <Route path="/customer/products/:productId" element={<ProductDetail />} />
+          <Route path="/customer/orders" element={<Navigate to="/my-purchases?tab=all" replace />} />
+          <Route path="/customer/purchases" element={<CustomerPurchasesRedirect />} />
+          <Route path="/customer/reservations" element={<Navigate to="/my-purchases?tab=items" replace />} />
+          <Route path="/customer/reservations/:reservationId" element={<ReservationDetail />} />
+          <Route path="/customer/checkout" element={<Checkout />} />
+          <Route path="/customer/profile" element={<CustomerProfileRoute />} />
+          <Route path="/my-purchases" element={<MyPurchases />} />
         </Route>
-        <Route path="/customer/cart" element={<CustomerAuthGuard><Cart /></CustomerAuthGuard>} />
-        <Route path="/customer/services" element={<Services />} />
-        <Route path="/customer/services/:serviceId" element={<ServiceDetail />} />
-        <Route path="/customer/products/:productId" element={<ProductDetail />} />
-        <Route path="/customer/orders" element={<CustomerAuthGuard><Navigate to="/my-purchases?tab=all" replace /></CustomerAuthGuard>} />
-        <Route path="/customer/purchases" element={<CustomerAuthGuard><Navigate to="/my-purchases?tab=all" replace /></CustomerAuthGuard>} />
-        <Route path="/customer/reservations" element={<CustomerAuthGuard><Navigate to="/my-purchases?tab=items" replace /></CustomerAuthGuard>} />
-        <Route path="/customer/reservations/:reservationId" element={<CustomerAuthGuard><ReservationDetail /></CustomerAuthGuard>} />
-        <Route path="/customer/checkout" element={<CustomerAuthGuard><Checkout /></CustomerAuthGuard>} />
-        <Route path="/customer/profile" element={<CustomerAuthGuard><CustomerProfileRoute /></CustomerAuthGuard>} />
-        <Route path="/my-purchases" element={<CustomerAuthGuard><MyPurchases /></CustomerAuthGuard>} />
         <Route path="*" element={<NotFoundPage />} />
         </Route>
         <Route path="/mechanic/login" element={<MechanicLogin />} />

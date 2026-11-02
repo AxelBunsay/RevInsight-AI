@@ -9,6 +9,7 @@ import {
   CustomerHeader
 } from './CustomerLayout';
 import { CustomerPrototypeProvider } from './CustomerPrototypeProvider';
+import { getCustomerAuthRedirect, getCustomerLandingRedirect } from './customerAuthAction';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
 
 const appSource = readFileSync(new URL('../../App.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
@@ -18,6 +19,24 @@ const responsiveStyles = readFileSync(new URL('../styles/customer-responsive.css
 const flowStyles = readFileSync(new URL('../styles/customer-flow.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const sharedStyles = readFileSync(new URL('../styles/shared.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const initialMenuState = { accountOpen: false, notificationsOpen: false };
+
+describe('customer route authentication', () => {
+  it('redirects signed-in customers from the root to Shop and leaves guest landing public', () => {
+    expect(getCustomerLandingRedirect('customer-token')).toBe('/customer/shop');
+    expect(getCustomerLandingRedirect('prototype-guest')).toBeNull();
+    expect(getCustomerLandingRedirect(null)).toBeNull();
+  });
+
+  it('redirects guests from protected routes to login with the requested path', () => {
+    const redirect = getCustomerAuthRedirect(null, {
+      pathname: '/customer/shop',
+      search: '?category=parts',
+      hash: ''
+    });
+
+    expect(redirect).toBe('/customer/login?redirect=%2Fcustomer%2Fshop%3Fcategory%3Dparts&returnTo=%2Fcustomer%2Fshop%3Fcategory%3Dparts');
+  });
+});
 
 describe('customer account menu', () => {
   it('opens by click action, toggles closed, and closes notifications when opened', () => {
@@ -144,11 +163,15 @@ describe('customer account menu', () => {
     const nav = markup.indexOf('id="customer-navigation"');
     expect(actions).toBeGreaterThan(-1);
     expect(markup).toContain('<strong>MANOY&#x27;S</strong>');
+    expect(markup).toContain('class="customer-brand" href="/"');
+    expect(markup).toContain('aria-current="page" href="/"');
+    expect(markup).toContain('>Home</a>');
     expect(cart).toBeGreaterThan(actions);
     expect(bell).toBeGreaterThan(cart);
     expect(toggle).toBeGreaterThan(bell);
     expect(nav).toBeGreaterThan(toggle);
     expect(markup).toContain('>Register</a>');
+    expect(customerLayoutSource).toContain("const isHomePage = currentPath === '/';");
     expect(markup.match(/customer-header-icon-button/g)).toHaveLength(3);
     expect(markup).not.toContain('customer-header-cart-count');
     expect(markup).not.toContain('customer-notification-count');

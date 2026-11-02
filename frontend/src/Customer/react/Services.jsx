@@ -22,6 +22,31 @@ function ServiceSkeleton() {
   </article>;
 }
 
+export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = false }) {
+  const unitPrice = partsSource === 'customer' ? service.laborOnlyPrice : service.price;
+  const unitTotal = Number(unitPrice || 0) + Number(service.mechanicFee || 0);
+  return <article className="service-card tone-sun" key={service._id}>
+    <div className="service-card-art">
+      <span className="service-code">Code: {service.code}</span>
+      <span className="service-duration">{formatDuration(service.durationMinutes)}</span>
+      <div className="service-icon" aria-hidden="true">{useInlineIcon
+        ? <svg viewBox="0 0 24 24" focusable="false"><path d="M14.2 6.1a5 5 0 0 0 6.1 6.1L12 20.5a2.1 2.1 0 0 1-3-3l8.3-8.3a5 5 0 0 0-6.1-6.1l3 3-2.8 2.8-3-3a5 5 0 0 0 6.1 6.1" /></svg>
+        : '🔧'}</div>
+    </div>
+    <div className="service-card-body">
+      <p className="service-category-label">{service.category || 'General'}</p>
+      <h2 title={service.name}>{service.name}</h2>
+      <p className="service-card-description" title={service.description || 'Service details available at the shop.'}>
+        {service.description || 'Service details available at the shop.'}
+      </p>
+    </div>
+    <div className="service-card-footer">
+      <strong>{partsSource === 'customer' && <span className="service-labor-only-label">Labor only · </span>}₱{unitTotal.toLocaleString('en-PH')} total{service.pricePerUnit ? ` / ${service.unitLabel || 'unit'}` : ''}</strong>
+      <Link to={`/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`} className="service-book-link">Book service</Link>
+    </div>
+  </article>;
+}
+
 export default function Services() {
   const [searchParams, setSearchParams] = useSearchParams();
   const partsSource = getServicePartsSource(searchParams);
@@ -89,31 +114,13 @@ export default function Services() {
           <button type="button" role="tab" aria-selected={partsSource === "shop"} className={partsSource === "shop" ? "active" : ""} onClick={() => choosePartsSource("shop")}>With shop parts</button>
           <button type="button" role="tab" aria-selected={partsSource === "customer"} className={partsSource === "customer" ? "active" : ""} onClick={() => choosePartsSource("customer")}>Labor only (I have my own parts)</button>
         </div>
-        <section
-          className="services-hero"
-          aria-label="Mechanic services introduction"
-        >
+        <section className="customer-compact-banner services-compact-banner" aria-label="Services introduction">
           <div>
-            <p className="services-hero-eyebrow">
-              MANOY&apos;S MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES
-            </p>
-            <h2>
-              Mechanic Services <span aria-hidden="true">🔧</span>
-            </h2>
-            <p>
-              Book a service and our skilled mechanics will handle the rest.
-            </p>
-            <div className="services-hero-stats">
-              <span>{modeServices.length} Services</span>
-              <span>Expert Mechanics</span>
-              <span>Quality Guaranteed</span>
-            </div>
+            <h2>Everything your ride needs.</h2>
+            <p>Quality parts, trusted accessories, and expert service in one place.</p>
           </div>
-          <div className="services-hero-wheel" aria-hidden="true">
-            ◉
-          </div>
+          <Link to="/customer/shop">Explore shop</Link>
         </section>
-
         <div className="services-toolbar">
           <label className="services-search">
             <span aria-hidden="true">⌕</span>
@@ -153,32 +160,7 @@ export default function Services() {
         <div className="service-card-grid" ref={servicesListRef}>
           {isLoading
             ? Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)
-            : pageServices.map((service) => {
-              const unitPrice = partsSource === "customer" ? service.laborOnlyPrice : service.price;
-              const unitTotal = Number(unitPrice || 0) + Number(service.mechanicFee || 0);
-              return <article
-                className="service-card tone-sun"
-                key={service._id}
-              >
-                <div className="service-card-art">
-                  <span className="service-code">Code: {service.code}</span>
-                  <span className="service-duration">{formatDuration(service.durationMinutes)}</span>
-                  <div className="service-icon" aria-hidden="true">🔧</div>
-                </div>
-                <div className="service-card-body">
-                  <p className="service-category-label">{service.category || "General"}</p>
-                  <h2 title={service.name}>{service.name}</h2>
-                  <p
-                    className="service-card-description"
-                    title={service.description || "Service details available at the shop."}
-                  >{service.description || "Service details available at the shop."}</p>
-                </div>
-                <div className="service-card-footer">
-                  <strong>{partsSource === "customer" && <span className="service-labor-only-label">Labor only · </span>}₱{unitTotal.toLocaleString("en-PH")} total{service.pricePerUnit ? ` / ${service.unitLabel || "unit"}` : ""}</strong>
-                  <Link to={`/customer/services/${service._id}${partsSource === "customer" ? "?parts=own" : ""}`} className="service-book-link">Book service</Link>
-                </div>
-              </article>;
-            })}
+            : pageServices.map((service) => <ServiceCard service={service} partsSource={partsSource} key={service._id} />)}
         </div>
         {!isLoading && error && (
           <div className="customer-empty" role="alert">

@@ -24,7 +24,14 @@ const pendingUserSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-      required: true
+      required: true,
+      validate: {
+        validator: async (phoneNumber) => {
+          const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+          return cleanAndValidateMobileNumber(phoneNumber).isValid;
+        },
+        message: 'Enter a valid mobile number (11 digits, starts with 09)'
+      }
     },
     otp: {
       code: {

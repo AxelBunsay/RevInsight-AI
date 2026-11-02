@@ -1,6 +1,28 @@
 const CUSTOMER_AUTH_ACTION_KEY = 'revinsightCustomerAuthAction';
 const ACTION_MAX_AGE_MS = 30 * 60 * 1000;
 
+export function getSafeCustomerRedirectPath(path) {
+  return typeof path === 'string' && path.startsWith('/customer') ? path : null;
+}
+
+export function hasCustomerSession(customerToken) {
+  return Boolean(customerToken && customerToken !== 'prototype-guest');
+}
+
+export function getCustomerLandingRedirect(customerToken) {
+  return hasCustomerSession(customerToken) ? '/customer/shop' : null;
+}
+
+export function getCustomerAuthRedirect(customerToken, location) {
+  if (hasCustomerSession(customerToken)) return null;
+
+  const requestedPath = location.pathname.startsWith('/my-purchases')
+    ? `/customer/purchases${location.search || ''}${location.hash || ''}`
+    : `${location.pathname}${location.search || ''}${location.hash || ''}`;
+  const params = new URLSearchParams({ redirect: requestedPath, returnTo: requestedPath });
+  return `/customer/login?${params.toString()}`;
+}
+
 export function readCustomerAuthAction() {
   const raw = sessionStorage.getItem(CUSTOMER_AUTH_ACTION_KEY);
   if (!raw) return null;

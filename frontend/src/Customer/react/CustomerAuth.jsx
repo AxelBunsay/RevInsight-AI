@@ -5,6 +5,7 @@ import { useCustomerPrototype } from './useCustomerPrototype';
 import {
   customerActionReturnPath,
   customerActionSignInMessage,
+  getSafeCustomerRedirectPath,
   readCustomerAuthAction
 } from './customerAuthAction';
 import {
@@ -13,6 +14,8 @@ import {
   getRememberedIdentifier,
   storeAuthSession
 } from '../../auth/authSession';
+import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from '../../../../shared/mobileNumber.mjs';
+import PasswordInput from '../../components/PasswordInput';
 import '../styles/auth.css';
 
 export function CustomerLogin() {
@@ -48,13 +51,15 @@ export function CustomerLogin() {
         identifier: credentials.email
       });
       updateProfile(response.user || {});
-      const returnTo = searchParams.get('returnTo');
-      const safeReturnTo = returnTo?.startsWith('/') && !returnTo.startsWith('//') ? returnTo : null;
+      const requestedRedirect = searchParams.get('redirect');
       const from = location.state?.from;
       const fromPath = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : null;
+      const safeRedirect = requestedRedirect !== null
+        ? getSafeCustomerRedirectPath(requestedRedirect)
+        : getSafeCustomerRedirectPath(fromPath) || getSafeCustomerRedirectPath(searchParams.get('returnTo'));
       navigate(pendingAction
         ? customerActionReturnPath(pendingAction)
-        : fromPath || safeReturnTo || '/customer/shop', {
+        : safeRedirect || '/customer/shop', {
         replace: true,
         state: pendingAction ? { resumeAction: true } : undefined
       });
@@ -71,7 +76,7 @@ export function CustomerLogin() {
     <form className="customer-auth-form" onSubmit={submitLogin}>
       {error && <p className="customer-error" role="alert">{error}</p>}
       <label>Email Address<input type="email" required placeholder="you@email.com" value={credentials.email} onChange={(event) => setCredentials({ ...credentials, email: event.target.value })} /></label>
-      <label>Password<input type="password" required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
+      <label>Password<PasswordInput required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
       <label className="customer-auth-remember"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
       <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
     </form>
@@ -80,22 +85,31 @@ export function CustomerLogin() {
 
 export function CustomerRegister() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { updateProfile } = useCustomerPrototype();
   const [step, setStep] = useState('register');
   const [formData, setFormData] = useState({ email: '', password: '', firstName: '', lastName: '', phoneNumber: '' });
   const [otp, setOtp] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [phoneNumberError, setPhoneNumberError] = useState('');
   const [message, setMessage] = useState('');
   const pendingAction = readCustomerAuthAction();
+  const safeRedirect = getSafeCustomerRedirectPath(searchParams.get('redirect'));
 
   const continueAfterAuthentication = () => navigate(
-    pendingAction ? customerActionReturnPath(pendingAction) : '/customer/shop',
+    pendingAction ? customerActionReturnPath(pendingAction) : safeRedirect || '/customer/shop',
     { replace: true, state: pendingAction ? { resumeAction: true } : undefined }
   );
 
   const handleRegister = async (event) => {
     event.preventDefault();
+    const mobileNumber = cleanAndValidateMobileNumber(formData.phoneNumber);
+    if (!mobileNumber.isValid) {
+      setPhoneNumberError(MOBILE_NUMBER_ERROR);
+      return;
+    }
+    setPhoneNumberError('');
     setIsSubmitting(true);
     setError('');
     try {
@@ -150,8 +164,8 @@ export function CustomerRegister() {
       <form className="customer-auth-form" onSubmit={handleRegister}>
         <div className="form-row"><label>First Name<input type="text" required value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} /></label><label>Last Name<input type="text" required value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} /></label></div>
         <label>Email<input type="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></label>
-        <label>Phone Number<input type="tel" required value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} placeholder="+63 9xx xxx xxxx" /></label>
-        <label>Password<input type="password" required minLength="6" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} /></label>
+        <label>Phone Number<input type="tel" inputMode="numeric" maxLength={11} autoComplete="tel" required value={formData.phoneNumber} aria-invalid={Boolean(phoneNumberError)} onChange={(event) => { const phoneNumber = cleanAndValidateMobileNumber(event.target.value).digits.slice(0, 11); setFormData({ ...formData, phoneNumber }); setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? '' : MOBILE_NUMBER_ERROR); }} onPaste={(event) => { event.preventDefault(); const phoneNumber = cleanAndValidateMobileNumber(event.clipboardData.getData('text')).digits.slice(0, 11); setFormData({ ...formData, phoneNumber }); setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? '' : MOBILE_NUMBER_ERROR); }} placeholder="09xxxxxxxxx" />{phoneNumberError && <small className="customer-field-error" role="alert">{phoneNumberError}</small>}</label>
+        <label>Password<PasswordInput required minLength="6" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} /></label>
         <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Sending OTP...' : 'Send OTP'}</button>
       </form>
     </>;

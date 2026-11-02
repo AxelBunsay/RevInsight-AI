@@ -69,7 +69,8 @@ describe('customer purchases page data and cards', () => {
     expect(getLegacyCustomerPurchaseLink('/customer/profile?tab=bookings')).toBe('/my-purchases?tab=services');
     expect(getLegacyCustomerPurchaseLink('/customer/reservations/123')).toBeNull();
     expect(appRoutes).toContain('getLegacyProfilePurchaseRedirect(location.search)');
-    expect(appRoutes).toContain('path="/my-purchases" element={<CustomerAuthGuard><MyPurchases /></CustomerAuthGuard>}');
+    expect(appRoutes).toContain('<Route element={<CustomerAuthGuard />}>');
+    expect(appRoutes).toContain('path="/my-purchases" element={<MyPurchases />}');
   });
 
   it('searches names, variants, service units, motorcycles, statuses, and reference fragments', () => {

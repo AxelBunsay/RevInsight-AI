@@ -911,17 +911,28 @@ const updateSettings = async (req, res) => {
     }
     const savedPickupAddress = typeof pickupAddress === 'string' ? pickupAddress.trim() : '';
     const savedPickupHours = typeof pickupHours === 'string' ? pickupHours.trim() : '';
-    const savedContactNumber = typeof contactNumber === 'string' ? contactNumber.trim() : '';
+    const hasContactNumber = Object.prototype.hasOwnProperty.call(req.body || {}, 'contactNumber');
+    let savedContactNumber = currentSettings.contactNumber;
+    let shouldUpdateContactNumber = false;
     if (typeof pickupAddress !== 'string' || savedPickupAddress.length > 150) {
       fieldErrors.pickupAddress = 'Pickup address must be 150 characters or fewer.';
     }
     if (typeof pickupHours !== 'string' || savedPickupHours.length > 80) {
       fieldErrors.pickupHours = 'Pickup hours must be 80 characters or fewer.';
     }
-    if (typeof contactNumber !== 'string' || savedContactNumber.length > 40 || !/^[\d+() -]*$/.test(savedContactNumber)) {
-      fieldErrors.contactNumber = savedContactNumber.length > 40
-        ? 'Shop contact number must be 40 characters or fewer.'
-        : 'Shop contact number may contain only digits, spaces, +, -, and parentheses.';
+    if (hasContactNumber) {
+      const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+      const submitted = cleanAndValidateMobileNumber(contactNumber);
+      const saved = cleanAndValidateMobileNumber(currentSettings.contactNumber);
+      const unchanged = typeof contactNumber === 'string'
+        && Boolean(contactNumber)
+        && (contactNumber === currentSettings.contactNumber || (saved.canonicalDigits && submitted.canonicalDigits === saved.canonicalDigits));
+      if (typeof contactNumber !== 'string' || (!submitted.isValid && !unchanged)) {
+        fieldErrors.contactNumber = 'Enter a valid mobile number (11 digits, starts with 09)';
+      } else if (!unchanged) {
+        savedContactNumber = submitted.digits;
+        shouldUpdateContactNumber = true;
+      }
     }
     if (Object.keys(fieldErrors).length) {
       return res.status(400).json({
@@ -936,18 +947,19 @@ const updateSettings = async (req, res) => {
       qrImageUrl: currentSettings.paymentInstructions.qrImageUrl || '',
       qrImagePublicId: currentSettings.paymentInstructions.qrImagePublicId || ''
     };
+    const settingsUpdate = {
+      downPaymentPercent,
+      serviceDownPaymentPercent,
+      pendingPaymentHours,
+      holdDays,
+      paymentInstructions: savedPaymentInstructions,
+      pickupAddress: savedPickupAddress,
+      pickupHours: savedPickupHours
+    };
+    if (shouldUpdateContactNumber) settingsUpdate.contactNumber = savedContactNumber;
     const settings = await ReservationSettings.findOneAndUpdate(
       { key: 'reservation' },
-      { $set: {
-        downPaymentPercent,
-        serviceDownPaymentPercent,
-        pendingPaymentHours,
-        holdDays,
-        paymentInstructions: savedPaymentInstructions,
-        pickupAddress: savedPickupAddress,
-        pickupHours: savedPickupHours,
-        contactNumber: savedContactNumber
-      } },
+      { $set: settingsUpdate },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
     );
     res.json({ success: true, settings });

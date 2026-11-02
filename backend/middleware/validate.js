@@ -1,7 +1,21 @@
-const validateRegister = (req, res, next) => {
+const User = require('../models/user');
+const Mechanic = require('../models/mechanic');
+
+const MOBILE_NUMBER_ERROR = 'Enter a valid mobile number (11 digits, starts with 09)';
+
+async function checkMobileNumberChange(value, existingValue) {
+  const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+  const submitted = cleanAndValidateMobileNumber(value);
+  const saved = cleanAndValidateMobileNumber(existingValue);
+  const unchanged = Boolean(value)
+    && (value === existingValue || (saved.canonicalDigits && submitted.canonicalDigits === saved.canonicalDigits));
+  return { ...submitted, unchanged, isValid: submitted.isValid || unchanged };
+}
+
+const validateRegister = async (req, res, next) => {
   const { email, password, firstName, lastName, phoneNumber } = req.body;
 
-  if (!email || !password || !firstName || !lastName || !phoneNumber) {
+  if (!email || !password || !firstName || !lastName) {
     return res.status(400).json({ message: 'All fields are required' });
   }
 
@@ -9,17 +23,14 @@ const validateRegister = (req, res, next) => {
     return res.status(400).json({ message: 'Password must be at least 8 characters and include a letter and a number.' });
   }
 
-  const digits = typeof phoneNumber === 'string' ? phoneNumber.replace(/\D/g, '') : '';
-  const localNumber = digits.startsWith('63')
-    ? digits.slice(2)
-    : digits.startsWith('0')
-      ? digits.slice(1)
-      : digits;
-  if (!/^9\d{9}$/.test(localNumber)) {
-    return res.status(400).json({ message: 'Enter a valid Philippine mobile number.' });
+  if (typeof phoneNumber !== 'string' || !phoneNumber) {
+    return res.status(400).json({ message: MOBILE_NUMBER_ERROR });
   }
-
-  next();
+  const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+  const mobileNumber = cleanAndValidateMobileNumber(phoneNumber);
+  if (!mobileNumber.isValid) return res.status(400).json({ message: MOBILE_NUMBER_ERROR });
+  req.body.phoneNumber = mobileNumber.digits;
+  return next();
 };
 
 const validateLogin = (req, res, next) => {
@@ -32,17 +43,29 @@ const validateLogin = (req, res, next) => {
   next();
 };
 
-const validateUpdateProfile = (req, res, next) => {
+const validateUpdateProfile = async (req, res, next) => {
   const { firstName, lastName, phoneNumber, profileImage, preferences } = req.body;
 
-  if (firstName === '' || lastName === '' || phoneNumber === '') {
+  if (firstName === '' || lastName === '') {
     return res.status(400).json({ message: 'Fields cannot be empty' });
   }
 
+  if (phoneNumber !== undefined) {
+    const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+    const submitted = cleanAndValidateMobileNumber(phoneNumber);
+    if (submitted.isValid) {
+      req.body.phoneNumber = submitted.digits;
+    } else {
+      const existing = req.user?.userId ? await User.findById(req.user.userId).select('phoneNumber').lean() : null;
+      const mobileNumber = await checkMobileNumberChange(phoneNumber, existing?.phoneNumber);
+      if (!mobileNumber.isValid) return res.status(400).json({ message: MOBILE_NUMBER_ERROR });
+      req.phoneNumberUnchanged = mobileNumber.unchanged;
+    }
+  }
   next();
 };
 
-const validateCustomerProfile = (req, res, next) => {
+const validateCustomerProfile = async (req, res, next) => {
   const { firstName, lastName, phoneNumber } = req.body || {};
 
   if (typeof firstName !== 'string' || !firstName.trim()) {
@@ -51,18 +74,17 @@ const validateCustomerProfile = (req, res, next) => {
   if (typeof lastName !== 'string' || !lastName.trim()) {
     return res.status(400).json({ message: 'Last name is required.' });
   }
-  if (typeof phoneNumber !== 'string') {
-    return res.status(400).json({ message: 'Phone number is required.' });
-  }
-
-  const digits = phoneNumber.replace(/\D/g, '');
-  const localNumber = digits.startsWith('63')
-    ? digits.slice(2)
-    : digits.startsWith('0')
-      ? digits.slice(1)
-      : digits;
-  if (!/^9\d{9}$/.test(localNumber)) {
-    return res.status(400).json({ message: 'Enter a valid Philippine mobile number.' });
+  if (phoneNumber !== undefined) {
+    const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+    const submitted = cleanAndValidateMobileNumber(phoneNumber);
+    if (submitted.isValid) {
+      req.body.phoneNumber = submitted.digits;
+    } else {
+      const existing = req.user?.userId ? await User.findById(req.user.userId).select('phoneNumber').lean() : null;
+      const mobileNumber = await checkMobileNumberChange(phoneNumber, existing?.phoneNumber);
+      if (!mobileNumber.isValid) return res.status(400).json({ message: MOBILE_NUMBER_ERROR });
+      req.phoneNumberUnchanged = mobileNumber.unchanged;
+    }
   }
 
   next();
@@ -73,19 +95,14 @@ const isValidMechanicUsername = (username) => (
   && /^[a-z0-9][a-z0-9._-]{3,19}$/i.test(username.trim())
 );
 
-const isValidPhilippinePhone = (phoneNumber) => {
-  return typeof phoneNumber === 'string'
-    && /^(?:(?:\+?63)|0)?[\s()-]*9(?:[\s()-]*\d){9}$/.test(phoneNumber.trim());
-};
-
-const validateCreateMechanic = (req, res, next) => {
+const validateCreateMechanic = async (req, res, next) => {
   const { email, username, password, firstName, lastName, phoneNumber, specialization, yearsOfExperience } = req.body || {};
 
   if (
     !username || !password
     || typeof firstName !== 'string' || !firstName.trim()
     || typeof lastName !== 'string' || !lastName.trim()
-    || !phoneNumber || !specialization || yearsOfExperience === undefined
+    || !specialization || yearsOfExperience === undefined
   ) {
     return res.status(400).json({ message: 'All required fields must be provided' });
   }
@@ -98,10 +115,6 @@ const validateCreateMechanic = (req, res, next) => {
     if (typeof email !== 'string' || !/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/.test(email.trim())) {
       return res.status(400).json({ message: 'Enter a valid email address.' });
     }
-  }
-
-  if (!isValidPhilippinePhone(phoneNumber)) {
-    return res.status(400).json({ message: 'Enter a valid Philippine mobile number.' });
   }
 
   if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
@@ -122,13 +135,17 @@ const validateCreateMechanic = (req, res, next) => {
     return res.status(400).json({ message: 'Years of experience must be zero or greater.' });
   }
 
-  next();
+  const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+  const mobileNumber = cleanAndValidateMobileNumber(phoneNumber);
+  if (!mobileNumber.isValid) return res.status(400).json({ message: MOBILE_NUMBER_ERROR });
+  req.body.phoneNumber = mobileNumber.digits;
+  return next();
 };
 
-const validateUpdateMechanic = (req, res, next) => {
+const validateUpdateMechanic = async (req, res, next) => {
   const { firstName, lastName, username, phoneNumber, specialization, yearsOfExperience, availabilityStatus, successRate } = req.body || {};
 
-  if (firstName === '' || lastName === '' || phoneNumber === '') {
+  if (firstName === '' || lastName === '') {
     return res.status(400).json({ message: 'Fields cannot be empty' });
   }
   if (firstName !== undefined && (typeof firstName !== 'string' || !firstName.trim())) {
@@ -142,8 +159,18 @@ const validateUpdateMechanic = (req, res, next) => {
     return res.status(400).json({ message: 'Username must be 4-20 characters, start with a letter or number, and use only letters, numbers, dots, underscores or hyphens.' });
   }
 
-  if (phoneNumber !== undefined && !isValidPhilippinePhone(phoneNumber)) {
-    return res.status(400).json({ message: 'Enter a valid Philippine mobile number.' });
+  if (phoneNumber !== undefined) {
+    const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+    const submitted = cleanAndValidateMobileNumber(phoneNumber);
+    if (submitted.isValid) {
+      req.body.phoneNumber = submitted.digits;
+    } else {
+      const mechanicId = req.params?.id || req.user?.userId;
+      const existing = mechanicId ? await Mechanic.findById(mechanicId).select('phoneNumber').lean() : null;
+      const mobileNumber = await checkMobileNumberChange(phoneNumber, existing?.phoneNumber);
+      if (!mobileNumber.isValid) return res.status(400).json({ message: MOBILE_NUMBER_ERROR });
+      req.phoneNumberUnchanged = mobileNumber.unchanged;
+    }
   }
 
   if (specialization) {

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import { getMechanicFormError } from "./mechanicFormValidation";
+import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from "../../../../shared/mobileNumber.mjs";
+import PasswordInput from "../../components/PasswordInput";
 
 function Mechanics() {
   const [mechanics, setMechanics] = useState([]);
@@ -15,7 +17,7 @@ function Mechanics() {
   const [editingMechanic, setEditingMechanic] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [phoneNumberError, setPhoneNumberError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [form, setForm] = useState({
     firstName: "",
@@ -63,7 +65,6 @@ function Mechanics() {
   }, [refreshKey]);
 
   const openMechanicDialog = (mechanic = null) => {
-    setShowPassword(false);
     setEditingMechanic(mechanic);
     setIsAdding(!mechanic);
     setForm(
@@ -74,7 +75,7 @@ function Mechanics() {
             username: mechanic.username || "",
             email: mechanic.email || "",
             password: "",
-            phoneNumber: mechanic.phoneNumber || "",
+            phoneNumber: cleanAndValidateMobileNumber(mechanic.phoneNumber || "").canonicalDigits,
             specialization: mechanic.specialization || "general",
             yearsOfExperience: mechanic.yearsOfExperience || 0,
           }
@@ -94,6 +95,12 @@ function Mechanics() {
   const saveMechanic = async (event) => {
     event.preventDefault();
     setError("");
+    setPhoneNumberError("");
+    const mobileNumber = cleanAndValidateMobileNumber(form.phoneNumber);
+    if (!mobileNumber.isValid) {
+      setPhoneNumberError(MOBILE_NUMBER_ERROR);
+      return;
+    }
     const formError = getMechanicFormError(form, Boolean(editingMechanic));
     if (formError) {
       setError(formError);
@@ -322,37 +329,40 @@ function Mechanics() {
               </label>
               <label className="mechanic-form-field mechanic-password-field">
                 {editingMechanic ? "New password (optional)" : "Password"}
-                <span className="mechanic-password-control">
-                  <input
-                    required={!editingMechanic}
-                    minLength="8"
-                    autoComplete="new-password"
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(event) =>
-                      setForm({ ...form, password: event.target.value })
-                    }
-                  />
-                  <button
-                    className="mechanic-password-toggle"
-                    type="button"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    onClick={() => setShowPassword((visible) => !visible)}
-                  >
-                    {showPassword ? "Hide" : "Show"}
-                  </button>
-                </span>
+                <PasswordInput
+                  className="mechanic-password-control"
+                  required={!editingMechanic}
+                  minLength="8"
+                  autoComplete="new-password"
+                  value={form.password}
+                  onChange={(event) =>
+                    setForm({ ...form, password: event.target.value })
+                  }
+                />
               </label>
               <label className="mechanic-form-field">
                 Phone number
                 <input
                   required
                   type="tel"
+                  inputMode="numeric"
+                  maxLength={11}
+                  autoComplete="tel"
                   value={form.phoneNumber}
-                  onChange={(event) =>
-                    setForm({ ...form, phoneNumber: event.target.value })
-                  }
+                  aria-invalid={Boolean(phoneNumberError)}
+                  onChange={(event) => {
+                    const phoneNumber = cleanAndValidateMobileNumber(event.target.value).digits.slice(0, 11);
+                    setForm({ ...form, phoneNumber });
+                    setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? "" : MOBILE_NUMBER_ERROR);
+                  }}
+                  onPaste={(event) => {
+                    event.preventDefault();
+                    const phoneNumber = cleanAndValidateMobileNumber(event.clipboardData.getData("text")).digits.slice(0, 11);
+                    setForm({ ...form, phoneNumber });
+                    setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? "" : MOBILE_NUMBER_ERROR);
+                  }}
                 />
+                {phoneNumberError && <small className="inventory-field-error" role="alert">{phoneNumberError}</small>}
               </label>
               <label className="mechanic-form-field">
                 Email (optional)

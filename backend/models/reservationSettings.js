@@ -25,7 +25,17 @@ const reservationSettingsSchema = new mongoose.Schema({
   gcashPaymentSettings: { type: gcashPaymentSettingsSchema, default: () => ({}) },
   pickupAddress: { type: String, default: '', maxlength: 150 },
   pickupHours: { type: String, default: '', maxlength: 80 },
-  contactNumber: { type: String, default: '0900 000 0000', maxlength: 40 },
+  contactNumber: {
+    type: String,
+    default: '09000000000',
+    validate: {
+      validator: async (contactNumber) => {
+        const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+        return cleanAndValidateMobileNumber(contactNumber).isValid;
+      },
+      message: 'Enter a valid mobile number (11 digits, starts with 09)'
+    }
+  },
   openDays: { type: [String], default: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] },
   openTime: { type: String, default: '09:00' },
   closeTime: { type: String, default: '18:00' },

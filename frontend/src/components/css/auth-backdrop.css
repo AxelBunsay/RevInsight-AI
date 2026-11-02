@@ -1,0 +1,99 @@
+.auth-backdrop {
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background-color: #17100B;
+  background-image:
+    radial-gradient(ellipse at top left, #3A200F 0%, transparent 62%),
+    radial-gradient(ellipse at bottom right, #4A2410 0%, transparent 60%),
+    linear-gradient(to top, rgba(242, 107, 29, 0.14) 0%, transparent 38%);
+}
+
+.auth-backdrop__line {
+  position: absolute;
+  top: var(--line-top);
+  left: 0;
+  display: block;
+  width: var(--line-width);
+  height: var(--line-height);
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent 0%, var(--line-color) 70%, transparent 100%);
+  opacity: var(--line-opacity);
+  animation: auth-backdrop-drift var(--line-duration) linear var(--line-delay) infinite;
+  will-change: transform;
+}
+
+.auth-backdrop__vignette {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: block;
+  background: radial-gradient(ellipse at center, rgba(23, 16, 11, 0.55) 0%, rgba(23, 16, 11, 0.2) 48%, transparent 82%);
+}
+
+.auth-backdrop__gears {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.auth-backdrop__gear {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: auth-backdrop-gear-turn var(--gear-duration) linear infinite;
+  animation-direction: var(--gear-direction);
+}
+
+.auth-backdrop__gear-tooth {
+  fill: rgba(242, 107, 29, 0.09);
+  stroke: rgba(242, 107, 29, 0.28);
+  stroke-width: 2px;
+}
+
+.auth-backdrop__gear-ring {
+  fill: none;
+  stroke: rgba(242, 107, 29, 0.16);
+  stroke-width: 2px;
+}
+
+.auth-backdrop__gear-hub {
+  fill: rgba(20, 10, 4, 0.6);
+  stroke: rgba(242, 107, 29, 0.3);
+  stroke-width: 2px;
+}
+
+@keyframes auth-backdrop-drift {
+  from { transform: translateX(calc(-600px - 8vw)); }
+  to { transform: translateX(calc(100vw + 560px)); }
+}
+
+@keyframes auth-backdrop-gear-turn {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 700px) {
+  .auth-backdrop__line:nth-child(n + 13) {
+    display: none;
+  }
+
+  .auth-backdrop__gear--small {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-backdrop__line {
+    animation: none;
+    transform: translateX(0);
+    will-change: auto;
+  }
+
+  .auth-backdrop__gear {
+    animation: none;
+  }
+}

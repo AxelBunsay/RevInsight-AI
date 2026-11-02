@@ -216,20 +216,21 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications, photoUrl, bio, availabilityStatus } = req.body;
+    const update = {
+      firstName,
+      lastName,
+      specialization,
+      yearsOfExperience,
+      certifications,
+      photoUrl,
+      bio,
+      availabilityStatus
+    };
+    if (phoneNumber !== undefined && !req.phoneNumberUnchanged) update.phoneNumber = phoneNumber;
 
     const mechanic = await Mechanic.findByIdAndUpdate(
       req.user.userId,
-      {
-        firstName,
-        lastName,
-        phoneNumber,
-        specialization,
-        yearsOfExperience,
-        certifications,
-        photoUrl,
-        bio,
-        availabilityStatus
-      },
+      update,
       { new: true, runValidators: true }
     );
 
@@ -351,6 +352,7 @@ const updateMechanic = async (req, res) => {
       availabilityStatus: availabilityStatus !== undefined ? availabilityStatus : mechanic.availabilityStatus,
       successRate: successRate !== undefined ? successRate : mechanic.successRate
     };
+    if (phoneNumber === undefined || req.phoneNumberUnchanged) delete update.phoneNumber;
 
     if (password) {
       if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {

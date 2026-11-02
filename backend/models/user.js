@@ -30,7 +30,15 @@ const userSchema = new mongoose.Schema({
   },
   phoneNumber: {
     type: String,
-    default: null
+    default: null,
+    validate: {
+      validator: async (phoneNumber) => {
+        if (phoneNumber === null || phoneNumber === undefined || phoneNumber === '') return true;
+        const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+        return cleanAndValidateMobileNumber(phoneNumber).isValid;
+      },
+      message: 'Enter a valid mobile number (11 digits, starts with 09)'
+    }
   },
   name: {
     type: String,

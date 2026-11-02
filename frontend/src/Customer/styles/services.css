@@ -55,68 +55,8 @@
   padding: 10px var(--customer-wide-content-padding);
   box-sizing: border-box;
 }
-.services-page .customer-heading {
+.services-page .customer-heading .customer-eyebrow {
   display: none;
-}
-
-.services-hero {
-  display: flex;
-  min-height: 144px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  margin: 0 auto 18px;
-  padding: 18px;
-  overflow: hidden;
-  border-radius: 12px;
-  background: linear-gradient(110deg, #281004, #6f2e12 54%, #f4771b);
-  color: #fff;
-}
-.services-hero-eyebrow {
-  margin: 0 0 5px;
-  color: #ff8b12;
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-}
-.services-hero h2 {
-  margin: 0 0 4px;
-  font-size: 30px;
-  line-height: 1.1;
-}
-.services-hero h2 span {
-  font-size: 24px;
-}
-.services-hero > div:first-child > p:not(.services-hero-eyebrow) {
-  max-width: none;
-  margin: 0;
-  color: #efd8ca;
-  font: 14px/1.35 "Segoe UI", sans-serif;
-  white-space: nowrap;
-}
-.services-hero-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-.services-hero-stats span {
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: rgba(178, 78, 12, 0.68);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-}
-.services-hero-wheel {
-  width: 76px;
-  height: 76px;
-  display: grid;
-  place-items: center;
-  border: 6px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 50%;
-  color: rgba(255, 255, 255, 0.14);
-  font-size: 44px;
 }
 
 .services-toolbar {
@@ -434,20 +374,11 @@
   .service-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .services-hero-wheel {
-    display: none;
-  }
 }
 @media (max-width: 767px) {
   .customer-page.services-page .customer-header {
     padding-right: var(--customer-wide-content-padding);
     padding-left: var(--customer-wide-content-padding);
-  }
-  .services-hero > div:first-child > p:not(.services-hero-eyebrow) {
-    white-space: normal;
-  }
-  .services-hero-stats {
-    flex-wrap: wrap;
   }
   .service-card-grid {
     grid-template-columns: 1fr;
@@ -456,18 +387,6 @@
 @media (max-width: 640px) {
   .services-page {
     padding: 0 0 40px;
-  }
-  .services-hero {
-    min-height: 144px;
-  }
-  .services-hero-eyebrow {
-    font-size: 10px;
-  }
-  .services-hero h2 {
-    font-size: 28px;
-  }
-  .services-hero > div:first-child > p:not(.services-hero-eyebrow) {
-    font-size: 15px;
   }
   .service-category-pills {
     gap: 7px;

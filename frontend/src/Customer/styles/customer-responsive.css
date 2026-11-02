@@ -1010,6 +1010,69 @@
   }
 }
 
+.customer-page .customer-header > .customer-brand {
+  min-width: 0;
+  flex: 0 1 auto;
+  gap: 8px;
+}
+
+.customer-page .customer-header .customer-brand__mark {
+  width: 40px !important;
+  height: 40px !important;
+  flex-basis: 40px;
+}
+
+.customer-page.customer-page .customer-brand__copy {
+  display: grid;
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
+  gap: 1px;
+}
+
+.customer-page.customer-page .customer-brand__copy strong {
+  font-size: 16px !important;
+  font-weight: 800;
+  letter-spacing: 0.08em !important;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.customer-page.customer-page .customer-brand__copy small {
+  display: block;
+  font-size: 12px !important;
+  font-weight: 700;
+  letter-spacing: 0.04em !important;
+  line-height: 1.2;
+  white-space: nowrap !important;
+}
+
+@media (max-width: 900px) {
+  .customer-page .customer-header {
+    max-height: 72px;
+  }
+
+  .customer-page .customer-header > .customer-brand {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .customer-page.customer-page .customer-brand__copy small {
+    display: -webkit-box;
+    overflow: hidden;
+    white-space: normal !important;
+    overflow-wrap: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+}
+
+@media (max-width: 340px) {
+  .customer-page.customer-page .customer-brand__copy small {
+    display: none !important;
+  }
+}
+
 @media (min-width: 901px) and (max-width: 1024px) {
   .customer-product-modal {
     display: flex;
