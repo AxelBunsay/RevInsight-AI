@@ -28,6 +28,7 @@ import { CustomerPrototypeProvider } from './Customer/react/CustomerPrototypePro
 import { CustomerPage } from './Customer/react/CustomerLayout';
 import { syncPortalFavicon } from './utils/portalFavicon';
 import './Customer/styles/customer-responsive.css';
+import './Customer/styles/customer-theme.css';
 
 function PortalFavicon() {
   const { pathname } = useLocation();

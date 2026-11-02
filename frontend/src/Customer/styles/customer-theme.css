@@ -1,0 +1,232 @@
+.customer-page,
+.customer-auth-page {
+  --c-bg: #FAF1E8;
+  --c-card-border: #F3D9C2;
+  --c-accent-tint: #FDEEDF;
+  --c-primary: #C2410C;
+  --c-primary-hover: #9A3412;
+  --c-on-primary: #FFFFFF;
+  --c-accent: #F26B1D;
+  --c-brand-text: #B33A00;
+  --c-dark: #2B1608;
+}
+
+.customer-page.customer-page,
+.customer-auth-page.customer-auth-page {
+  background-color: var(--c-bg);
+  color: var(--c-dark);
+}
+
+.customer-page.customer-page:not(.shop-page):not(.services-page),
+.customer-page.customer-page.shop-page,
+.customer-page.customer-page.services-page {
+  background-color: var(--c-bg);
+}
+
+.customer-page .customer-header {
+  background-color: var(--c-bg);
+  border-color: var(--c-card-border);
+}
+
+.customer-page :is(.shop-how-it-works .shop-pickup-only, .customer-labor-only-note, .customer-labor-only-switch, .customer-parts-source-tag, .customer-account-identity > span, .customer-account-records article > span) {
+  background-color: var(--c-accent-tint);
+  color: var(--c-dark);
+}
+
+.customer-page :is(.product-card, .service-card, .customer-detail-layout, .customer-product-modal, .customer-related-product, .customer-account-identity, .customer-account-panel, .customer-reservation-card, .customer-reservation-detail-card, .customer-confirmation-card, .customer-confirmation-dialog, .customer-empty-cart, .shop-category-directory, .shop-no-results, .shop-load-error, .customer-product-categories, .customer-reservation-tabs, .customer-purchases-tabs, .customer-account-tabs, .customer-notification-popover, .landing-trust-strip > div, .landing-how-grid article) {
+  background-color: #fff;
+  border: 1px solid var(--c-card-border);
+}
+
+.customer-page :is(.shop-motorcycle-filter, .customer-reservation-detail-meta, .customer-confirmation-order, .customer-account-records article) {
+  background-color: var(--c-bg);
+  color: var(--c-dark);
+}
+
+.customer-page .customer-account-delete {
+  background-color: #fff;
+  border-color: var(--c-card-border);
+}
+
+.customer-auth-page .customer-auth-panel {
+  background-color: #fff;
+}
+
+.customer-page :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea),
+.customer-auth-page :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  border-color: var(--c-card-border);
+}
+
+.customer-page .customer-heading h1,
+.customer-page .customer-product-results h2,
+.customer-page .customer-flow-section-heading h2,
+.customer-page .customer-reservation-card-top h2,
+.customer-page .customer-reservation-detail-card .customer-reservation-card-top h1,
+.customer-page .customer-account-identity strong,
+.customer-auth-page .customer-auth-heading h2 {
+  color: var(--c-dark);
+}
+
+.customer-page :is(.product-price, .customer-detail-price, .customer-booking-footer strong, .service-card-footer strong, .customer-reservation-card-bottom strong, .customer-reservation-card-bottom a, .customer-account-identity-stats strong, .customer-flow-section-heading a, .customer-related-product small),
+.customer-page :is(.customer-eyebrow, .service-category-label, .landing-section-heading > a, .services-my-bookings, .shop-section-heading a),
+.customer-page .shop-content a:not(.customer-primary-button):not(.customer-secondary-button):not(.product-card):not(.shop-compact-banner a),
+.customer-auth-page .customer-auth-content .customer-link a {
+  color: var(--c-brand-text);
+}
+
+.customer-page :is(.customer-primary-button, .customer-detail-actions .customer-primary-button, .customer-booking-footer .customer-primary-button, .customer-checkout-button, .service-booking-form > button, .service-card-footer button, .service-card-footer .service-book-link, .shop-no-results button, .shop-load-error button, .shop-settings-error button, .customer-site-footer-map-link, .customer-modal-footer .customer-primary-button),
+.customer-auth-page .customer-auth-form button {
+  min-height: 44px;
+  border-color: transparent;
+  background-color: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.customer-page :is(.customer-primary-button, .customer-detail-actions .customer-primary-button, .customer-booking-footer .customer-primary-button, .customer-checkout-button, .service-booking-form > button, .service-card-footer button, .service-card-footer .service-book-link, .shop-no-results button, .shop-load-error button, .shop-settings-error button, .customer-site-footer-map-link, .customer-modal-footer .customer-primary-button):hover:not(:disabled),
+.customer-auth-page .customer-auth-form button:hover:not(:disabled) {
+  background-color: var(--c-primary-hover);
+  color: var(--c-on-primary);
+}
+
+.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .shop-motorcycle-filter button, .customer-account-shortcuts .customer-secondary-button) {
+  min-height: 44px;
+  border: 1px solid var(--c-card-border);
+  background-color: #fff;
+  color: var(--c-dark);
+}
+
+.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .shop-motorcycle-filter button, .customer-account-shortcuts .customer-secondary-button):hover:not(:disabled) {
+  background-color: var(--c-accent-tint);
+  color: var(--c-dark);
+}
+
+.customer-page :is(.customer-product-categories button.active, .category-pills button.active, .service-category-pills button.active, .services-parts-mode button.active, .customer-reservation-tabs button.is-active, .customer-purchases-tabs button.is-active, .customer-account-tabs button.is-active, .customer-pagination button.is-active, .customer-nav > a.active, .customer-account-menu-trigger.active),
+.customer-auth-page .customer-auth-tab-indicator {
+  border-color: var(--c-accent);
+  background-color: var(--c-accent);
+  color: var(--c-dark);
+}
+
+.customer-page :is(.customer-product-categories button.active small, .customer-account-tabs button.is-active .customer-account-tab-count) {
+  background-color: var(--c-accent-tint);
+  color: var(--c-dark);
+}
+
+.customer-page .services-parts-mode button.active .service-labor-only-label {
+  color: var(--c-dark);
+}
+
+.customer-auth-page .customer-auth-tabs a.active {
+  color: var(--c-dark);
+}
+
+.customer-page :is(.product-badge, .landing-product-grid .product-badge) {
+  background-color: var(--c-accent);
+  color: var(--c-dark);
+}
+
+.customer-page .customer-parts-source-tag,
+.customer-page .customer-purchase-type {
+  background-color: var(--c-accent-tint);
+  color: var(--c-dark);
+}
+
+.customer-page .customer-header-actions .customer-header-icon-button svg,
+.customer-page .service-icon svg,
+.customer-page .customer-account-identity > span {
+  color: var(--c-accent);
+}
+
+.customer-page.shop-page .shop-category-tile .shop-category-icon,
+.customer-page .landing-trust-icon {
+  background-color: var(--c-accent-tint);
+  color: var(--c-accent);
+}
+
+.customer-auth-page .customer-auth-copy li > span:first-child {
+  background-color: var(--c-accent);
+  color: var(--c-dark);
+}
+
+.customer-page :focus-visible,
+.customer-auth-page :focus-visible {
+  outline-color: var(--c-accent);
+}
+
+.customer-page input[type="checkbox"],
+.customer-auth-page input[type="checkbox"] {
+  accent-color: var(--c-accent);
+}
+
+.customer-page .customer-compact-banner {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.customer-page .customer-compact-banner > a {
+  background: #fff;
+  color: var(--c-brand-text);
+}
+
+.customer-page .landing-hero,
+.customer-page .landing-labor-card,
+.customer-page .landing-final-cta {
+  background-image: linear-gradient(105deg, var(--c-dark), var(--c-brand-text) 62%, var(--c-primary));
+}
+
+.customer-page .landing-hero-primary .landing-hero-actions a:first-child,
+.customer-page .landing-labor-card a,
+.customer-page .landing-final-cta a {
+  background-color: #fff;
+  color: var(--c-brand-text);
+}
+
+.customer-page .landing-hero-primary .landing-hero-actions a:last-child {
+  background-color: transparent;
+  color: #fff;
+}
+
+.customer-page .landing-hero-primary .landing-hero-actions a:first-child:hover,
+.customer-page .landing-labor-card a:hover,
+.customer-page .landing-final-cta a:hover {
+  background-color: #fff;
+  color: var(--c-brand-text);
+}
+
+.customer-page :is(.customer-primary-button, .customer-checkout-button, .service-booking-form > button, .service-card-footer button, .service-card-footer .service-book-link, .shop-no-results button, .shop-load-error button, .shop-settings-error button, .customer-site-footer-map-link, .customer-modal-footer .customer-primary-button):disabled,
+.customer-auth-page .customer-auth-form button:disabled {
+  background-color: var(--c-card-border);
+  color: var(--c-dark);
+  cursor: not-allowed;
+}
+
+.customer-page.customer-page .customer-nav > a.active,
+.customer-page.customer-page .customer-account-menu-trigger.active {
+  background-color: var(--c-accent);
+  color: var(--c-dark);
+}
+
+.customer-page.customer-page.shop-page .product-card .product-price,
+.customer-page.customer-page .product-price,
+.customer-page.customer-page .customer-detail-price,
+.customer-page.customer-page .service-card-footer strong,
+.customer-page.customer-page .customer-booking-footer strong {
+  color: var(--c-brand-text);
+}
+
+.customer-page.customer-page.shop-page .product-card .product-badge,
+.customer-page.customer-page .landing-product-grid .product-badge {
+  background-color: var(--c-accent);
+  color: var(--c-dark);
+}
+
+.customer-page.customer-page.shop-page .shop-category-tile .shop-category-icon {
+  background-color: var(--c-accent-tint);
+  color: var(--c-accent);
+}
+
+.customer-page.customer-page .landing-section-heading > a,
+.customer-page.customer-page .customer-eyebrow,
+.customer-page.customer-page .service-category-label {
+  color: var(--c-brand-text);
+}
