@@ -2,11 +2,6 @@ const mongoose = require('mongoose');
 
 const usernamePattern = /^[a-z0-9][a-z0-9._-]{3,19}$/;
 
-const isValidPhilippinePhone = (phoneNumber) => {
-  return typeof phoneNumber === 'string'
-    && /^(?:(?:\+?63)|0)?[\s()-]*9(?:[\s()-]*\d){9}$/.test(phoneNumber.trim());
-};
-
 const mechanicSchema = new mongoose.Schema({
   // Authentication & Identity
   username: {
@@ -49,8 +44,11 @@ const mechanicSchema = new mongoose.Schema({
     required: [true, 'Phone number is required'],
     trim: true,
     validate: {
-      validator: isValidPhilippinePhone,
-      message: 'Enter a valid Philippine mobile number.'
+      validator: async (phoneNumber) => {
+        const { cleanAndValidateMobileNumber } = await import('../../shared/mobileNumber.mjs');
+        return cleanAndValidateMobileNumber(phoneNumber).isValid;
+      },
+      message: 'Enter a valid mobile number (11 digits, starts with 09)'
     }
   },
 

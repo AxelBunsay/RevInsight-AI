@@ -5,26 +5,12 @@ import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { clearAuthSession } from '../../auth/authSession';
 import { clearCustomerAuthAction } from './customerAuthAction';
+import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from '../../../../shared/mobileNumber.mjs';
 import CustomerModalPortal from './CustomerModalPortal';
 import useCustomerModalEffects from './useCustomerModalEffects';
 import '../styles/customer-flow.css';
 
 const activeReservationStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved'];
-
-function formatPhoneNumber(value) {
-  let digits = String(value || '').replace(/\D/g, '');
-  if (digits.startsWith('63')) digits = digits.slice(2);
-  if (digits.startsWith('0')) digits = digits.slice(1);
-  digits = digits.slice(0, 10);
-  const groups = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 10)].filter(Boolean);
-  return groups.length ? `+63 ${groups.join(' ')}` : '';
-}
-
-function isValidPhilippineMobile(value) {
-  const digits = String(value || '').replace(/\D/g, '');
-  const localNumber = digits.startsWith('63') ? digits.slice(2) : digits.startsWith('0') ? digits.slice(1) : digits;
-  return /^9\d{9}$/.test(localNumber);
-}
 
 function dateKeyInManila(value) {
   if (!value) return '';
@@ -46,7 +32,7 @@ export default function CustomerProfile() {
     firstName: profile.firstName || '',
     lastName: profile.lastName || '',
     email: profile.email || '',
-    phoneNumber: formatPhoneNumber(profile.phoneNumber || '')
+    phoneNumber: cleanAndValidateMobileNumber(profile.phoneNumber || '').canonicalDigits
   }));
   const [vehicleForm, setVehicleForm] = useState({ make: '', model: '', year: '', plate: '' });
   const [itemReservations, setItemReservations] = useState([]);
@@ -120,7 +106,7 @@ export default function CustomerProfile() {
     const errors = {};
     if (!profileForm.firstName.trim()) errors.firstName = 'First name is required.';
     if (!profileForm.lastName.trim()) errors.lastName = 'Last name is required.';
-    if (!isValidPhilippineMobile(profileForm.phoneNumber)) errors.phoneNumber = 'Enter a valid Philippine mobile number, such as +63 947 188 6228.';
+    if (!cleanAndValidateMobileNumber(profileForm.phoneNumber).isValid) errors.phoneNumber = MOBILE_NUMBER_ERROR;
     setFieldErrors(errors);
     setFormError('');
     setToast('');
@@ -131,16 +117,16 @@ export default function CustomerProfile() {
       const response = await api.updateCustomerProfile({
         firstName: profileForm.firstName.trim(),
         lastName: profileForm.lastName.trim(),
-        phoneNumber: formatPhoneNumber(profileForm.phoneNumber)
+        phoneNumber: cleanAndValidateMobileNumber(profileForm.phoneNumber).digits
       });
       const updatedProfile = response.user || {
         ...profile,
         ...profileForm,
-        phoneNumber: formatPhoneNumber(profileForm.phoneNumber)
+        phoneNumber: cleanAndValidateMobileNumber(profileForm.phoneNumber).digits
       };
       updateProfile(updatedProfile);
       localStorage.setItem('customerUser', JSON.stringify({ ...profile, ...updatedProfile }));
-      setProfileForm((current) => ({ ...current, ...updatedProfile, phoneNumber: formatPhoneNumber(updatedProfile.phoneNumber) }));
+      setProfileForm((current) => ({ ...current, ...updatedProfile, phoneNumber: cleanAndValidateMobileNumber(updatedProfile.phoneNumber).canonicalDigits }));
       setToast('Profile saved successfully.');
     } catch (error) {
       const message = error.message || 'Profile could not be saved.';
@@ -254,7 +240,7 @@ export default function CustomerProfile() {
           <label>First name<input required value={profileForm.firstName} aria-invalid={Boolean(fieldErrors.firstName)} onChange={(event) => { setProfileForm({ ...profileForm, firstName: event.target.value }); setFieldErrors({ ...fieldErrors, firstName: '' }); setFormError(''); }} />{fieldErrors.firstName && <small className="customer-field-error" role="alert">{fieldErrors.firstName}</small>}</label>
           <label>Last name<input required value={profileForm.lastName} aria-invalid={Boolean(fieldErrors.lastName)} onChange={(event) => { setProfileForm({ ...profileForm, lastName: event.target.value }); setFieldErrors({ ...fieldErrors, lastName: '' }); setFormError(''); }} />{fieldErrors.lastName && <small className="customer-field-error" role="alert">{fieldErrors.lastName}</small>}</label>
           <label className="customer-account-email-field">Email address<input type="email" readOnly title="Your email is your login and can't be changed here." value={profileForm.email} className="is-read-only" /></label>
-          <label>Phone number<input type="tel" inputMode="tel" value={profileForm.phoneNumber} aria-invalid={Boolean(fieldErrors.phoneNumber)} onChange={(event) => { setProfileForm({ ...profileForm, phoneNumber: formatPhoneNumber(event.target.value) }); setFieldErrors({ ...fieldErrors, phoneNumber: '' }); setFormError(''); }} placeholder="+63 947 188 6228" />{fieldErrors.phoneNumber && <small className="customer-field-error" role="alert">{fieldErrors.phoneNumber}</small>}</label>
+          <label>Phone number<input type="tel" inputMode="numeric" maxLength={11} autoComplete="tel" value={profileForm.phoneNumber} aria-invalid={Boolean(fieldErrors.phoneNumber)} onChange={(event) => { const phoneNumber = cleanAndValidateMobileNumber(event.target.value).digits.slice(0, 11); setProfileForm({ ...profileForm, phoneNumber }); setFieldErrors({ ...fieldErrors, phoneNumber: cleanAndValidateMobileNumber(phoneNumber).isValid ? '' : MOBILE_NUMBER_ERROR }); setFormError(''); }} onPaste={(event) => { event.preventDefault(); const phoneNumber = cleanAndValidateMobileNumber(event.clipboardData.getData('text')).digits.slice(0, 11); setProfileForm({ ...profileForm, phoneNumber }); setFieldErrors({ ...fieldErrors, phoneNumber: cleanAndValidateMobileNumber(phoneNumber).isValid ? '' : MOBILE_NUMBER_ERROR }); setFormError(''); }} placeholder="09xxxxxxxxx" />{fieldErrors.phoneNumber && <small className="customer-field-error" role="alert">{fieldErrors.phoneNumber}</small>}</label>
           <button type="submit" className="customer-primary-button" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save profile'}</button>
           {formError && <small className="customer-field-error customer-form-error" role="alert">{formError}</small>}
         </form>

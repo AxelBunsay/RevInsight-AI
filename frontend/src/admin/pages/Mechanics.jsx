@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import { getMechanicFormError } from "./mechanicFormValidation";
+import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from "../../../../shared/mobileNumber.mjs";
 
 function Mechanics() {
   const [mechanics, setMechanics] = useState([]);
@@ -16,6 +17,7 @@ function Mechanics() {
   const [isAdding, setIsAdding] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [phoneNumberError, setPhoneNumberError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [form, setForm] = useState({
     firstName: "",
@@ -74,7 +76,7 @@ function Mechanics() {
             username: mechanic.username || "",
             email: mechanic.email || "",
             password: "",
-            phoneNumber: mechanic.phoneNumber || "",
+            phoneNumber: cleanAndValidateMobileNumber(mechanic.phoneNumber || "").canonicalDigits,
             specialization: mechanic.specialization || "general",
             yearsOfExperience: mechanic.yearsOfExperience || 0,
           }
@@ -94,6 +96,12 @@ function Mechanics() {
   const saveMechanic = async (event) => {
     event.preventDefault();
     setError("");
+    setPhoneNumberError("");
+    const mobileNumber = cleanAndValidateMobileNumber(form.phoneNumber);
+    if (!mobileNumber.isValid) {
+      setPhoneNumberError(MOBILE_NUMBER_ERROR);
+      return;
+    }
     const formError = getMechanicFormError(form, Boolean(editingMechanic));
     if (formError) {
       setError(formError);
@@ -348,11 +356,24 @@ function Mechanics() {
                 <input
                   required
                   type="tel"
+                  inputMode="numeric"
+                  maxLength={11}
+                  autoComplete="tel"
                   value={form.phoneNumber}
-                  onChange={(event) =>
-                    setForm({ ...form, phoneNumber: event.target.value })
-                  }
+                  aria-invalid={Boolean(phoneNumberError)}
+                  onChange={(event) => {
+                    const phoneNumber = cleanAndValidateMobileNumber(event.target.value).digits.slice(0, 11);
+                    setForm({ ...form, phoneNumber });
+                    setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? "" : MOBILE_NUMBER_ERROR);
+                  }}
+                  onPaste={(event) => {
+                    event.preventDefault();
+                    const phoneNumber = cleanAndValidateMobileNumber(event.clipboardData.getData("text")).digits.slice(0, 11);
+                    setForm({ ...form, phoneNumber });
+                    setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? "" : MOBILE_NUMBER_ERROR);
+                  }}
                 />
+                {phoneNumberError && <small className="inventory-field-error" role="alert">{phoneNumberError}</small>}
               </label>
               <label className="mechanic-form-field">
                 Email (optional)

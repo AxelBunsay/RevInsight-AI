@@ -3,47 +3,44 @@ import validation from '../middleware/validate.js';
 
 const { validateCustomerProfile, validateRegister, validateCreateMechanic } = validation;
 
-function validateProfile(body) {
+async function validateProfile(body) {
   const req = { body };
   const res = {
     status: vi.fn().mockReturnThis(),
     json: vi.fn()
   };
   const next = vi.fn();
-  validateCustomerProfile(req, res, next);
+  await validateCustomerProfile(req, res, next);
   return { res, next };
 }
 
 describe('customer profile phone validation', () => {
-  it.each(['+63 947 188 6228', '09471886228', '9471886228'])(
-    'accepts a Philippine mobile number in %s format',
-    (phoneNumber) => {
-      const { res, next } = validateProfile({ firstName: 'Alex', lastName: 'Rider', phoneNumber });
-      expect(next).toHaveBeenCalledOnce();
-      expect(res.status).not.toHaveBeenCalled();
-    },
-  );
+  it('accepts an 11-digit mobile number starting with 09', async () => {
+    const { res, next } = await validateProfile({ firstName: 'Alex', lastName: 'Rider', phoneNumber: '09171234567' });
+    expect(next).toHaveBeenCalledOnce();
+    expect(res.status).not.toHaveBeenCalled();
+  });
 
-  it('rejects a non-mobile phone number', () => {
-    const { res, next } = validateProfile({ firstName: 'Alex', lastName: 'Rider', phoneNumber: '02 8123 4567' });
+  it('rejects a number that does not start with 09', async () => {
+    const { res, next } = await validateProfile({ firstName: 'Alex', lastName: 'Rider', phoneNumber: '12345' });
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ message: 'Enter a valid Philippine mobile number.' });
+    expect(res.json).toHaveBeenCalledWith({ message: 'Enter a valid mobile number (11 digits, starts with 09)' });
     expect(next).not.toHaveBeenCalled();
   });
 
-  function runValidation(validator, body) {
+  async function runValidation(validator, body) {
     const req = { body };
     const res = {
       status: vi.fn().mockReturnThis(),
       json: vi.fn()
     };
     const next = vi.fn();
-    validator(req, res, next);
+    await validator(req, res, next);
     return { res, next };
   }
 
   describe('registration credential validation', () => {
-    it('requires a strong password and Philippine mobile number for registration', () => {
+    it('requires a strong password and valid mobile number for registration', async () => {
       const body = {
         email: 'rider@example.com',
         password: 'Password1',
@@ -51,16 +48,16 @@ describe('customer profile phone validation', () => {
         lastName: 'Rider',
         phoneNumber: '09171234567'
       };
-      expect(runValidation(validateRegister, body).next).toHaveBeenCalledOnce();
+      expect((await runValidation(validateRegister, body)).next).toHaveBeenCalledOnce();
 
-      const invalidPhone = runValidation(validateRegister, { ...body, phoneNumber: '02 8123 4567' });
+      const invalidPhone = await runValidation(validateRegister, { ...body, phoneNumber: '12345' });
       expect(invalidPhone.res.status).toHaveBeenCalledWith(400);
       expect(invalidPhone.res.json).toHaveBeenCalledWith({
-        message: 'Enter a valid Philippine mobile number.'
+        message: 'Enter a valid mobile number (11 digits, starts with 09)'
       });
     });
 
-    it('requires an eight-character password with a letter and number for mechanic creation', () => {
+    it('requires an eight-character password with a letter and number for mechanic creation', async () => {
       const body = {
         username: 'mechanic.alex',
         email: 'mechanic@example.com',
@@ -71,7 +68,7 @@ describe('customer profile phone validation', () => {
         specialization: 'general',
         yearsOfExperience: 1
       };
-      const { res, next } = runValidation(validateCreateMechanic, body);
+      const { res, next } = await runValidation(validateCreateMechanic, body);
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
         message: 'Password must be at least 8 characters and include a letter and a number.'

@@ -1,11 +1,12 @@
+import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from "../../../../shared/mobileNumber.mjs";
+
 export function isValidMechanicUsername(username) {
   return typeof username === "string"
     && /^[a-z0-9][a-z0-9._-]{3,19}$/i.test(username.trim());
 }
 
 export function isValidPhilippinePhone(phoneNumber) {
-  return typeof phoneNumber === "string"
-    && /^(?:(?:\+?63)|0)?[\s()-]*9(?:[\s()-]*\d){9}$/.test(phoneNumber.trim());
+  return cleanAndValidateMobileNumber(phoneNumber).isValid;
 }
 
 export function getMechanicFormError(form, isEditing) {
@@ -16,7 +17,7 @@ export function getMechanicFormError(form, isEditing) {
     return "Username must be 4-20 characters, start with a letter or number, and use only letters, numbers, dots, underscores or hyphens.";
   }
   if (!isValidPhilippinePhone(form.phoneNumber)) {
-    return "Enter a valid Philippine mobile number.";
+    return MOBILE_NUMBER_ERROR;
   }
   if (!isEditing && (!form.password || form.password.length < 8 || !/[A-Za-z]/.test(form.password) || !/\d/.test(form.password))) {
     return "Password must be at least 8 characters and include a letter and a number.";

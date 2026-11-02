@@ -4,7 +4,7 @@ import { getAuthToken } from '../../auth/authSession';
 import { api } from '../../services/api';
 import ShopProductCard from './ShopProductCard';
 import { CustomerPage } from './CustomerLayout';
-import { getVisitDetails, selectLandingProducts, selectLandingServices, shouldShowFeaturedProducts } from './landingData';
+import { selectLandingProducts, selectLandingServices, shouldShowFeaturedProducts } from './landingData';
 import { getProductModalSearch } from './productDetailHelpers';
 import { ServiceCard } from './Services';
 import '../styles/landing.css';
@@ -54,7 +54,6 @@ export default function Landing() {
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [services, setServices] = useState([]);
-  const [shopSettings, setShopSettings] = useState(null);
   const [downPaymentPercent, setDownPaymentPercent] = useState(null);
   const [hasCustomerAccount] = useState(() => {
     const token = getAuthToken('customer');
@@ -62,8 +61,6 @@ export default function Landing() {
   });
   const featuredProducts = useMemo(() => selectLandingProducts(products), [products]);
   const popularServices = useMemo(() => selectLandingServices(services), [services]);
-  const visitDetails = getVisitDetails(shopSettings);
-
   useEffect(() => {
     let active = true;
     Promise.allSettled([
@@ -76,7 +73,6 @@ export default function Landing() {
       if (servicesResult.status === 'fulfilled') setServices(servicesResult.value.services || []);
       if (settingsResult.status === 'fulfilled') {
         const settings = settingsResult.value.settings || null;
-        setShopSettings(settings);
         setDownPaymentPercent(settings?.downPaymentPercent ?? null);
       }
     }).finally(() => {
@@ -89,7 +85,6 @@ export default function Landing() {
     <div className="landing-content">
       <section className="shop-market-hero landing-hero" aria-label="Manoy's Motorcycle home">
         <div className="shop-promo-primary landing-hero-primary">
-          <p>MANOY&apos;S MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>
           <h1>Everything your ride needs.</h1>
           <span>Quality parts, trusted accessories, and expert service in one place. Reserve online, pay the down payment, and pick up at the shop.</span>
           <div className="landing-hero-actions">
@@ -97,15 +92,21 @@ export default function Landing() {
             <Link to="/customer/services">Book a service</Link>
           </div>
         </div>
-        <div className="landing-hero-logo" aria-hidden="true">
-          <img src="/logo.svg" alt="" width="168" height="168" />
-        </div>
       </section>
 
       <section className="landing-trust-strip" aria-label="Shop highlights">
-        <div><strong>Ride-ready essentials</strong></div>
-        <div><strong>Expert service support</strong></div>
-        <div><strong>Pickup only. No delivery.</strong></div>
+        <div className="landing-trust-card">
+          <span className="landing-trust-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 13.5h16l-1.6-5a2 2 0 0 0-1.9-1.4H7.5a2 2 0 0 0-1.9 1.4L4 13.5Zm0 0v4h2m12 0h2v-4m-14 0v2h16v-2M7 17.5v1m10-1v1" /><circle cx="7" cy="13.5" r="1" /><circle cx="17" cy="13.5" r="1" /></svg></span>
+          <div><strong>Ride-ready essentials</strong><p>Parts selected for everyday maintenance.</p></div>
+        </div>
+        <div className="landing-trust-card">
+          <span className="landing-trust-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3.5 19 6v5.3c0 4.3-2.8 7.4-7 9.2-4.2-1.8-7-4.9-7-9.2V6l7-2.5Z" /><path d="m9 12 2 2 4-4" /></svg></span>
+          <div><strong>Expert service support</strong><p>Book a mechanic when you need one.</p></div>
+        </div>
+        <div className="landing-trust-card">
+          <span className="landing-trust-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 7h10v10H4zM14 10h3l3 3v4h-6" /><circle cx="8" cy="18" r="1.7" /><circle cx="17" cy="18" r="1.7" /></svg></span>
+          <div><strong>Pickup only. No delivery.</strong><p>Reserve online, collect at the shop.</p></div>
+        </div>
       </section>
 
         {shouldShowFeaturedProducts(productsLoading, featuredProducts) && <section className="landing-section" aria-labelledby="landing-featured-title">
@@ -139,27 +140,16 @@ export default function Landing() {
       <section className="landing-section landing-how" aria-labelledby="landing-how-title">
         <h2 id="landing-how-title">How it works</h2>
         <div className="landing-how-grid">
-          <article>
+          <article className="landing-how-parts">
             <h3>Parts</h3>
-            <ol><li>Reserve your item</li><li>Pay the down payment (GCash)</li><li>Pick up at the shop and pay the balance</li></ol>
+            <ol><li><span className="landing-step-number">1</span><span>Reserve your item</span></li><li><span className="landing-step-number">2</span><span>Pay the down payment (GCash)</span></li><li><span className="landing-step-number">3</span><span>Pick up at the shop and pay the balance</span></li></ol>
           </article>
-          <article>
+          <article className="landing-how-services">
             <h3>Services</h3>
-            <ol><li>Choose a service, date and time</li><li>Pay the down payment (GCash)</li><li>A mechanic handles the rest</li></ol>
+            <ol><li><span className="landing-step-number">1</span><span>Choose a service, date and time</span></li><li><span className="landing-step-number">2</span><span>Pay the down payment (GCash)</span></li><li><span className="landing-step-number">3</span><span>A mechanic handles the rest</span></li></ol>
           </article>
         </div>
       </section>
-
-      {visitDetails && <section className="landing-section landing-visit" aria-labelledby="landing-visit-title">
-        <h2 id="landing-visit-title">Visit us</h2>
-        <div className="landing-visit-details">
-          {visitDetails.address && <p>{visitDetails.address}</p>}
-          {visitDetails.hours && <p>Hours: {visitDetails.hours}</p>}
-          {visitDetails.contact && <p>Contact: <a href={`tel:${visitDetails.contact.replace(/[^\d+]/g, '')}`}>{visitDetails.contact}</a></p>}
-          <p>Pickup only. No delivery.</p>
-        </div>
-        {visitDetails.address && <a className="landing-map-link" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(visitDetails.address)}`} target="_blank" rel="noreferrer">Open in Maps</a>}
-      </section>}
 
       {!hasCustomerAccount && <section className="landing-final-cta" aria-label="Customer account">
         <div>

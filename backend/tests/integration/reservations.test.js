@@ -705,7 +705,7 @@ describe('reservation business flow integration', () => {
     },
     pickupAddress: '',
     pickupHours: '',
-    contactNumber: '0900 000 0000',
+    contactNumber: '09000000000',
     ...overrides
   });
 
@@ -727,17 +727,17 @@ describe('reservation business flow integration', () => {
     expect(response.body.message).toBe('Pickup hours must be 80 characters or fewer.');
   });
 
-  it('rejects shop contact numbers over 40 characters and disallowed characters', async () => {
+  it('rejects shop contact numbers that do not match the mobile format', async () => {
     const tooLong = await adminPut('/api/admin/reservations/settings')
       .send(reservationSettingsPayload({ contactNumber: '1'.repeat(41) }));
     expect(tooLong.status).toBe(400);
-    expect(tooLong.body.fieldErrors.contactNumber).toBe('Shop contact number must be 40 characters or fewer.');
+    expect(tooLong.body.fieldErrors.contactNumber).toBe('Enter a valid mobile number (11 digits, starts with 09)');
 
     const invalid = await adminPut('/api/admin/reservations/settings')
       .send(reservationSettingsPayload({ contactNumber: '0917-ABC-1234' }));
     expect(invalid.status).toBe(400);
     expect(invalid.body.fieldErrors.contactNumber)
-      .toBe('Shop contact number may contain only digits, spaces, +, -, and parentheses.');
+      .toBe('Enter a valid mobile number (11 digits, starts with 09)');
   });
 
   it('saves and returns the pickup address, hours and shop contact number', async () => {
@@ -746,14 +746,14 @@ describe('reservation business flow integration', () => {
       .send(reservationSettingsPayload({
         pickupAddress,
         pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
-        contactNumber: '+63 (917) 123-4567'
+        contactNumber: '09171234567'
       }));
 
     expect(response.status).toBe(200);
     expect(response.body.settings).toMatchObject({
       pickupAddress,
       pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
-      contactNumber: '+63 (917) 123-4567'
+      contactNumber: '09171234567'
     });
 
     const customerSettings = await api.get('/api/reservations/shop-settings');
@@ -761,7 +761,7 @@ describe('reservation business flow integration', () => {
     expect(customerSettings.body.settings).toMatchObject({
       pickupAddress,
       pickupHours: 'Mon-Sat 9:00 AM to 6:00 PM',
-      contactNumber: '+63 (917) 123-4567'
+      contactNumber: '09171234567'
     });
   });
 

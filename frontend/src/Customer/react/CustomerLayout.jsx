@@ -1,9 +1,10 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { api } from '../../services/api';
-import { hasCustomerFooterDetails } from './customerFooterSettings';
+import { CUSTOMER_SHOP_MAPS_URL, hasCustomerFooterDetails } from './customerFooterSettings';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
 import { getLegacyCustomerPurchaseLink } from './customerPurchases';
+import { getCustomerAuthRedirect } from './customerAuthAction';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import NotificationDropdown from '../../components/NotificationDropdown';
 import NotificationContent from '../../components/NotificationContent';
@@ -64,12 +65,16 @@ export function CustomerAccountMenuTrigger({ isActive, isExpanded, onClick }) {
   </button>;
 }
 
-export function CustomerAuthGuard({ children }) {
+export function CustomerAuthGuard() {
   const location = useLocation();
-  const customerToken = getAuthToken('customer');
-  const hasCustomerAccount = Boolean(customerToken && customerToken !== 'prototype-guest');
+  const redirect = getCustomerAuthRedirect(getAuthToken('customer'), location);
 
-  return hasCustomerAccount ? children : <Navigate to="/customer/login" replace state={{ from: location }} />;
+  return redirect ? <Navigate to={redirect} replace /> : <Outlet />;
+}
+
+export function CustomerPurchasesRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/my-purchases${location.search || '?tab=all'}${location.hash}`} replace />;
 }
 
 export function CustomerHeader() {
@@ -297,6 +302,7 @@ function CustomerFooter() {
         </div>
         <span>Pickup only. No delivery.</span>
       </div>}
+    <a className="customer-site-footer-map-link" href={CUSTOMER_SHOP_MAPS_URL} target="_blank" rel="noopener noreferrer">Open in Maps</a>
   </footer>;
 }
 

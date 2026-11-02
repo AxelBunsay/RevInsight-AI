@@ -10,6 +10,7 @@ import { getItemsPageData, getItemsRequest, itemFilterOptions } from "./itemsTra
 import TransactionCards from "./TransactionCards";
 import { formatTransactionMoney as formatMoney } from "./transactionCardData";
 import { getPartsSourceExportValue, getPartsSourceQuery, SERVICE_TRANSACTION_EXPORT_HEADERS } from "./transactionPartsSource";
+import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from "../../../../shared/mobileNumber.mjs";
 
 const reservationItemName = (item) => item.variantLabel && !String(item.name || "").includes(item.variantLabel)
   ? `${item.name || item.productName || "Product"} - ${item.variantLabel}`
@@ -560,6 +561,7 @@ function Transactions() {
       setSettings({
         ...defaultReservationSettings,
         ...response.settings,
+        contactNumber: cleanAndValidateMobileNumber(response.settings?.contactNumber || "").canonicalDigits,
         serviceDownPaymentPercent: response.settings?.serviceDownPaymentPercent ?? response.settings?.downPaymentPercent ?? defaultReservationSettings.serviceDownPaymentPercent,
         paymentInstructions: {
           ...defaultReservationSettings.paymentInstructions,
@@ -646,12 +648,17 @@ function Transactions() {
     event.preventDefault();
     setSettingsError("");
     setSettingsFieldErrors({});
+    if (!cleanAndValidateMobileNumber(settings.contactNumber).isValid) {
+      setSettingsFieldErrors({ contactNumber: MOBILE_NUMBER_ERROR });
+      return;
+    }
     setIsSavingSettings(true);
     try {
       const response = await api.updateReservationSettings(settings);
       setSettings({
         ...defaultReservationSettings,
         ...response.settings,
+        contactNumber: cleanAndValidateMobileNumber(response.settings?.contactNumber || "").canonicalDigits,
         serviceDownPaymentPercent: response.settings?.serviceDownPaymentPercent ?? response.settings?.downPaymentPercent ?? defaultReservationSettings.serviceDownPaymentPercent,
         paymentInstructions: {
           ...defaultReservationSettings.paymentInstructions,
@@ -1193,14 +1200,29 @@ function Transactions() {
             <label>
               Shop contact number
               <input
-                type="text"
-                inputMode="tel"
+                type="tel"
+                inputMode="numeric"
                 autoComplete="tel"
-                maxLength="40"
-                pattern="[0-9+() -]*"
+                maxLength={11}
                 aria-invalid={Boolean(settingsFieldErrors.contactNumber)}
                 value={settings.contactNumber}
-                onChange={(event) => updateReservationSetting("contactNumber", event.target.value)}
+                onChange={(event) => {
+                  const contactNumber = cleanAndValidateMobileNumber(event.target.value).digits.slice(0, 11);
+                  updateReservationSetting("contactNumber", contactNumber);
+                  setSettingsFieldErrors((current) => ({
+                    ...current,
+                    contactNumber: cleanAndValidateMobileNumber(contactNumber).isValid ? "" : MOBILE_NUMBER_ERROR,
+                  }));
+                }}
+                onPaste={(event) => {
+                  event.preventDefault();
+                  const contactNumber = cleanAndValidateMobileNumber(event.clipboardData.getData("text")).digits.slice(0, 11);
+                  updateReservationSetting("contactNumber", contactNumber);
+                  setSettingsFieldErrors((current) => ({
+                    ...current,
+                    contactNumber: cleanAndValidateMobileNumber(contactNumber).isValid ? "" : MOBILE_NUMBER_ERROR,
+                  }));
+                }}
               />
               {settingsFieldErrors.contactNumber && <small className="inventory-field-error" role="alert">{settingsFieldErrors.contactNumber}</small>}
             </label>

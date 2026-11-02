@@ -16,11 +16,11 @@ const validForm = {
 };
 
 describe("mechanic form validation", () => {
-  it("accepts normalized username rules and Philippine mobile formats", () => {
+  it("accepts normalized usernames and only 09 mobile numbers", () => {
     expect(isValidMechanicUsername(" Morgan.Mechanic ")).toBe(true);
     expect(isValidMechanicUsername("_bad")).toBe(false);
     expect(isValidMechanicUsername("abc")).toBe(false);
-    expect(isValidPhilippinePhone("+63 917 123 4567")).toBe(true);
+    expect(isValidPhilippinePhone("+63 917 123 4567")).toBe(false);
     expect(isValidPhilippinePhone("09171234567")).toBe(true);
     expect(isValidPhilippinePhone("not a phone")).toBe(false);
   });

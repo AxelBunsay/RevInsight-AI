@@ -9,6 +9,7 @@ import {
   CustomerHeader
 } from './CustomerLayout';
 import { CustomerPrototypeProvider } from './CustomerPrototypeProvider';
+import { getCustomerAuthRedirect } from './customerAuthAction';
 import { customerHeaderMenuReducer, isOutsideCustomerMenus } from './customerHeaderMenu';
 
 const appSource = readFileSync(new URL('../../App.jsx', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
@@ -18,6 +19,18 @@ const responsiveStyles = readFileSync(new URL('../styles/customer-responsive.css
 const flowStyles = readFileSync(new URL('../styles/customer-flow.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const sharedStyles = readFileSync(new URL('../styles/shared.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 const initialMenuState = { accountOpen: false, notificationsOpen: false };
+
+describe('customer route authentication', () => {
+  it('redirects guests from protected routes to login with the requested path', () => {
+    const redirect = getCustomerAuthRedirect(null, {
+      pathname: '/customer/shop',
+      search: '?category=parts',
+      hash: ''
+    });
+
+    expect(redirect).toBe('/customer/login?redirect=%2Fcustomer%2Fshop%3Fcategory%3Dparts&returnTo=%2Fcustomer%2Fshop%3Fcategory%3Dparts');
+  });
+});
 
 describe('customer account menu', () => {
   it('opens by click action, toggles closed, and closes notifications when opened', () => {
