@@ -44,7 +44,6 @@ export function CustomerAccountMenu({ isOpen, onSelect, onSignOut, canSignOut = 
         {canSignOut && <>
           <Link role="menuitem" to="/customer/profile" onClick={onSelect}>My profile</Link>
           <Link role="menuitem" to="/my-purchases?tab=all" onClick={onSelect}>My purchases</Link>
-          <Link role="menuitem" to="/my-purchases?tab=services" onClick={onSelect}>My bookings</Link>
           <div className="customer-account-menu-divider" role="separator" />
           <button type="button" className="customer-account-menu-signout" role="menuitem" onClick={() => { onSelect?.(); onSignOut?.(); }}>Sign out</button>
         </>}
@@ -219,7 +218,7 @@ export function CustomerHeader() {
       <div className="customer-header-actions">
       <Link className="customer-header-icon-button customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
         <svg viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(0.5 -0.1)"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></g></svg>
-        {cartCount > 0 && <span className="customer-header-cart-count">{cartCount}</span>}
+        {cartCount > 0 && <span className="customer-header-cart-count">{cartCount > 99 ? '99+' : cartCount}</span>}
       </Link>
       <div className="customer-notification-area" ref={notificationAreaRef}>
         <button type="button" className="customer-header-icon-button customer-notification-bell" aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ''}`} aria-expanded={customerMenus.notificationsOpen} onClick={() => { setMenuOpenPath(null); dispatchCustomerMenu({ type: 'toggle-notifications' }); }}>

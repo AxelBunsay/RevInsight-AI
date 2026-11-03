@@ -2864,19 +2864,60 @@
 
 .customer-header-cart-count {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  display: grid;
-  min-width: 17px;
-  height: 17px;
-  place-items: center;
-  padding: 0 4px;
-  border: 2px solid #f8f5f1;
+  top: -2px;
+  right: -2px;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border: 2px solid #fff;
   border-radius: 999px;
-  background: #ef6415;
+  background: var(--c-primary);
   color: #fff;
-  font-size: 9px;
-  line-height: 1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.customer-page .customer-header,
+.customer-page .customer-header-inner,
+.customer-page .customer-header-actions,
+.customer-page .customer-notification-area,
+.customer-page .customer-header-cart,
+.customer-page .customer-notification-bell {
+  overflow: visible;
+}
+
+.customer-page .customer-header-cart-count,
+.customer-page .customer-notification-count {
+  top: -2px;
+  right: -2px;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.customer-page .customer-header-actions,
+.customer-page .customer-header-inner,
+.customer-page .customer-header {
+  overflow: visible !important;
+}
+
+.customer-page .customer-header-actions {
+  box-sizing: border-box;
+  padding-top: 6px;
 }
 
 .customer-site-footer {

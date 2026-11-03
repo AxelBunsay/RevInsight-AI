@@ -48,6 +48,7 @@
 
   .customer-page .customer-header-inner {
     display: grid;
+    overflow: visible !important;
     width: calc(100% - 2 * (12px + var(--customer-wide-content-padding)));
     min-height: 64px;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -94,6 +95,9 @@
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
+    box-sizing: border-box;
+    padding-top: 6px;
+    overflow: visible !important;
   }
 
   .customer-page .customer-header-cart,
@@ -129,11 +133,16 @@
 
   .customer-page .customer-header-cart-count,
   .customer-page .customer-notification-count {
-    top: -4px;
-    right: -4px;
+    top: -2px;
+    right: -2px;
     min-width: 20px;
     height: 20px;
+    padding: 0 6px;
+    border: 2px solid #fff;
     font-size: 12px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
   }
 
   .customer-page .customer-menu-toggle {
@@ -1105,6 +1114,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    box-sizing: border-box;
+    padding-top: 6px;
+    overflow: visible !important;
   }
 
   .customer-page .customer-header-cart,

@@ -473,7 +473,10 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         {quoteRequired && <p className="customer-quote-payment-note">No payment now. The mechanic will send you a price first.</p>}
         {quoteRequired && <label className="customer-notes-field">Parts you will bring<textarea required value={customerPartsNote} onChange={(event) => { setCustomerPartsNote(event.target.value); setBookingSuccess(''); }} rows="3" placeholder="For example: Brake pads" /><small>Tell the mechanic which parts you will provide.</small></label>}
         <label className="customer-notes-field">Notes{quoteRequired ? ' (optional)' : ' for the mechanic'}<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" />{!quoteRequired && <small>{service.pricePerUnit ? 'Notes do not change the price. Choose the quantity above.' : 'Notes do not change the service price.'}</small>}</label>
-        {bookingSuccess && <p className="customer-success" role="status">{bookingSuccess} <Link to="/my-purchases?tab=services">View my bookings</Link></p>}
+        {bookingSuccess && <>
+          <p className="customer-success" role="status">{bookingSuccess}</p>
+          <Link className="customer-primary-button" to="/my-purchases?tab=services">View in My purchases</Link>
+        </>}
         <div className="customer-booking-summary">
           <p>{summary}</p>
           {!quoteRequired && <ServicePriceBreakdown {...serviceAmounts} className={isModal ? 'is-modal-summary' : ''} />}
