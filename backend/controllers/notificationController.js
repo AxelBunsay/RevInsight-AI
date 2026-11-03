@@ -115,6 +115,46 @@ const clearCustomerNotifications = async (req, res) => {
   }
 };
 
+const getMechanicNotifications = async (req, res) => {
+  try {
+    const filter = { audience: 'mechanic', mechanicId: req.user.userId, clearedAt: null };
+    const [notifications, unreadCount] = await Promise.all([
+      Notification.find(filter).sort({ createdAt: -1 }).limit(50).lean(),
+      Notification.countDocuments({ ...filter, read: false })
+    ]);
+    res.json({ notifications, unreadCount });
+  } catch (error) {
+    console.error('[getMechanicNotifications] error', error);
+    res.status(500).json({ message: 'Notifications could not be loaded.' });
+  }
+};
+
+const markMechanicNotificationRead = async (req, res) => {
+  try {
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, audience: 'mechanic', mechanicId: req.user.userId, clearedAt: null },
+      { $set: { read: true } },
+      { new: true }
+    );
+    if (!notification) return res.status(404).json({ message: 'Notification not found.' });
+    res.json({ notification });
+  } catch (error) {
+    console.error('[markMechanicNotificationRead] error', error);
+    res.status(500).json({ message: 'Notification could not be updated.' });
+  }
+};
+
+const clearMechanicNotifications = async (req, res) => {
+  try {
+    const filter = { audience: 'mechanic', mechanicId: req.user.userId, clearedAt: null };
+    await Notification.updateMany(filter, { $set: { clearedAt: new Date() } });
+    res.json({ success: true, unreadCount: 0 });
+  } catch (error) {
+    console.error('[clearMechanicNotifications] error', error);
+    res.status(500).json({ message: 'Notifications could not be cleared.' });
+  }
+};
+
 module.exports = {
   getAdminNotifications,
   markAdminNotificationRead,
@@ -122,5 +162,8 @@ module.exports = {
   clearAdminNotifications,
   getCustomerNotifications,
   markCustomerNotificationRead,
-  clearCustomerNotifications
+  clearCustomerNotifications,
+  getMechanicNotifications,
+  markMechanicNotificationRead,
+  clearMechanicNotifications
 };

@@ -15,6 +15,11 @@ import {
   storeAuthSession
 } from '../../auth/authSession';
 import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from '../../../../shared/mobileNumber.mjs';
+import {
+  CUSTOMER_USERNAME_HINT,
+  sanitizeCustomerUsername,
+  validateCustomerUsername
+} from '../../../../shared/customerUsername.mjs';
 import PasswordInput from '../../components/PasswordInput';
 import '../styles/auth.css';
 
@@ -24,7 +29,7 @@ export function CustomerLogin() {
   const [searchParams] = useSearchParams();
   const { updateProfile } = useCustomerPrototype();
   const [credentials, setCredentials] = useState(() => ({
-    email: getRememberedIdentifier('customer'),
+    identifier: getRememberedIdentifier('customer'),
     password: ''
   }));
   const [rememberMe, setRememberMe] = useState(DEFAULT_REMEMBER_ME);
@@ -39,8 +44,8 @@ export function CustomerLogin() {
     setError('');
     try {
       const response = await api.loginCustomer(buildLoginPayload(
-        'email',
-        credentials.email,
+        'identifier',
+        credentials.identifier.trim(),
         credentials.password,
         rememberMe
       ));
@@ -48,7 +53,7 @@ export function CustomerLogin() {
         token: response.token,
         user: response.user,
         rememberMe,
-        identifier: credentials.email
+        identifier: credentials.identifier.trim()
       });
       updateProfile(response.user || {});
       const requestedRedirect = searchParams.get('redirect');
@@ -75,7 +80,7 @@ export function CustomerLogin() {
     {signInMessage && <p className="customer-auth-action-message" role="status">{signInMessage}</p>}
     <form className="customer-auth-form" onSubmit={submitLogin}>
       {error && <p className="customer-error" role="alert">{error}</p>}
-      <label>Email Address<input type="email" required placeholder="you@email.com" value={credentials.email} onChange={(event) => setCredentials({ ...credentials, email: event.target.value })} /></label>
+      <label>Username or email<input type="text" required autoComplete="username" placeholder="Username or email" value={credentials.identifier} onChange={(event) => setCredentials({ ...credentials, identifier: event.target.value })} /></label>
       <label>Password<PasswordInput required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
       <label className="customer-auth-remember"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
       <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
@@ -88,10 +93,11 @@ export function CustomerRegister() {
   const [searchParams] = useSearchParams();
   const { updateProfile } = useCustomerPrototype();
   const [step, setStep] = useState('register');
-  const [formData, setFormData] = useState({ email: '', password: '', firstName: '', lastName: '', phoneNumber: '' });
+  const [formData, setFormData] = useState({ email: '', username: '', password: '', firstName: '', lastName: '', phoneNumber: '' });
   const [otp, setOtp] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
   const [phoneNumberError, setPhoneNumberError] = useState('');
   const [message, setMessage] = useState('');
   const pendingAction = readCustomerAuthAction();
@@ -104,12 +110,18 @@ export function CustomerRegister() {
 
   const handleRegister = async (event) => {
     event.preventDefault();
+    const usernameValidation = validateCustomerUsername(formData.username);
+    if (!usernameValidation.isValid) {
+      setUsernameError(usernameValidation.message);
+      return;
+    }
     const mobileNumber = cleanAndValidateMobileNumber(formData.phoneNumber);
     if (!mobileNumber.isValid) {
       setPhoneNumberError(MOBILE_NUMBER_ERROR);
       return;
     }
     setPhoneNumberError('');
+    setUsernameError('');
     setIsSubmitting(true);
     setError('');
     try {
@@ -117,7 +129,8 @@ export function CustomerRegister() {
       setMessage('OTP sent to your email. Please check your inbox.');
       setStep('verify');
     } catch (err) {
-      setError(err.message || 'Registration failed. Please try again.');
+      if (err.message === 'Username is already taken') setUsernameError(err.message);
+      else setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -163,6 +176,10 @@ export function CustomerRegister() {
       {message && <p className="customer-success" role="status">{message}</p>}
       <form className="customer-auth-form" onSubmit={handleRegister}>
         <div className="form-row"><label>First Name<input type="text" required value={formData.firstName} onChange={(e) => setFormData({ ...formData, firstName: e.target.value })} /></label><label>Last Name<input type="text" required value={formData.lastName} onChange={(e) => setFormData({ ...formData, lastName: e.target.value })} /></label></div>
+        <label>Username<input type="text" required autoComplete="username" value={formData.username} aria-invalid={Boolean(usernameError)} onChange={(event) => { const username = sanitizeCustomerUsername(event.target.value); setFormData({ ...formData, username }); const validation = validateCustomerUsername(username); setUsernameError(username && !validation.isValid ? validation.message : ''); }} />
+          <small className="customer-field-hint">{CUSTOMER_USERNAME_HINT}</small>
+          {usernameError && <small className="customer-field-error" role="alert">{usernameError}</small>}
+        </label>
         <label>Email<input type="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} /></label>
         <label>Phone Number<input type="tel" inputMode="numeric" maxLength={11} autoComplete="tel" required value={formData.phoneNumber} aria-invalid={Boolean(phoneNumberError)} onChange={(event) => { const phoneNumber = cleanAndValidateMobileNumber(event.target.value).digits.slice(0, 11); setFormData({ ...formData, phoneNumber }); setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? '' : MOBILE_NUMBER_ERROR); }} onPaste={(event) => { event.preventDefault(); const phoneNumber = cleanAndValidateMobileNumber(event.clipboardData.getData('text')).digits.slice(0, 11); setFormData({ ...formData, phoneNumber }); setPhoneNumberError(cleanAndValidateMobileNumber(phoneNumber).isValid ? '' : MOBILE_NUMBER_ERROR); }} placeholder="09xxxxxxxxx" />{phoneNumberError && <small className="customer-field-error" role="alert">{phoneNumberError}</small>}</label>
         <label>Password<PasswordInput required minLength="6" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} /></label>

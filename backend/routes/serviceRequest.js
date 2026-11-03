@@ -6,6 +6,9 @@ const paymentUpload = require('../middleware/paymentUpload');
 
 // User gets their own service requests
 router.get('/my', authorizeRoles('customer'), serviceRequestController.getUserServiceRequests);
+router.post('/:id/quote/accept', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
+router.post('/:id/quote/reject', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
+router.post('/:id/quote/cancel', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
 router.post('/:id/payment', authorizeRoles('customer'), (req, res, next) => {
   paymentUpload.single('proof')(req, res, (error) => {
     if (error) return res.status(400).json({
@@ -15,6 +18,9 @@ router.post('/:id/payment', authorizeRoles('customer'), (req, res, next) => {
   });
 }, serviceRequestController.submitServicePayment);
 // Mechanic gets their assigned jobs
+router.get('/mechanic/quotes', authorizeRoles('mechanic'), serviceRequestController.getMechanicQuoteRequests);
+router.post('/:id/quote', authorizeRoles('mechanic'), serviceRequestController.submitMechanicQuote);
+router.post('/:id/quote/decline', authorizeRoles('mechanic'), serviceRequestController.declineMechanicQuoteRequest);
 router.get('/mechanic', authorizeRoles('mechanic'), serviceRequestController.getMechanicJobs);
 // Mechanic accepts a job and sets start time
 router.put('/accept', authorizeRoles('mechanic'), serviceRequestController.mechanicAcceptJob);

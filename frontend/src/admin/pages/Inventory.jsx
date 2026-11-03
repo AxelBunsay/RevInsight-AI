@@ -73,6 +73,8 @@ const validateServiceForm = (form) => {
   const price = Number(form.price);
   const mechanicFee = Number(form.mechanicFee);
   const laborOnlyPrice = Number(form.laborOnlyPrice);
+  const laborPriceMin = Number(form.laborPriceMin);
+  const laborPriceMax = Number(form.laborPriceMax);
   const durationMinutes = Number(form.durationMinutes);
   const maxUnits = Number(form.maxUnits);
 
@@ -89,6 +91,14 @@ const validateServiceForm = (form) => {
   }
   if (form.laborOnlyPrice !== "" && (!Number.isFinite(laborOnlyPrice) || laborOnlyPrice < 0 || laborOnlyPrice > 999999.99)) {
     errors.laborOnlyPrice = "Labor-only price must be from 0 to 999,999.99.";
+  }
+  if (form.laborPriceMin !== "" && (!Number.isFinite(laborPriceMin) || laborPriceMin < 0 || laborPriceMin > 999999.99)) {
+    errors.laborPriceMin = "Minimum labor price must be from 0 to 999,999.99.";
+  }
+  if (form.laborPriceMax !== "" && (!Number.isFinite(laborPriceMax) || laborPriceMax < 0 || laborPriceMax > 999999.99)) {
+    errors.laborPriceMax = "Maximum labor price must be from 0 to 999,999.99.";
+  } else if (form.laborPriceMin !== "" && form.laborPriceMax !== "" && laborPriceMax < laborPriceMin) {
+    errors.laborPriceMax = "Maximum labor price must be greater than or equal to minimum labor price.";
   }
   if (form.durationMinutes === "" || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
     errors.durationMinutes = "Duration must be a whole number from 1 to 1,440 minutes.";
@@ -139,6 +149,8 @@ function Inventory() {
     description: "",
     price: "",
     laborOnlyPrice: "",
+    laborPriceMin: "",
+    laborPriceMax: "",
     mechanicFee: "",
     category: "General",
     durationMinutes: "60",
@@ -397,6 +409,8 @@ function Inventory() {
           description: service.description || "",
           price: String(service.price),
           laborOnlyPrice: service.laborOnlyPrice == null ? "" : String(service.laborOnlyPrice),
+          laborPriceMin: service.laborPriceMin == null ? "" : String(service.laborPriceMin),
+          laborPriceMax: service.laborPriceMax == null ? "" : String(service.laborPriceMax),
           mechanicFee: String(service.mechanicFee ?? 0),
           category: service.category || "General",
           durationMinutes: String(service.durationMinutes || 60),
@@ -405,7 +419,7 @@ function Inventory() {
           maxUnits: String(service.maxUnits || 2),
           scaleDuration: service.scaleDuration !== false,
         }
-      : { name: "", description: "", price: "", laborOnlyPrice: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
+      : { name: "", description: "", price: "", laborOnlyPrice: "", laborPriceMin: "", laborPriceMax: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
   };
 
   const saveService = async (event) => {
@@ -422,6 +436,8 @@ function Inventory() {
         description: serviceForm.description,
         price: Number(serviceForm.price),
         laborOnlyPrice: serviceForm.laborOnlyPrice === "" ? null : Number(serviceForm.laborOnlyPrice),
+        laborPriceMin: serviceForm.laborPriceMin === "" ? null : Number(serviceForm.laborPriceMin),
+        laborPriceMax: serviceForm.laborPriceMax === "" ? null : Number(serviceForm.laborPriceMax),
         mechanicFee: Number(serviceForm.mechanicFee),
         category: serviceForm.category.trim(),
         durationMinutes: Number(serviceForm.durationMinutes),
@@ -434,7 +450,7 @@ function Inventory() {
       else await api.createService(payload);
       setIsAddingService(false);
       setEditingService(null);
-      setServiceForm({ name: "", description: "", price: "", laborOnlyPrice: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
+      setServiceForm({ name: "", description: "", price: "", laborOnlyPrice: "", laborPriceMin: "", laborPriceMax: "", mechanicFee: "", category: "General", durationMinutes: "60", pricePerUnit: false, unitLabel: "", maxUnits: "2", scaleDuration: true });
       setServiceRefreshKey((key) => key + 1);
       setToast(editingService ? "Service updated successfully." : "Service added successfully.");
     } catch (saveError) {
@@ -1220,7 +1236,39 @@ function Inventory() {
               {serviceFormErrors.price && <small className="inventory-field-error">{serviceFormErrors.price}</small>}
             </label>
             <label>
-              Labor-only price (customer brings own parts)
+              Labor price range minimum
+              <input
+                min="0"
+                max="999999.99"
+                step="0.01"
+                type="number"
+                aria-invalid={Boolean(serviceFormErrors.laborPriceMin)}
+                value={serviceForm.laborPriceMin}
+                onChange={(event) => {
+                  setServiceForm({ ...serviceForm, laborPriceMin: event.target.value });
+                  setServiceFormErrors((errors) => ({ ...errors, laborPriceMin: "", laborPriceMax: "" }));
+                }}
+              />
+              {serviceFormErrors.laborPriceMin && <small className="inventory-field-error">{serviceFormErrors.laborPriceMin}</small>}
+            </label>
+            <label>
+              Labor price range maximum
+              <input
+                min="0"
+                max="999999.99"
+                step="0.01"
+                type="number"
+                aria-invalid={Boolean(serviceFormErrors.laborPriceMax)}
+                value={serviceForm.laborPriceMax}
+                onChange={(event) => {
+                  setServiceForm({ ...serviceForm, laborPriceMax: event.target.value });
+                  setServiceFormErrors((errors) => ({ ...errors, laborPriceMax: "" }));
+                }}
+              />
+              {serviceFormErrors.laborPriceMax && <small className="inventory-field-error">{serviceFormErrors.laborPriceMax}</small>}
+            </label>
+            <label>
+              Fixed labor-only price (legacy)
               <input
                 min="0"
                 max="999999.99"

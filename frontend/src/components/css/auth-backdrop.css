@@ -4,11 +4,11 @@
   inset: 0;
   overflow: hidden;
   pointer-events: none;
-  background-color: #17100B;
+  background-color: var(--auth-backdrop-base, #17100B);
   background-image:
-    radial-gradient(ellipse at top left, #3A200F 0%, transparent 62%),
-    radial-gradient(ellipse at bottom right, #4A2410 0%, transparent 60%),
-    linear-gradient(to top, rgba(242, 107, 29, 0.14) 0%, transparent 38%);
+    radial-gradient(ellipse at top left, var(--auth-backdrop-glow-top, #3A200F) 0%, transparent 62%),
+    radial-gradient(ellipse at bottom right, var(--auth-backdrop-glow-bottom, #4A2410) 0%, transparent 60%),
+    var(--auth-backdrop-extra-glow, linear-gradient(to top, rgba(242, 107, 29, 0.14) 0%, transparent 38%));
 }
 
 .auth-backdrop__line {
@@ -66,6 +66,22 @@
   stroke-width: 2px;
 }
 
+.auth-backdrop__tool {
+  position: absolute;
+  top: 100vh;
+  left: var(--tool-left);
+  display: block;
+  width: var(--tool-size);
+  height: var(--tool-size);
+  opacity: var(--tool-opacity);
+  animation: rise var(--tool-duration) linear var(--tool-delay) infinite;
+  will-change: transform;
+}
+
+.auth-backdrop--tools .auth-backdrop__vignette {
+  background: radial-gradient(ellipse at center, rgba(18, 19, 28, 0.7) 0%, rgba(18, 19, 28, 0.25) 48%, transparent 82%);
+}
+
 @keyframes auth-backdrop-drift {
   from { transform: translateX(calc(-600px - 8vw)); }
   to { transform: translateX(calc(100vw + 560px)); }
@@ -76,12 +92,26 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes rise {
+  from { transform: translateY(0) rotate(0deg); }
+  to { transform: translateY(calc(-100vh - 240px)) rotate(var(--rot)); }
+}
+
 @media (max-width: 700px) {
   .auth-backdrop__line:nth-child(n + 13) {
     display: none;
   }
 
   .auth-backdrop__gear--small {
+    display: none;
+  }
+
+  .auth-backdrop__tool {
+    width: var(--tool-mobile-size);
+    height: var(--tool-mobile-size);
+  }
+
+  .auth-backdrop--tools > .auth-backdrop__tool:nth-child(n + 11) {
     display: none;
   }
 }
@@ -95,5 +125,12 @@
 
   .auth-backdrop__gear {
     animation: none;
+  }
+
+  .auth-backdrop__tool {
+    top: var(--tool-static-top);
+    animation: none;
+    transform: none;
+    will-change: auto;
   }
 }

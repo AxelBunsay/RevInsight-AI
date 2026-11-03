@@ -93,6 +93,7 @@ export default function ServiceDetail() {
   const [timeSlot, setTimeSlot] = useState(editingCartItem?.startTime || '');
   const [vehicle, setVehicle] = useState(editingCartItem?.vehicle || '');
   const [notes, setNotes] = useState(editingCartItem?.notes || '');
+  const [customerPartsNote, setCustomerPartsNote] = useState(editingCartItem?.customerPartsNote || '');
   const [units, setUnits] = useState(editingCartItem?.units || 1);
   const [schedule, setSchedule] = useState(null);
   const [slots, setSlots] = useState([]);
@@ -100,6 +101,7 @@ export default function ServiceDetail() {
   const [availabilityError, setAvailabilityError] = useState('');
   const [closedMessage, setClosedMessage] = useState('');
   const [bookingError, setBookingError] = useState(location.state?.message || '');
+  const [bookingSuccess, setBookingSuccess] = useState('');
   const [isFindingNext, setIsFindingNext] = useState(false);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [vehicleForm, setVehicleForm] = useState({ make: '', model: '', year: '', plate: '' });
@@ -118,6 +120,7 @@ export default function ServiceDetail() {
         setTimeSlot(editingCartItem?.startTime || '');
         setVehicle(editingCartItem?.vehicle || '');
         setNotes(editingCartItem?.notes || '');
+        setCustomerPartsNote(editingCartItem?.customerPartsNote || '');
         setService(response.service);
         setServiceError('');
       }
@@ -236,8 +239,11 @@ export default function ServiceDetail() {
 
   const durationMinutes = Number(service.durationMinutes || 60) * (service.pricePerUnit && service.scaleDuration !== false ? units : 1);
   const durationLabel = formatDuration(durationMinutes);
-  const laborOnlyUnavailable = partsSource === 'customer'
-    && (service.laborOnlyPrice === null || service.laborOnlyPrice === undefined || service.laborOnlyPrice === '');
+  const quoteRequired = partsSource === 'customer'
+    && (service.laborPriceMin != null || service.laborPriceMax != null || service.laborOnlyPrice == null || service.laborOnlyPrice === '');
+  const laborEstimate = service.laborPriceMin != null || service.laborPriceMax != null
+    ? `Est. PHP ${Number(service.laborPriceMin || 0).toLocaleString('en-PH')} - PHP ${Number(service.laborPriceMax || service.laborPriceMin || 0).toLocaleString('en-PH')}`
+    : 'Price set by mechanic';
   const unitPrice = partsSource === 'customer' ? Number(service.laborOnlyPrice || 0) : Number(service.price || 0);
   const serviceAmounts = calculateServiceAmounts(unitPrice, service.mechanicFee, units);
   const unitPromptLabel = (service.unitLabel || 'unit').endsWith('s')
@@ -304,7 +310,7 @@ export default function ServiceDetail() {
   };
 
   const addBooking = async () => {
-    if (!canAddBooking || !selectedSlot || laborOnlyUnavailable) return;
+    if (!canAddBooking || !selectedSlot || (quoteRequired && !customerPartsNote.trim())) return;
     const customerToken = getAuthToken('customer');
     if (!customerToken || customerToken === 'prototype-guest') {
       saveCustomerAuthAction({
@@ -326,6 +332,23 @@ export default function ServiceDetail() {
         setBookingError('That time was just booked. Please choose another.');
         setTimeSlot('');
         await loadSlots(bookingDate);
+        return;
+      }
+      if (quoteRequired) {
+        const response = await api.createServiceBookings([{
+          serviceId: service._id,
+          partsSource: 'customer',
+          date: bookingDate,
+          startTime: timeSlot,
+          ...(service.pricePerUnit ? { units } : {}),
+          vehicle: vehicle.trim(),
+          notes: notes.trim(),
+          customerPartsNote: customerPartsNote.trim()
+        }]);
+        const result = response.results?.[0];
+        if (!result?.ok) throw new Error(result?.message || 'Quote request could not be sent.');
+        setBookingSuccess('Request sent. No payment now. The mechanic will send you a price first.');
+        setBookingError('');
         return;
       }
       const cartItem = {
@@ -377,19 +400,18 @@ export default function ServiceDetail() {
         Labor only: you bring your own parts.{' '}
         <Link to={`/customer/services/${service._id}`}>Switch to shop-parts version</Link>
       </p>}
-      {laborOnlyUnavailable && <p className="customer-error" role="alert">Labor-only booking is not available for this service. <Link to={`/customer/services/${service._id}`}>Switch to shop parts</Link>.</p>}
       <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/services">Services</Link><span>/</span><span>{service.category || 'General'}</span><span>/</span><span>{service.name}</span></nav>
       <section className="customer-detail-layout customer-service-detail">
         <div className="customer-detail-art tone-sun" aria-label={`${service.name} service illustration`}><span aria-hidden="true">🔧</span><small>{durationLabel}</small></div>
-        <div className="customer-detail-copy"><p className="customer-eyebrow">{service.category || 'General'} · {durationLabel}</p><h1>{service.name}</h1><p>{service.description}</p><strong className="customer-detail-price">{partsSource === 'customer' ? 'Labor-only total' : 'Total'} {`₱${Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}`}</strong>
+        <div className="customer-detail-copy"><p className="customer-eyebrow">{service.category || 'General'} · {durationLabel}</p><h1>{service.name}</h1><p>{service.description}</p><strong className="customer-detail-price">{quoteRequired ? laborEstimate : `${partsSource === 'customer' ? 'Labor-only total' : 'Total'} ₱${Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}`}</strong>
           <h2>What&apos;s included</h2><ul className="customer-inclusion-list"><li>{service.description || 'Service details available at the shop.'}</li></ul>
         </div>
       </section>
       <section className="customer-booking-panel">
         <div className="customer-flow-section-heading"><div><p className="customer-eyebrow">BOOK A SERVICE</p><h2>Book a time</h2></div><span>{durationLabel} · all times Manila time</span></div>
-        {partsSource === 'shop' && service.laborOnlyPrice != null && <p className="customer-labor-only-switch"><Link to={`/customer/services/${service._id}?parts=own`}>Book labor only (I have my own parts)</Link></p>}
-        {service.pricePerUnit && <p className="customer-service-unit-price">{`${partsSource === 'customer' ? 'Labor-only ' : ''}₱${unitPrice.toLocaleString('en-PH')} + ₱${Number(service.mechanicFee || 0).toLocaleString('en-PH')} mechanic fee per ${service.unitLabel}`}</p>}
-        <ServicePriceBreakdown {...serviceAmounts} />
+        {partsSource === 'shop' && (service.laborOnlyPrice != null || service.laborPriceMin != null || service.laborPriceMax != null) && <p className="customer-labor-only-switch"><Link to={`/customer/services/${service._id}?parts=own`}>Book labor only (I have my own parts)</Link></p>}
+        {service.pricePerUnit && !quoteRequired && <p className="customer-service-unit-price">{`${partsSource === 'customer' ? 'Labor-only ' : ''}₱${unitPrice.toLocaleString('en-PH')} + ₱${Number(service.mechanicFee || 0).toLocaleString('en-PH')} mechanic fee per ${service.unitLabel}`}</p>}
+        {!quoteRequired && <ServicePriceBreakdown {...serviceAmounts} />}
         {service.pricePerUnit && <label className="customer-service-units">How many {unitPromptLabel}?
           <span className="customer-quantity-control">
             <button type="button" aria-label="Decrease service units" disabled={units <= 1} onClick={() => setUnits((value) => Math.max(1, value - 1))}>−</button>
@@ -433,11 +455,14 @@ export default function ServiceDetail() {
         {bookingError && <p className="customer-error" role="alert">{bookingError}</p>}
         {closedMessage && <p className="customer-shop-closed-message" role="status">{closedMessage}</p>}
         {allSlotsUnavailable && <div className="customer-no-slots"><p>No slots left on this date</p><button type="button" className="customer-secondary-button" onClick={handleNextAvailable} disabled={isFindingNext}>{isFindingNext ? 'Finding a date...' : 'Show next available'}</button></div>}
-        <label className="customer-notes-field">Notes for the mechanic<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" /><small>{service.pricePerUnit ? 'Notes do not change the price. Choose the quantity above.' : 'Notes do not change the service price.'}</small></label>
+        {quoteRequired && <label className="customer-notes-field">Parts you will bring<textarea required value={customerPartsNote} onChange={(event) => { setCustomerPartsNote(event.target.value); setBookingSuccess(''); }} rows="3" placeholder="For example: Brake pads" /><small>Tell the mechanic which parts you will provide.</small></label>}
+        <label className="customer-notes-field">Notes{quoteRequired ? ' (optional)' : ' for the mechanic'}<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" />{!quoteRequired && <small>{service.pricePerUnit ? 'Notes do not change the price. Choose the quantity above.' : 'Notes do not change the service price.'}</small>}</label>
+        {bookingSuccess && <p className="customer-success" role="status">{bookingSuccess} <Link to="/my-purchases?tab=services">View my bookings</Link></p>}
         <div className="customer-booking-summary">
           <p>{summary}</p>
-          <div className="customer-booking-footer"><p>Estimated total <strong>₱{Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}</strong></p>          <button type="button" className="customer-primary-button" disabled={!canAddBooking} onClick={addBooking}>{editCartKey ? 'Update booking' : 'Add booking to cart'}</button></div>
+          <div className="customer-booking-footer">{!quoteRequired && <p>Estimated total <strong>₱{Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}</strong></p>}<button type="button" className="customer-primary-button" disabled={!canAddBooking || (quoteRequired && !customerPartsNote.trim()) || Boolean(bookingSuccess)} onClick={addBooking}>{quoteRequired ? 'Send request' : editCartKey ? 'Update booking' : 'Add booking to cart'}</button></div>
           {!canAddBooking && <small className="customer-booking-hint">{missingBookingChoice || (closedMessage ? 'Choose an open date.' : 'Choose an available time to continue.')}</small>}
+          {quoteRequired && !customerPartsNote.trim() && <small className="customer-field-error" role="status">List the parts you will bring to send a quote request.</small>}
         </div>
       </section>
     </div>

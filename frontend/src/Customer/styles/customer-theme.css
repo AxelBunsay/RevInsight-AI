@@ -1,5 +1,6 @@
 .customer-page,
 .customer-auth-page {
+  --customer-page-background: radial-gradient(circle at 85% 8%, #ffe1ca 0, transparent 28%), #fff7ed;
   --c-bg: #FAF1E8;
   --c-card-border: #F3D9C2;
   --c-accent-tint: #FDEEDF;
@@ -11,16 +12,15 @@
   --c-dark: #2B1608;
 }
 
-.customer-page.customer-page,
+.customer-page.customer-page {
+  background: var(--customer-page-background);
+  color: var(--c-dark);
+  font-family: 'Segoe UI', sans-serif;
+}
+
 .customer-auth-page.customer-auth-page {
   background-color: var(--c-bg);
   color: var(--c-dark);
-}
-
-.customer-page.customer-page:not(.shop-page):not(.services-page),
-.customer-page.customer-page.shop-page,
-.customer-page.customer-page.services-page {
-  background-color: var(--c-bg);
 }
 
 .customer-page .customer-header {
@@ -38,7 +38,7 @@
   border: 1px solid var(--c-card-border);
 }
 
-.customer-page :is(.shop-motorcycle-filter, .customer-reservation-detail-meta, .customer-confirmation-order, .customer-account-records article) {
+.customer-page :is(.customer-reservation-detail-meta, .customer-confirmation-order, .customer-account-records article) {
   background-color: var(--c-bg);
   color: var(--c-dark);
 }
@@ -68,7 +68,7 @@
 }
 
 .customer-page :is(.product-price, .customer-detail-price, .customer-booking-footer strong, .service-card-footer strong, .customer-reservation-card-bottom strong, .customer-reservation-card-bottom a, .customer-account-identity-stats strong, .customer-flow-section-heading a, .customer-related-product small),
-.customer-page :is(.customer-eyebrow, .service-category-label, .landing-section-heading > a, .services-my-bookings, .shop-section-heading a),
+.customer-page :is(.customer-eyebrow, .service-category-label, .landing-section-heading > a, .shop-section-heading a),
 .customer-page .shop-content a:not(.customer-primary-button):not(.customer-secondary-button):not(.product-card):not(.shop-compact-banner a),
 .customer-auth-page .customer-auth-content .customer-link a {
   color: var(--c-brand-text);
@@ -88,19 +88,19 @@
   color: var(--c-on-primary);
 }
 
-.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .shop-motorcycle-filter button, .customer-account-shortcuts .customer-secondary-button) {
+.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .customer-account-shortcuts .customer-secondary-button) {
   min-height: 44px;
   border: 1px solid var(--c-card-border);
   background-color: #fff;
   color: var(--c-dark);
 }
 
-.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .shop-motorcycle-filter button, .customer-account-shortcuts .customer-secondary-button):hover:not(:disabled) {
+.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .customer-account-shortcuts .customer-secondary-button):hover:not(:disabled) {
   background-color: var(--c-accent-tint);
   color: var(--c-dark);
 }
 
-.customer-page :is(.customer-product-categories button.active, .category-pills button.active, .service-category-pills button.active, .services-parts-mode button.active, .customer-reservation-tabs button.is-active, .customer-purchases-tabs button.is-active, .customer-account-tabs button.is-active, .customer-pagination button.is-active, .customer-nav > a.active, .customer-account-menu-trigger.active),
+.customer-page :is(.customer-product-categories button.active, .category-pills button.active, .services-parts-mode button.active, .customer-reservation-tabs button.is-active, .customer-purchases-tabs button.is-active, .customer-account-tabs button.is-active, .customer-pagination button.is-active, .customer-nav > a.active, .customer-account-menu-trigger.active),
 .customer-auth-page .customer-auth-tab-indicator {
   border-color: var(--c-accent);
   background-color: var(--c-accent);

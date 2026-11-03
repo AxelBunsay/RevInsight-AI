@@ -11,6 +11,7 @@ import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
 import { getServiceBookingStatus, getServicePaymentSummary } from '../../utils/servicePayment';
 import ProductImage from './ProductImage';
+import CustomerQuoteActions from './CustomerQuoteActions';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -137,7 +138,8 @@ export default function ReservationDetail() {
   </CustomerPage>;
 
   if (serviceBooking) {
-    const paymentPending = (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending'
+    const quotePending = ['quote_requested', 'quoted'].includes(serviceBooking.quoteStatus);
+    const paymentPending = !quotePending && (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending'
       && !['cancelled', 'declined', 'completed'].includes(serviceBooking.status);
     const serviceStatus = getServiceBookingStatus(serviceBooking);
     return <CustomerPage title="Booking details" description="Review your service booking and payment status.">
@@ -148,7 +150,14 @@ export default function ReservationDetail() {
         <section className="customer-reservation-detail-card">
           <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{formatServiceName(serviceBooking.serviceType, serviceBooking.units, serviceBooking.unitLabel)}</h1><p>{serviceBooking.pricePerUnit ? `${serviceUnitSummary(serviceBooking.units || 1, serviceBooking.unitLabel)} · ` : ''}{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
           {serviceBooking.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}
-          <div className="customer-reservation-detail-meta"><div><span>Parts</span><strong>{serviceBooking.partsSource === 'customer' ? 'Customer brings own parts' : 'From the shop'}</strong></div><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /><div><span>Payment</span><strong>{serviceStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
+          <div className="customer-reservation-detail-meta"><div><span>Parts</span><strong>{serviceBooking.partsSource === 'customer' ? 'Customer brings own parts' : 'From the shop'}</strong></div>{!quotePending && <><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /></>}<div><span>Payment</span><strong>{serviceStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
+          {serviceBooking.quoteStatus && serviceBooking.customerPartsNote && <p><strong>Parts you will bring:</strong> {serviceBooking.customerPartsNote}</p>}
+          {quotePending && <CustomerQuoteActions
+            booking={serviceBooking}
+            settings={settings}
+            onBookingUpdate={setServiceBooking}
+            onAccepted={() => setShowPaymentForm(true)}
+          />}
           {serviceBooking.paymentRejectionReason && <p className="customer-error" role="alert">Payment needs attention: {serviceBooking.paymentRejectionReason}</p>}
           {paymentPending && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
           {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={getServicePaymentSummary(serviceBooking).downPaymentAmount} settings={settings} showServiceBreakdown onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}

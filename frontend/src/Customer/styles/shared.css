@@ -3,9 +3,8 @@
   min-height: 100vh;
   max-height: none;
   padding: 22px clamp(16px, 4vw, 64px) 64px;
-  background: radial-gradient(circle at 85% 8%, #ffe1ca 0, transparent 28%), #fff7ed;
   color: #fdfdfd;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Segoe UI', sans-serif;
   transition: filter 0.2s ease, transform 0.2s ease;
 }
 
@@ -41,9 +40,8 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  padding-top: 75px;
   gap: 8px;
-}
+  font-family: 'Segoe UI', sans-serif;
 
 .customer-nav a,
 .customer-logout {

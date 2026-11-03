@@ -28,7 +28,7 @@ function sortTimestamp(record) {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }
 
-export function PurchaseRecordList({ records, showType, listRef }) {
+export function PurchaseRecordList({ records, showType, listRef, settings, onBookingUpdate }) {
   return <div className="customer-reservation-list" ref={listRef}>
     {records.map((record) => record.type === 'item'
       ? <ItemReservationCard key={`item-${record.reference}`} reservation={record.value} showType={showType} />
@@ -37,6 +37,9 @@ export function PurchaseRecordList({ records, showType, listRef }) {
         booking={record.value}
         prototype={record.prototype}
         showType={showType}
+        settings={settings}
+        onBookingUpdate={onBookingUpdate}
+        redirectAfterAccept
       />)}
   </div>;
 }
@@ -47,6 +50,7 @@ export default function MyPurchases() {
   const activeTab = getPurchaseTab(searchParams.toString());
   const [itemReservations, setItemReservations] = useState([]);
   const [serviceBookings, setServiceBookings] = useState([]);
+  const [reservationSettings, setReservationSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errors, setErrors] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -61,8 +65,8 @@ export default function MyPurchases() {
 
   useEffect(() => {
     let isMounted = true;
-    Promise.allSettled([api.getCustomerReservations(), api.getCustomerServiceRequests()])
-      .then(([itemsResult, servicesResult]) => {
+    Promise.allSettled([api.getCustomerReservations(), api.getCustomerServiceRequests(), api.getReservationSettings()])
+      .then(([itemsResult, servicesResult, settingsResult]) => {
         if (!isMounted) return;
         const loadErrors = [];
         if (itemsResult.status === 'fulfilled') {
@@ -75,6 +79,7 @@ export default function MyPurchases() {
         } else {
           loadErrors.push(servicesResult.reason.message || 'Service bookings could not be loaded.');
         }
+        if (settingsResult.status === 'fulfilled') setReservationSettings(settingsResult.value.settings || {});
         setErrors(loadErrors);
       })
       .finally(() => {
@@ -134,6 +139,10 @@ export default function MyPurchases() {
     resetPage();
   };
 
+  const updateServiceBooking = (updatedBooking) => {
+    setServiceBookings((current) => current.map((booking) => booking._id === updatedBooking._id ? updatedBooking : booking));
+  };
+
   const emptyCopy = activeTab === 'items'
     ? { title: 'No item reservations yet', description: 'Your reserved items and pickup updates will appear here.', href: '/customer/shop', label: 'Browse the shop' }
     : activeTab === 'services'
@@ -186,7 +195,13 @@ export default function MyPurchases() {
       {isLoading
         ? <p className="customer-empty">Loading purchases and bookings...</p>
         : visibleRecords.length
-          ? <PurchaseRecordList records={pageRecords} showType={activeTab === 'all'} listRef={purchasesListRef} />
+          ? <PurchaseRecordList
+            records={pageRecords}
+            showType={activeTab === 'all'}
+            listRef={purchasesListRef}
+            settings={reservationSettings}
+            onBookingUpdate={updateServiceBooking}
+          />
           : debouncedSearchQuery
             ? <section className="customer-empty-cart">
               <span aria-hidden="true">⌕</span>

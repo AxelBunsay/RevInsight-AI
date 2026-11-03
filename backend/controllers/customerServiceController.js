@@ -275,18 +275,23 @@ const createServiceBookings = async (req, res) => {
             if (!configuredService) {
               throw Object.assign(new Error('This service is no longer available.'), { status: 400 });
             }
-            if (partsSource === 'customer' && configuredService.laborOnlyPrice == null) {
-              throw Object.assign(new Error('This service is not available as labor only.'), { status: 400 });
+            const hasLaborPriceRange = configuredService.laborPriceMin != null || configuredService.laborPriceMax != null;
+            const quoteRequired = partsSource === 'customer'
+              && (hasLaborPriceRange || configuredService.laborOnlyPrice == null);
+            const customerPartsNote = [booking.customerPartsNote, booking.notes]
+              .find((value) => typeof value === 'string' && value.trim())?.trim().slice(0, 1000) || '';
+            if (quoteRequired && !customerPartsNote) {
+              throw Object.assign(new Error('Describe the parts you will provide.'), { status: 400 });
             }
             const units = validateServiceUnits(configuredService, booking.units);
-            const unitPrice = Number(partsSource === 'customer'
+            const unitPrice = quoteRequired ? 0 : Number(partsSource === 'customer'
               ? configuredService.laborOnlyPrice
               : configuredService.price) || 0;
-            const unitMechanicFee = Number(configuredService.mechanicFee) || 0;
+            const unitMechanicFee = quoteRequired ? 0 : Number(configuredService.mechanicFee) || 0;
             const servicePriceTotal = unitPrice * units;
             const mechanicFeeTotal = unitMechanicFee * units;
             const paymentSnapshot = calculateServicePayment(
-              servicePriceTotal + mechanicFeeTotal,
+              quoteRequired ? 0 : servicePriceTotal + mechanicFeeTotal,
               schedule.serviceDownPaymentPercent
             );
             const serviceDurationMinutes = durationInMinutes(configuredService, units);
@@ -312,6 +317,10 @@ const createServiceBookings = async (req, res) => {
               customerId: req.user.userId,
               serviceId: booking.serviceId,
               partsSource,
+              quoteStatus: quoteRequired ? 'quote_requested' : '',
+              customerPartsNote: quoteRequired ? customerPartsNote : '',
+              laborPriceMinSnapshot: quoteRequired ? configuredService.laborPriceMin ?? null : null,
+              laborPriceMaxSnapshot: quoteRequired ? configuredService.laborPriceMax ?? null : null,
               serviceType: configuredService.name,
               description: typeof booking.notes === 'string' && booking.notes.trim()
                 ? booking.notes.trim()
@@ -330,12 +339,12 @@ const createServiceBookings = async (req, res) => {
               estimatedPrice: paymentSnapshot.totalAmount,
               ...paymentSnapshot,
               amountPaid: 0,
-              paymentStatus: paymentSnapshot.downPaymentAmount === 0 ? 'Confirmed' : 'Payment Pending',
-              paymentMethod: paymentSnapshot.downPaymentAmount === 0 ? 'No upfront payment required' : '',
+              paymentStatus: quoteRequired ? 'Payment Pending' : paymentSnapshot.downPaymentAmount === 0 ? 'Confirmed' : 'Payment Pending',
+              paymentMethod: !quoteRequired && paymentSnapshot.downPaymentAmount === 0 ? 'No upfront payment required' : '',
               laborFee: mechanicFeeTotal,
               durationMinutes: serviceDurationMinutes,
               createdAt,
-              paymentDueAt: paymentSnapshot.downPaymentAmount === 0
+              paymentDueAt: quoteRequired || paymentSnapshot.downPaymentAmount === 0
                 ? null
                 : new Date(createdAt.getTime() + schedule.pendingPaymentHours * 60 * 60 * 1000),
               scheduledDate: dayRange.start,

@@ -25,12 +25,19 @@ function ServiceSkeleton() {
 export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = false }) {
   const unitPrice = partsSource === 'customer' ? service.laborOnlyPrice : service.price;
   const unitTotal = Number(unitPrice || 0) + Number(service.mechanicFee || 0);
+  const hasLaborRange = service.laborPriceMin != null || service.laborPriceMax != null;
+  const laborRange = hasLaborRange
+    ? `Est. PHP ${Number(service.laborPriceMin || 0).toLocaleString('en-PH')} - PHP ${Number(service.laborPriceMax || service.laborPriceMin || 0).toLocaleString('en-PH')}`
+    : 'Price set by mechanic';
   return <article className="service-card tone-sun" key={service._id}>
     <div className="service-card-art">
       <span className="service-code">Code: {service.code}</span>
       <span className="service-duration">{formatDuration(service.durationMinutes)}</span>
+      <p className="service-card-description" title={service.description || 'Service details available at the shop.'}>
+        {service.description || 'Service details available at the shop.'}
+      </p>
       <div className="service-icon" aria-hidden="true">{useInlineIcon
-        ? <svg viewBox="0 0 24 24" focusable="false"><path d="M14.2 6.1a5 5 0 0 0 6.1 6.1L12 20.5a2.1 2.1 0 0 1-3-3l8.3-8.3a5 5 0 0 0-6.1-6.1l3 3-2.8 2.8-3-3a5 5 0 0 0 6.1 6.1" /></svg>
+    <div className={`service-card-footer${partsSource === 'customer' ? ' is-quote' : ''}`}>
         : '🔧'}</div>
     </div>
     <div className="service-card-body">
@@ -41,8 +48,10 @@ export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = fal
       </p>
     </div>
     <div className="service-card-footer">
-      <strong>{partsSource === 'customer' && <span className="service-labor-only-label">Labor only · </span>}₱{unitTotal.toLocaleString('en-PH')} total{service.pricePerUnit ? ` / ${service.unitLabel || 'unit'}` : ''}</strong>
-      <Link to={`/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`} className="service-book-link">Book service</Link>
+      {partsSource === 'customer'
+        ? <div className="service-quote-estimate"><strong>{laborRange}</strong><small>Final price is set by the mechanic</small></div>
+        : <strong>₱{unitTotal.toLocaleString('en-PH')} total{service.pricePerUnit ? ` / ${service.unitLabel || 'unit'}` : ''}</strong>}
+      <Link to={`/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`} className="service-book-link">{partsSource === 'customer' ? 'Request quote' : 'Book service'}</Link>
     </div>
   </article>;
 }
@@ -55,6 +64,7 @@ export default function Services() {
   const [error, setError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState('featured');
   const [category, setCategory] = useState("All");
   const servicesListRef = useRef(null);
   const modeServices = useMemo(
@@ -89,8 +99,14 @@ export default function Services() {
       const serviceCategory = service.category || "General";
       return (category === "All" || serviceCategory === category)
         && (!query || `${service.name} ${service.description || ""}`.toLowerCase().includes(query));
+    }).sort((left, right) => {
+      const getTotal = (service) => Number((partsSource === 'customer' ? service.laborOnlyPrice : service.price) || 0)
+        + Number(service.mechanicFee || 0);
+      if (sort === 'price-low') return getTotal(left) - getTotal(right);
+      if (sort === 'price-high') return getTotal(right) - getTotal(left);
+      return left.name.localeCompare(right.name);
     });
-  }, [category, modeServices, search]);
+  }, [category, modeServices, partsSource, search, sort]);
 
   const servicesPageSize = CUSTOMER_PAGE_SIZES.services;
   const { page, pageCount, setPage, resetPage } = useCustomerPagination({
@@ -108,9 +124,10 @@ export default function Services() {
     <CustomerPage
       title="Motorcycle Services"
       description="Book expert care for your motorcycle."
+      actions={<Link className="customer-secondary-button services-bookings-link services-my-bookings" to="/my-purchases?tab=services">My bookings</Link>}
     >
-      <div className="services-content">
-        <div className="services-parts-mode" role="tablist" aria-label="Service parts source">
+      <div className="shop-content">
+        <div className="customer-product-categories services-parts-mode" role="tablist" aria-label="Service parts source">
           <button type="button" role="tab" aria-selected={partsSource === "shop"} className={partsSource === "shop" ? "active" : ""} onClick={() => choosePartsSource("shop")}>With shop parts</button>
           <button type="button" role="tab" aria-selected={partsSource === "customer"} className={partsSource === "customer" ? "active" : ""} onClick={() => choosePartsSource("customer")}>Labor only (I have my own parts)</button>
         </div>
@@ -121,69 +138,57 @@ export default function Services() {
           </div>
           <Link to="/customer/shop">Explore shop</Link>
         </section>
-        <div className="services-toolbar">
-          <label className="services-search">
-            <span aria-hidden="true">⌕</span>
-            <input
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); resetPage(); }}
-              placeholder="Search services..."
-              aria-label="Search services"
-            />
-          </label>
-          <div
-            className="service-category-pills"
-            role="tablist"
-            aria-label="Service categories"
-          >
-            {categories.map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={category === item ? "active" : ""}
-                onClick={() => { setCategory(item); resetPage(); }}
-              >
-                {item}{" "}
-                <small>
-                  {item === "All"
-                    ? modeServices.length
-                    : modeServices.filter(
-                        (service) => (service.category || "General") === item,
-                      ).length}
-                </small>
-              </button>
-            ))}
-          </div>
-          <Link className="services-my-bookings" to="/my-purchases?tab=services">My bookings</Link>
+        <div className="shop-toolbar">
+          <input
+            value={search}
+            onChange={(event) => { setSearch(event.target.value); resetPage(); }}
+            placeholder="Search services..."
+            aria-label="Search services"
+          />
+          <select value={sort} onChange={(event) => { setSort(event.target.value); resetPage(); }} aria-label="Sort services">
+            <option value="featured">Featured</option>
+            <option value="price-low">Price low to high</option>
+            <option value="price-high">Price high to low</option>
+            <option value="name">Name A-Z</option>
+          </select>
         </div>
 
-        <div className="service-card-grid" ref={servicesListRef}>
-          {isLoading
-            ? Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)
-            : pageServices.map((service) => <ServiceCard service={service} partsSource={partsSource} key={service._id} />)}
+        <div className="customer-product-categories" role="group" aria-label="Service categories">
+          {categories.map((item) => <button type="button" className={category === item ? 'active' : ''} key={item} onClick={() => { setCategory(item); resetPage(); }}>
+            {item}<small>{item === 'All' ? modeServices.length : modeServices.filter((service) => (service.category || 'General') === item).length}</small>
+          </button>)}
         </div>
-        {!isLoading && error && (
-          <div className="customer-empty" role="alert">
-            <p>Could not load services. Try again.</p>
-            <button type="button" className="customer-secondary-button" onClick={() => {
-              setError(false);
-              setIsLoading(true);
-              setRetryKey((key) => key + 1);
-            }}>Try again</button>
-          </div>
-        )}
-        {!isLoading && !error && !modeServices.length && partsSource === "customer" && (
-          <div className="customer-empty services-labor-empty">
-            <p>No services currently offer labor-only booking. You can still browse all services with shop parts.</p>
-            <button type="button" className="customer-secondary-button" onClick={() => choosePartsSource("shop")}>Browse services with shop parts</button>
-          </div>
-        )}
-        {!isLoading && !error && !services.length && (
-          <p className="customer-empty">No services available</p>
-        )}
-        {!isLoading && !error && modeServices.length > 0 && !visibleServices.length && (
-          <p className="customer-empty">No services match your search.</p>
-        )}
+
+        <section className="shop-how-it-works services-how-it-works" aria-label="How service bookings work">
+          <div><strong>1. Choose a service</strong></div>
+          <div><strong>2. Pay the down payment</strong></div>
+          <div><strong>3. A mechanic handles the rest</strong></div>
+        </section>
+
+        <div className="customer-product-results">
+          <h2>All services</h2>
+          <span>{isLoading ? 'Loading services' : `${visibleServices.length} services`}</span>
+        </div>
+
+        {isLoading
+          ? <div className="product-grid" aria-label="Loading services">{Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)}</div>
+          : error
+            ? <div className="shop-load-error" role="alert">
+              <p>Could not load services. Try again.</p>
+              <button type="button" onClick={() => {
+                setError(false);
+                setIsLoading(true);
+                setRetryKey((key) => key + 1);
+              }}>Try again</button>
+            </div>
+            : visibleServices.length
+              ? <div className="service-card-grid" ref={servicesListRef}>
+                {pageServices.map((service) => <ServiceCard service={service} partsSource={partsSource} key={service._id} />)}
+              </div>
+              : <div className="shop-no-results">
+                <p>{modeServices.length ? 'No services match your search.' : 'No services available.'}</p>
+                <button type="button" onClick={() => { setSearch(''); setCategory('All'); setSort('featured'); resetPage(); }}>Clear filters</button>
+              </div>}
         {!isLoading && !error && <CustomerPagination
           page={page}
           pageCount={pageCount}

@@ -13,11 +13,19 @@ async function checkMobileNumberChange(value, existingValue) {
 }
 
 const validateRegister = async (req, res, next) => {
-  const { email, password, firstName, lastName, phoneNumber } = req.body;
+  const { email, username, password, firstName, lastName, phoneNumber } = req.body;
 
-  if (!email || !password || !firstName || !lastName) {
+  if (!email || !username || !password || !firstName || !lastName) {
     return res.status(400).json({ message: 'All fields are required' });
   }
+
+  const { normalizeCustomerUsername, validateCustomerUsername } = await import('../../shared/customerUsername.mjs');
+  const usernameValidation = validateCustomerUsername(username);
+  if (!usernameValidation.isValid) {
+    return res.status(400).json({ message: usernameValidation.message });
+  }
+  req.body.username = normalizeCustomerUsername(username);
+  req.body.usernameLower = req.body.username.toLowerCase();
 
   if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
     return res.status(400).json({ message: 'Password must be at least 8 characters and include a letter and a number.' });
@@ -34,10 +42,11 @@ const validateRegister = async (req, res, next) => {
 };
 
 const validateLogin = (req, res, next) => {
-  const { email, password } = req.body;
+  const identifier = req.body.identifier ?? req.body.email;
+  const { password } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' });
+  if (typeof identifier !== 'string' || !identifier.trim() || !password) {
+    return res.status(400).json({ message: 'Username or email and password are required' });
   }
 
   next();

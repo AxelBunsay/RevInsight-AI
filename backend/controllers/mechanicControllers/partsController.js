@@ -23,12 +23,15 @@ const serializeMechanicPart = (product, { host, protocol }) => {
 
 const summarizeMechanicJobs = (jobs) => {
   const completed = jobs.filter((job) => job.status === 'completed');
+  const laborTotal = (job) => Number(job.quoteStatus === 'accepted'
+    ? job.quotedPrice
+    : job.mechanicFeeTotal ?? job.laborFee ?? 0);
   return {
     totalJobs: jobs.length,
     scheduledJobs: jobs.filter((job) => ['assigned', 'confirmed', 'accepted'].includes(job.status)).length,
     inProgressJobs: jobs.filter((job) => job.status === 'in-progress').length,
     completedJobs: completed.length,
-    totalEarnings: completed.reduce((total, job) => total + Number(job.mechanicFeeTotal ?? job.laborFee ?? 0), 0),
+    totalEarnings: completed.reduce((total, job) => total + laborTotal(job), 0),
     paidJobs: completed.length
   };
 };

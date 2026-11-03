@@ -12,7 +12,6 @@ import { CUSTOMER_PAGE_SIZES, getCustomerPageItems } from './customerPagination'
 import { useCustomerPagination } from './useCustomerPagination';
 import '../styles/shop.css';
 
-const MOTORCYCLE_FILTER_KEY = 'revinsightShopMotorcycle';
 const SHOP_VIEW_STATE_KEY = 'revinsightShopViewState';
 const readShopViewState = () => {
   try {
@@ -26,21 +25,6 @@ const variantAvailable = (variant) => Math.max(
   0,
   Number(variant.available ?? (Number(variant.stock || 0) - Number(variant.reservedQty || 0)))
 );
-const hasFitment = (variant) => Boolean(variant.brand || variant.model);
-const matchesMotorcycle = (variant, brand, model) =>
-  (!brand || variant.brand?.toLowerCase() === brand.toLowerCase())
-  && (!model || variant.model?.toLowerCase() === model.toLowerCase());
-const readMotorcycleFilter = () => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(MOTORCYCLE_FILTER_KEY) || '{}');
-    return {
-      brand: typeof saved.brand === 'string' ? saved.brand : '',
-      model: typeof saved.model === 'string' ? saved.model : ''
-    };
-  } catch {
-    return { brand: '', model: '' };
-  }
-};
 
 const categoryIcon = (category = '') => {
   const normalized = category.toLowerCase();
@@ -73,7 +57,6 @@ export default function Shop() {
   const [category, setCategory] = useState(() => restoredShopView?.category || 'All');
   const [sort, setSort] = useState(() => restoredShopView?.sort || 'featured');
   const [products, setProducts] = useState([]);
-  const [motorcycle, setMotorcycle] = useState(() => restoredShopView?.motorcycle || readMotorcycleFilter());
   const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsLoading, setIsSettingsLoading] = useState(true);
@@ -95,7 +78,6 @@ export default function Shop() {
         search,
         category,
         sort,
-        motorcycle,
         scrollY: window.scrollY
       }));
     } catch {
@@ -154,14 +136,6 @@ export default function Shop() {
   useEffect(() => {
     void Promise.resolve().then(loadShopData);
   }, [loadShopData]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(MOTORCYCLE_FILTER_KEY, JSON.stringify(motorcycle));
-    } catch {
-      // Storage is optional; the in-memory filter remains usable.
-    }
-  }, [motorcycle]);
 
   const retryShopData = () => {
     setIsLoading(true);
@@ -242,24 +216,9 @@ export default function Shop() {
     () => ['All', ...new Set(products.map((product) => product.category).filter(Boolean))],
     [products]
   );
-  const motorcycleBrands = useMemo(() => [...new Set(products.flatMap((product) =>
-    (product.variants || []).map((variant) => variant.brand?.trim()).filter(Boolean)
-  ))].sort((left, right) => left.localeCompare(right)), [products]);
-  const motorcycleModels = useMemo(() => [...new Set(products.flatMap((product) =>
-    (product.variants || [])
-      .filter((variant) => !motorcycle.brand || variant.brand?.toLowerCase() === motorcycle.brand.toLowerCase())
-      .map((variant) => variant.model?.trim())
-      .filter(Boolean)
-  ))].sort((left, right) => left.localeCompare(right)), [motorcycle.brand, products]);
   const visibleProducts = useMemo(() => products.filter((product) => {
     const query = search.trim().toLowerCase();
-    const variants = product.variants || [];
-    const fitmentVariants = variants.filter(hasFitment);
-    const matchesBike = !motorcycle.brand && !motorcycle.model
-      || !fitmentVariants.length
-      || fitmentVariants.some((variant) => matchesMotorcycle(variant, motorcycle.brand, motorcycle.model));
     return (category === 'All' || product.category === category)
-      && matchesBike
       && (!query || `${product.name} ${product.description} ${product.category}`.toLowerCase().includes(query));
   }).sort((left, right) => sort === 'price-low'
     ? Math.min(...(left.variants || []).map((variant) => Number(variant.price)), Number(left.price))
@@ -267,7 +226,7 @@ export default function Shop() {
     : sort === 'price-high'
       ? Math.min(...(right.variants || []).map((variant) => Number(variant.price)), Number(right.price))
         - Math.min(...(left.variants || []).map((variant) => Number(variant.price)), Number(left.price))
-      : left.name.localeCompare(right.name)), [category, motorcycle, products, search, sort]);
+      : left.name.localeCompare(right.name)), [category, products, search, sort]);
 
   const shopPageSize = CUSTOMER_PAGE_SIZES.shop;
   const { page, pageCount, setPage, resetPage } = useCustomerPagination({
@@ -282,7 +241,6 @@ export default function Shop() {
     setSearch('');
     setCategory('All');
     setSort('featured');
-    setMotorcycle({ brand: '', model: '' });
     resetPage();
   };
 
@@ -311,28 +269,6 @@ export default function Shop() {
           <option value="price-high">Price: High to low</option>
           <option value="name">Name</option>
         </select>
-      </div>
-
-      <div className="shop-motorcycle-filter" aria-label="Filter by motorcycle">
-        <strong>My motorcycle</strong>
-        <select
-          value={motorcycle.brand}
-          aria-label="Motorcycle brand"
-          onChange={(event) => { setMotorcycle({ brand: event.target.value, model: '' }); resetPage(); }}
-        >
-          <option value="">All brands</option>
-          {motorcycleBrands.map((brand) => <option value={brand} key={brand}>{brand}</option>)}
-        </select>
-        <select
-          value={motorcycle.model}
-          aria-label="Motorcycle model"
-          disabled={!motorcycle.brand}
-          onChange={(event) => { setMotorcycle((current) => ({ ...current, model: event.target.value })); resetPage(); }}
-        >
-          <option value="">All models</option>
-          {motorcycleModels.map((model) => <option value={model} key={model}>{model}</option>)}
-        </select>
-        <button type="button" onClick={() => { setMotorcycle({ brand: '', model: '' }); resetPage(); }}>Clear</button>
       </div>
 
       {settingsError && <div className="shop-settings-error" role="status">

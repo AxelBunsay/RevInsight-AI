@@ -33,7 +33,13 @@ const getMechanicsSummary = async (req, res) => {
                       { $lt: ['$completedAt', manilaEnd] }
                     ]
                   },
-                  { $ifNull: ['$mechanicFeeTotal', { $ifNull: ['$laborFee', 0] }] },
+                  {
+                    $cond: [
+                      { $eq: ['$quoteStatus', 'accepted'] },
+                      { $ifNull: ['$quotedPrice', 0] },
+                      { $ifNull: ['$mechanicFeeTotal', { $ifNull: ['$laborFee', 0] }] }
+                    ]
+                  },
                   0
                 ]
               }
@@ -46,7 +52,16 @@ const getMechanicsSummary = async (req, res) => {
         {
           $group: {
             _id: { $ifNull: ['$mechanicId', '$mechanic'] },
-            totalRepairs: { $sum: 1 }
+            totalRepairs: { $sum: 1 },
+            totalLabor: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$quoteStatus', 'accepted'] },
+                  { $ifNull: ['$quotedPrice', 0] },
+                  { $ifNull: ['$mechanicFeeTotal', { $ifNull: ['$laborFee', 0] }] }
+                ]
+              }
+            }
           }
         }
       ]),
@@ -56,7 +71,7 @@ const getMechanicsSummary = async (req, res) => {
     const repairsByMechanic = new Map(
       repairRows
         .filter((row) => row._id)
-        .map((row) => [String(row._id), row.totalRepairs]),
+        .map((row) => [String(row._id), { totalRepairs: row.totalRepairs, totalLabor: row.totalLabor }]),
     );
 
     res.status(200).json({
@@ -64,7 +79,8 @@ const getMechanicsSummary = async (req, res) => {
       totalRepairs: summaryRows[0]?.totalRepairs || 0,
       mechanics: mechanics.map((mechanic) => ({
         mechanicId: String(mechanic._id),
-        totalRepairs: repairsByMechanic.get(String(mechanic._id)) || 0
+        totalRepairs: repairsByMechanic.get(String(mechanic._id))?.totalRepairs || 0,
+        totalLabor: repairsByMechanic.get(String(mechanic._id))?.totalLabor || 0
       }))
     });
   } catch (error) {

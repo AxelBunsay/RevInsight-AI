@@ -7,7 +7,6 @@
 
 .customer-page:not(.shop-page):not(.services-page) {
   padding: 0 16px 0;
-  background: #f8f5f1;
   color: #24252a;
   font-family: 'Segoe UI', sans-serif;
 }
@@ -16,6 +15,13 @@
   margin: 0 0 5px;
   color: #28231f;
   font: 700 24px/1.2 'Segoe UI', sans-serif;
+}
+
+.customer-page .customer-heading-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .customer-page .customer-heading > p:last-child {
@@ -1995,6 +2001,59 @@
 .customer-reservation-card-bottom strong { color: #d95e19; font-size: 14px; }
 .customer-reservation-card-bottom a { color: #d95e19; font-weight: 700; text-decoration: none; }
 .customer-status-pill { flex: 0 0 auto; padding: 6px 9px; border-radius: 999px; background: #fff2dc; color: #946100; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.customer-status-pill.status-awaiting-quote { background: #f3ebE2; color: #6b5444; }
+.customer-status-pill.status-quote-ready { background: #c2410c; color: #fff; }
+.customer-status-pill.status-accepted { background: #e7f6eb; color: #24633a; }
+.customer-status-pill.status-rejected,
+.customer-status-pill.status-declined-by-mechanic,
+.customer-status-pill.status-cancelled { background: #f3e8e4; color: #805245; }
+
+.customer-quote-actions {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #f0d9c7;
+  border-radius: 10px;
+  background: #fff8f1;
+  color: #4b392c;
+}
+
+.customer-quote-actions > div:not(.customer-quote-actions-buttons) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customer-quote-actions > div > span {
+  color: #76665a;
+  font-size: 13px;
+}
+
+.customer-quote-actions > div > strong {
+  color: #2b1608;
+  font-size: 15px;
+  text-align: right;
+}
+
+.customer-quote-actions > p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.customer-quote-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.customer-quote-actions-buttons > button {
+  min-height: 44px;
+  flex: 1 1 120px;
+}
 .customer-reservation-detail-card { max-width: 820px; margin: 0 auto; }
 .customer-reservation-detail-card .customer-reservation-card-top h1 { margin: 5px 0; color: #29231f; font-size: 24px; }
 .customer-reservation-detail-card > h2 { margin-top: 24px; color: #29231f; font-size: 15px; }
@@ -2363,7 +2422,6 @@
   display: flex;
   min-height: 100vh;
   flex-direction: column;
-  background: #f8f5f1;
 }
 
 .customer-page.shop-page .customer-compact-banner,
@@ -2760,18 +2818,6 @@
   }
 }
 
-.services-my-bookings {
-  display: inline-flex;
-  margin-top: 16px;
-  color: #c64f12;
-  font: 700 12px 'Segoe UI', sans-serif;
-  text-decoration: none;
-}
-
-.services-my-bookings:hover {
-  text-decoration: underline;
-}
-
 @media (max-width: 760px) {
   .customer-page.customer-page .customer-header,
   .customer-auth-page .customer-header {
@@ -2875,7 +2921,6 @@
 
     .customer-account-tabs button,
     .customer-reservation-tabs button,
-    .service-category-pills button,
     .customer-page button,
     .customer-auth-page button {
       min-height: 44px;
@@ -2884,7 +2929,6 @@
     .customer-primary-button,
     .customer-secondary-button,
     .service-book-link,
-    .services-my-bookings,
     .customer-reservation-card-bottom a {
       min-height: 44px;
     }

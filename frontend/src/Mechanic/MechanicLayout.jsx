@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { getMechanicNotifications, logoutMechanic, markMechanicNotificationsRead } from './mechanicService';
+import {
+  clearMechanicNotifications,
+  getMechanicNotifications,
+  getMechanicQuoteRequests,
+  logoutMechanic,
+  markMechanicNotificationsRead
+} from './mechanicService';
 import { getAuthSessionLoginPath, getAuthUser } from '../auth/authSession';
 import NotificationContent from '../components/NotificationContent';
 import RouteContentTransition from '../components/RouteContentTransition';
@@ -34,16 +40,32 @@ export default function MechanicLayout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
   const [profile, setProfile] = useState({});
+  const [pendingQuoteCount, setPendingQuoteCount] = useState(0);
+
+  const refreshQuoteCount = async () => {
+    try {
+      const response = await getMechanicQuoteRequests();
+      setPendingQuoteCount((response.requests || []).length);
+    } catch {
+      return;
+    }
+  };
 
   useEffect(() => {
     let active = true;
-    getMechanicNotifications().then((items) => {
-      if (active) {
-        setNotifications(items);
-        setProfile(getAuthUser('mechanic') || {});
-      }
-    });
-    return () => { active = false; };
+    const refresh = async () => {
+      const [notificationResult, quoteResult] = await Promise.allSettled([
+        getMechanicNotifications(),
+        getMechanicQuoteRequests()
+      ]);
+      if (!active) return;
+      if (notificationResult.status === 'fulfilled') setNotifications(notificationResult.value);
+      if (quoteResult.status === 'fulfilled') setPendingQuoteCount((quoteResult.value.requests || []).length);
+      setProfile(getAuthUser('mechanic') || {});
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 30000);
+    return () => { active = false; window.clearInterval(interval); };
   }, [location.pathname]);
 
   const unreadCount = notifications.filter((item) => !item.read).length;
@@ -55,7 +77,7 @@ export default function MechanicLayout() {
       <aside className="mechanic-sidebar">
         <Link className="mechanic-brand" to="/mechanic/dashboard" aria-label="Mechanic dashboard"><img src="/logo-mechanic.png" alt="Manoy's mechanic portal" width="40" height="40" /></Link>
         <nav className="mechanic-navigation" aria-label="Mechanic navigation">
-          {links.map((item) => <NavLink key={item.to} to={item.to} className={({ isActive }) => `mechanic-nav-link${isActive ? ' active' : ''}`}><span className="mechanic-nav-icon" aria-hidden="true">{item.icon}</span><span>{item.label}</span></NavLink>)}
+          {links.map((item) => <NavLink key={item.to} to={item.to} className={({ isActive }) => `mechanic-nav-link${isActive ? ' active' : ''}`}><span className="mechanic-nav-icon" aria-hidden="true">{item.icon}</span><span className="mechanic-nav-label">{item.label}{item.to === '/mechanic/jobs' && pendingQuoteCount > 0 && <span className="mechanic-nav-quote-count" aria-label={`${pendingQuoteCount} pending quote requests`}>{pendingQuoteCount}</span>}</span></NavLink>)}
         </nav>
         <button className="mechanic-logout" type="button" onClick={() => setShowLogout(true)}><span aria-hidden="true">⇥</span><span>Logout</span></button>
       </aside>
@@ -74,7 +96,7 @@ export default function MechanicLayout() {
                   <strong>Notifications</strong>
                   <div className="mechanic-notification-actions">
                     {!!unreadCount && <button type="button" onClick={async () => setNotifications(await markMechanicNotificationsRead())}>Mark all as read</button>}
-                    {!!notifications.length && <button type="button" onClick={() => setNotifications([])}>Clear all</button>}
+                    {!!notifications.length && <button type="button" onClick={async () => setNotifications(await clearMechanicNotifications())}>Clear all</button>}
                   </div>
                 </header>
                 <div className="mechanic-notification-list">{notifications.length ? notifications.map((item) => <article className={`mechanic-notification${item.read ? '' : ' unread'}`} key={item.id}><NotificationContent message={item.text} timestamp={item.time} /></article>) : <p className="mechanic-notification-empty">No notifications yet.</p>}</div>
@@ -85,7 +107,7 @@ export default function MechanicLayout() {
         </header>
         <main className="mechanic-main">
           <RouteContentTransition pathname={location.pathname}>
-            <Outlet />
+            <Outlet context={{ notifications, refreshQuoteCount }} />
           </RouteContentTransition>
         </main>
       </div>

@@ -307,7 +307,7 @@ function CustomerFooter() {
   </footer>;
 }
 
-export function CustomerPage({ title, description, children, preserveScrollOnMount = false }) {
+export function CustomerPage({ title, description, children, preserveScrollOnMount = false, actions = null }) {
   const location = useLocation();
   useDocumentTitle(getCustomerDocumentTitle(title));
 
@@ -327,7 +327,9 @@ export function CustomerPage({ title, description, children, preserveScrollOnMou
   return <>
       <section className="customer-heading">
         {title !== 'Account' && <p className="customer-eyebrow">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}
-        <h1>{title}</h1>
+        {actions
+          ? <div className="customer-heading-title-row"><h1>{title}</h1>{actions}</div>
+          : <h1>{title}</h1>}
         <p>{description}</p>
       </section>
       {children}

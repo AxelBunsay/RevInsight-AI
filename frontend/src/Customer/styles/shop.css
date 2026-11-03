@@ -2,9 +2,7 @@
   min-height: 100vh;
   max-height: none;
   padding: 22px clamp(16px, 4vw, 64px) 64px;
-  background: radial-gradient(circle at 85% 8%, #ffe1ca 0, transparent 28%), #fff7ed;
   color: #fdfdfd;
-  font-family: Georgia, 'Times New Roman', serif;
 }
 
 .customer-header {
@@ -134,10 +132,11 @@
   color: #ffffff;
 }
 
-.product-grid {
+.product-grid,
+.service-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
 }
 
 .product-card {
@@ -247,8 +246,6 @@
   padding: 0;
   min-height: 100vh;
   max-height: none;
-  background: #f8f5f1 !important;
-  background-image: none !important;
   color: #24252a;
   font-family: 'Segoe UI', sans-serif;
 }
@@ -483,54 +480,21 @@
   white-space: nowrap;
 }
 
-.shop-page .shop-toolbar {
+.shop-page .shop-toolbar,
+.services-page .shop-toolbar {
   grid-template-columns: minmax(0, 1fr) 160px;
   margin: 0 auto 12px;
 }
 
 .shop-page .shop-toolbar input,
-.shop-page .shop-toolbar select {
+.shop-page .shop-toolbar select,
+.services-page .shop-toolbar input,
+.services-page .shop-toolbar select {
   height: 34px;
   padding: 8px 11px;
   border-color: #e4e0dc;
   border-radius: 9px;
   font-size: 11px;
-}
-
-.shop-page .shop-motorcycle-filter {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border: 1px solid #e8e3df;
-  border-radius: 9px;
-  background: #ffffff;
-  color: #49372f;
-  font-size: 11px;
-}
-
-.shop-page .shop-motorcycle-filter select {
-  min-width: 150px;
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid #e4e0dc;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #49372f;
-  font-size: 11px;
-}
-
-.shop-page .shop-motorcycle-filter button {
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid #e4e0dc;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #626973;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 .shop-page .cart-link {
@@ -564,11 +528,17 @@
 .shop-page .product-grid {
   display: grid;
   width: 100%;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   align-items: start;
   justify-content: start;
   margin: 0;
-  gap: 12px;
+}
+
+.shop-page .product-card,
+.services-page .service-card {
+  border: 1px solid #e8e3df;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: none;
 }
 
 .shop-page .product-card {
@@ -581,10 +551,6 @@
   text-decoration: none;
   cursor: pointer;
   transition: box-shadow 150ms ease, border-color 150ms ease, transform 100ms ease;
-  border: 1px solid #e8e3df;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: none;
 }
 
 .shop-page .product-card:hover {
@@ -644,11 +610,13 @@
   font-weight: 700;
 }
 
-.shop-page .product-card-body {
+.shop-page .product-card-body,
+.services-page .service-card-body {
   padding: 8px 10px 10px;
 }
 
-.shop-page .product-card h2 {
+.shop-page .product-card h2,
+.services-page .service-card h2 {
   display: -webkit-box;
   min-height: 34px;
   overflow: hidden;
@@ -662,7 +630,8 @@
   -webkit-line-clamp: 2;
 }
 
-.shop-page .product-price {
+.shop-page .product-price,
+.services-page .service-card-footer strong {
   margin: 0;
   color: #f15d16;
   font-size: 16px;
@@ -876,12 +845,6 @@
 
 }
 
-@media (min-width: 481px) and (max-width: 900px) {
-  .shop-page .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));
-  }
-}
-
 @media (max-width: 620px) {
   .shop-page {
     padding: 0;
@@ -949,8 +912,3 @@
 
 }
 
-@media (max-width: 480px) {
-  .shop-page .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
-}

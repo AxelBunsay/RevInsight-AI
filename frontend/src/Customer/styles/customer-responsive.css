@@ -304,11 +304,6 @@
     height: 44px;
   }
 
-  .customer-page.shop-page .product-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
   .customer-page.shop-page .product-card {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -328,39 +323,16 @@
 
   .customer-page.shop-page .shop-toolbar input,
   .customer-page.shop-page .shop-toolbar select,
-  .customer-page.shop-page .shop-motorcycle-filter select {
+  .customer-page.services-page .shop-toolbar input,
+  .customer-page.services-page .shop-toolbar select {
     min-width: 0;
     min-height: 44px;
     font-size: 16px;
   }
 
-  .customer-page.shop-page .shop-motorcycle-filter button,
-  .customer-page.shop-page .customer-product-categories button {
+  .customer-page.shop-page .customer-product-categories button,
+  .customer-page.services-page .customer-product-categories button {
     min-height: 44px;
-  }
-
-  .customer-page.shop-page .product-grid > * {
-    min-width: 0;
-  }
-
-  .customer-page .services-toolbar {
-    display: grid;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  .customer-page .services-search {
-    width: 100%;
-    min-width: 0;
-  }
-
-  .customer-page .service-category-pills {
-    margin-top: 0;
-  }
-
-  .customer-page .service-category-pills button {
-    min-height: 44px;
-    font-size: 14px;
   }
 
   .customer-page .services-my-bookings {
@@ -369,35 +341,11 @@
     min-height: 44px;
     align-items: center;
     justify-content: center;
-    padding: 0 16px;
-    border: 1px solid #eadfd5;
-    border-radius: 999px;
-    background: #fff;
-    color: #c64f12;
-    font-size: 14px;
-    font-weight: 700;
-    text-decoration: none;
+    padding: 0 12px;
   }
 
-  .customer-page .service-card-footer {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 8px;
-    padding: 0 16px 16px;
-  }
-
-  .customer-page .service-card-footer strong {
-    min-height: 0;
-    font-size: 16px;
-    line-height: 1.4;
-    overflow-wrap: anywhere;
-  }
-
-  .customer-page .service-card-footer .service-book-link,
-  .customer-page .service-card-footer button {
-    width: 100%;
-    min-height: 48px;
-    white-space: normal;
+  .customer-page.shop-page .product-grid > * {
+    min-width: 0;
   }
 
   .customer-product-modal {
@@ -937,8 +885,6 @@
   min-height: 44px;
 }
 
-.customer-page.shop-page .shop-motorcycle-filter select,
-.customer-page.shop-page .shop-motorcycle-filter button,
 .customer-page.shop-page .shop-toolbar select,
 .customer-page.shop-page .shop-toolbar input {
   min-height: 44px !important;
@@ -1499,8 +1445,7 @@
   .customer-page .customer-layout-container > .route-content-transition,
   .customer-page .customer-layout-container .customer-heading,
   .customer-page .customer-layout-container .customer-flow-page,
-  .customer-page .customer-layout-container .shop-content,
-  .customer-page .customer-layout-container .services-content {
+  .customer-page .customer-layout-container .shop-content {
     width: 100%;
     max-width: none;
   }
@@ -1522,7 +1467,6 @@
   }
 
   .customer-page .customer-layout-container .shop-content,
-  .customer-page .customer-layout-container .services-content,
   .customer-page .customer-layout-container .customer-flow-page.customer-account-page,
   .customer-page .customer-layout-container .customer-flow-page.customer-purchases-page,
   .customer-page .customer-layout-container .customer-heading {

@@ -10,6 +10,8 @@ import {
 } from '../auth/authSession';
 import useDocumentTitle from '../utils/useDocumentTitle';
 import PasswordInput from '../components/PasswordInput';
+import AuthBackdrop from '../components/AuthBackdrop';
+import './mechanic-login-background.css';
 
 export default function MechanicLogin() {
   useDocumentTitle("Mechanic sign in | Manoy's");
@@ -45,7 +47,9 @@ export default function MechanicLogin() {
     }
   };
 
-  return <main className="mechanic-login-page"><section className="mechanic-login-wrap">
+  return <main className="mechanic-login-page">
+    <AuthBackdrop variant="tools" baseColor="#12131C" glowColor="108, 92, 231" />
+    <section className="mechanic-login-wrap">
     <div className="mechanic-login-intro"><img className="mechanic-login-logo" src="/logo-mechanic.png" alt="Manoy's mechanic portal" /><span className="mechanic-eyebrow">MECHANIC PORTAL</span><h1>Mechanic Login</h1><p>Sign in to manage assigned service jobs.</p></div>
     <form className="mechanic-login-card" onSubmit={submit}>
       <label className="mechanic-field"><span>Username</span><input autoComplete="username" autoCapitalize="none" spellCheck="false" type="text" value={username} onChange={(event) => setUsername(event.target.value)} required /></label>
@@ -54,5 +58,6 @@ export default function MechanicLogin() {
       {error && <p className="mechanic-alert" role="alert">{error}</p>}
       <button className="button-primary mechanic-login-submit" type="submit" disabled={submitting}>{submitting && <span className="mechanic-login-spinner" aria-hidden="true" />}{submitting ? 'Signing in…' : 'Sign in'}</button>
     </form>
-  </section></main>;
+    </section>
+  </main>;
 }
