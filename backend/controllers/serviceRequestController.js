@@ -1034,6 +1034,101 @@ const getUserServiceRequests = async (req, res) => {
   }
 };
 
+const rateServiceRequest = async (req, res) => {
+  const { id } = req.params;
+  const rating = req.body?.rating;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(404).json({ message: 'Service booking not found.' });
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: 'Rating must be a whole number from 1 to 5.' });
+  }
+  if (req.body?.comment !== undefined && typeof req.body.comment !== 'string') {
+    return res.status(400).json({ message: 'Rating comment must be text.' });
+  }
+  const comment = (req.body?.comment || '').trim();
+  if (comment.length > 300) {
+    return res.status(400).json({ message: 'Rating comment must be 300 characters or fewer.' });
+  }
+
+  const session = await mongoose.startSession();
+  let updatedRequest;
+  try {
+    await session.withTransaction(async () => {
+      const request = await ServiceRequest.findOne({
+        _id: id,
+        $or: [{ user: req.user.userId }, { customerId: req.user.userId }]
+      }).session(session);
+      if (!request) throw Object.assign(new Error('Service booking not found.'), { status: 404 });
+      if (request.status !== 'completed') {
+        throw Object.assign(new Error('You can rate a mechanic only after the service is completed.'), { status: 400 });
+      }
+      if (request.mechanicRating != null) {
+        throw Object.assign(new Error('You have already rated this service.'), { status: 400 });
+      }
+      const mechanicId = request.mechanicId || request.mechanic;
+      if (!mechanicId) {
+        throw Object.assign(new Error('This completed service has no assigned mechanic to rate.'), { status: 400 });
+      }
+
+      updatedRequest = await ServiceRequest.findOneAndUpdate({
+        _id: id,
+        status: 'completed',
+        $and: [
+          { $or: [{ user: req.user.userId }, { customerId: req.user.userId }] },
+          { $or: [{ mechanicRating: { $exists: false } }, { mechanicRating: null }] }
+        ]
+      }, {
+        $set: {
+          mechanicRating: rating,
+          mechanicRatingComment: comment,
+          mechanicRatedAt: new Date()
+        }
+      }, { new: true, runValidators: true, session });
+      if (!updatedRequest) {
+        throw Object.assign(new Error('This service has already been rated.'), { status: 400 });
+      }
+
+      const [summary] = await ServiceRequest.aggregate([
+        {
+          $match: {
+            status: 'completed',
+            mechanicRating: { $gte: 1, $lte: 5 },
+            $or: [{ mechanic: mechanicId }, { mechanicId }]
+          }
+        },
+        { $group: { _id: null, average: { $avg: '$mechanicRating' }, count: { $sum: 1 } } }
+      ]).session(session);
+      if (!summary) throw new Error('Mechanic rating summary could not be calculated.');
+      const averageRating = Math.round(summary.average * 10) / 10;
+      const mechanic = await Mechanic.findByIdAndUpdate(mechanicId, {
+        $set: { averageRating, ratingCount: summary.count }
+      }, { new: true, session });
+      if (!mechanic) throw Object.assign(new Error('Assigned mechanic could not be found.'), { status: 404 });
+
+      await Notification.create([{
+        audience: 'mechanic',
+        mechanicId,
+        type: 'mechanic_rating_received',
+        message: `You received a new rating: ${rating}/5 stars.`,
+        link: '/mechanic/profile#performance',
+        recordId: updatedRequest._id,
+        recordType: 'service'
+      }], { session });
+    });
+    return res.status(200).json({
+      message: 'Your rating was submitted.',
+      serviceRequest: customerServiceRequestPayload(updatedRequest)
+    });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('[rateServiceRequest] error', error);
+    return res.status(500).json({ message: 'Your rating could not be submitted. Please try again.' });
+  } finally {
+    await session.endSession();
+  }
+};
+
 // Mechanic gets their assigned jobs
 const getMechanicJobs = async (req, res) => {
   try {
@@ -1074,6 +1169,7 @@ module.exports = {
   expireServiceBookings,
   updateJobStatus,
   getUserServiceRequests,
+  rateServiceRequest,
   getMechanicJobs,
   getMechanicQuoteRequests,
   submitMechanicQuote,

@@ -91,6 +91,10 @@ const mechanicSchema = new mongoose.Schema({
     enum: ['available', 'busy', 'on-leave'],
     default: 'available'
   },
+  availabilityUpdatedAt: {
+    type: Date,
+    default: undefined
+  },
 
   // Work Statistics
   totalRepairs: {
@@ -102,6 +106,11 @@ const mechanicSchema = new mongoose.Schema({
     default: 0,
     min: 0,
     max: 5
+  },
+  ratingCount: {
+    type: Number,
+    default: 0,
+    min: 0
   },
   successRate: {
     type: Number,

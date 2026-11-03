@@ -70,6 +70,20 @@ async function submitQuote(requestId, price = 425) {
     .send({ price, note: 'Parts inspection and labor estimate.' });
 }
 
+async function createCompletedBooking(customer = fixtures.customer) {
+  return ServiceRequest.create({
+    user: customer._id,
+    customerId: customer._id,
+    serviceId: fixtures.service._id,
+    mechanic: fixtures.mechanic._id,
+    mechanicId: fixtures.mechanic._id,
+    serviceType: fixtures.service.name,
+    description: 'Completed service for rating test.',
+    status: 'completed',
+    completedAt: new Date()
+  });
+}
+
 describe('labor-only service quote flow', () => {
   beforeAll(async () => {
     await startReplicaSet();
@@ -220,5 +234,84 @@ describe('labor-only service quote flow', () => {
     expect(summary.body.totalLaborToday).toBe(425);
     expect(summary.body.mechanics.find((mechanic) => mechanic.mechanicId === String(fixtures.mechanic._id)))
       .toMatchObject({ totalRepairs: 1, totalLabor: 425 });
+  });
+
+  it('lets the owning customer rate a completed booking and recomputes the mechanic average', async () => {
+    const first = await createCompletedBooking();
+    const second = await createCompletedBooking();
+    const firstRating = await api.post(`/api/services/bookings/${first._id}/rating`)
+      .set('Authorization', 'Bearer ' + customerToken)
+      .send({ rating: 5, comment: 'Great work, thank you.' });
+    const secondRating = await api.post(`/api/services/bookings/${second._id}/rating`)
+      .set('Authorization', 'Bearer ' + customerToken)
+      .send({ rating: 4 });
+
+    expect(firstRating.status).toBe(200);
+    expect(firstRating.body.serviceRequest).toMatchObject({
+      mechanicRating: 5,
+      mechanicRatingComment: 'Great work, thank you.'
+    });
+    expect(firstRating.body.serviceRequest.mechanicRatedAt).toBeTruthy();
+    expect(secondRating.status).toBe(200);
+    expect(await Mechanic.findById(fixtures.mechanic._id).lean())
+      .toMatchObject({ averageRating: 4.5, ratingCount: 2 });
+    expect(await Notification.exists({
+      audience: 'mechanic',
+      mechanicId: fixtures.mechanic._id,
+      type: 'mechanic_rating_received',
+      recordId: first._id,
+      message: 'You received a new rating: 5/5 stars.',
+      link: '/mechanic/profile#performance'
+    })).not.toBeNull();
+
+    const customerBookings = await api.get('/api/service-requests/my')
+      .set('Authorization', 'Bearer ' + customerToken);
+    expect(customerBookings.status).toBe(200);
+    expect(customerBookings.body.requests.find((item) => item._id === String(first._id)))
+      .toMatchObject({ mechanicRating: 5, mechanicRatingComment: 'Great work, thank you.' });
+  });
+
+  it('rejects rating a booking before completion', async () => {
+    const booking = await createCompletedBooking();
+    booking.status = 'in-progress';
+    await booking.save();
+
+    const response = await api.post(`/api/services/bookings/${booking._id}/rating`)
+      .set('Authorization', 'Bearer ' + customerToken)
+      .send({ rating: 5 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/only after the service is completed/i);
+  });
+
+  it('rejects a second rating for the same booking', async () => {
+    const booking = await createCompletedBooking();
+    const url = `/api/services/bookings/${booking._id}/rating`;
+    const first = await api.post(url).set('Authorization', 'Bearer ' + customerToken).send({ rating: 5 });
+    const second = await api.post(url).set('Authorization', 'Bearer ' + customerToken).send({ rating: 4 });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(400);
+    expect(second.body.message).toMatch(/already rated/i);
+  });
+
+  it('prevents another customer from rating the booking', async () => {
+    const booking = await createCompletedBooking();
+    const response = await api.post(`/api/services/bookings/${booking._id}/rating`)
+      .set('Authorization', 'Bearer ' + secondCustomerToken)
+      .send({ rating: 5 });
+
+    expect(response.status).toBe(404);
+    expect((await ServiceRequest.findById(booking._id)).mechanicRating).toBeUndefined();
+  });
+
+  it.each([0, 6, 2.5, '5', null])('rejects invalid rating value %s', async (rating) => {
+    const booking = await createCompletedBooking();
+    const response = await api.post(`/api/services/bookings/${booking._id}/rating`)
+      .set('Authorization', 'Bearer ' + customerToken)
+      .send({ rating });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/whole number from 1 to 5/i);
   });
 });

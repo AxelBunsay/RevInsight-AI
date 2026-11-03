@@ -149,8 +149,32 @@ const getMechanicStats = async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    const jobs = await ServiceRequest.find({ $or: [{ mechanic: mechanicId }, { mechanicId }] });
-    res.status(200).json(summarizeMechanicJobs(jobs));
+    const mechanicFilter = { $or: [{ mechanic: mechanicId }, { mechanicId }] };
+    const [jobs, recentRatings] = await Promise.all([
+      ServiceRequest.find(mechanicFilter),
+      ServiceRequest.find({
+        ...mechanicFilter,
+        status: 'completed',
+        mechanicRating: { $gte: 1, $lte: 5 }
+      })
+        .select('mechanicRating mechanicRatingComment mechanicRatedAt serviceType scheduledDate user')
+        .populate('user', 'firstName')
+        .sort({ mechanicRatedAt: -1 })
+        .limit(5)
+        .lean()
+    ]);
+    const ratings = jobs.filter((job) => job.status === 'completed' && Number.isInteger(job.mechanicRating));
+    res.status(200).json({
+      ...summarizeMechanicJobs(jobs),
+      ratingCount: ratings.length,
+      recentRatings: recentRatings.map((rating) => ({
+        rating: rating.mechanicRating,
+        comment: rating.mechanicRatingComment || '',
+        serviceName: rating.serviceType || 'Service',
+        date: rating.mechanicRatedAt || rating.scheduledDate,
+        customerFirstName: rating.user?.firstName || 'Customer'
+      }))
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

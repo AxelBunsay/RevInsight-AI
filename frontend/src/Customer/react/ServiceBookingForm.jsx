@@ -93,6 +93,10 @@ export default function ServiceBookingForm({ service: providedService = null, pa
   });
   const [timeSlot, setTimeSlot] = useState(editingCartItem?.startTime || '');
   const [vehicle, setVehicle] = useState(editingCartItem?.vehicle || '');
+  const [availableMechanics, setAvailableMechanics] = useState([]);
+  const [mechanicsLoadError, setMechanicsLoadError] = useState('');
+  const [selectedMechanicId, setSelectedMechanicId] = useState(editingCartItem?.mechanicId || '');
+  const [mechanicError, setMechanicError] = useState('');
   const [notes, setNotes] = useState(editingCartItem?.notes || '');
   const [customerPartsNote, setCustomerPartsNote] = useState(editingCartItem?.customerPartsNote || '');
   const [units, setUnits] = useState(editingCartItem?.units || 1);
@@ -111,6 +115,18 @@ export default function ServiceBookingForm({ service: providedService = null, pa
   const slotRequestRef = useRef(0);
   const nextAvailableRequestRef = useRef(0);
   const today = manilaDateKey();
+
+  useEffect(() => {
+    let active = true;
+    api.getAvailableMechanics().then((response) => {
+      if (!active) return;
+      setAvailableMechanics(response.mechanics || []);
+      setMechanicsLoadError('');
+    }).catch((error) => {
+      if (active) setMechanicsLoadError(error.message || 'Mechanics could not be loaded.');
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     if (providedService) {
@@ -250,6 +266,13 @@ export default function ServiceBookingForm({ service: providedService = null, pa
     ? `Est. PHP ${Number(service.laborPriceMin || 0).toLocaleString('en-PH')} - PHP ${Number(service.laborPriceMax || service.laborPriceMin || 0).toLocaleString('en-PH')}`
     : 'Price set by mechanic';
   const unitPrice = partsSource === 'customer' ? Number(service.laborOnlyPrice || 0) : Number(service.price || 0);
+  const selectedMechanic = availableMechanics.find((mechanic) => mechanic.id === selectedMechanicId);
+  const selectedMechanicStatus = selectedMechanic?.availabilityStatus || 'available';
+  const mechanicStatusLabel = (status) => ({
+    available: 'Available',
+    busy: 'Busy',
+    'on-leave': 'On leave'
+  }[status] || 'Available');
   const serviceAmounts = calculateServiceAmounts(unitPrice, service.mechanicFee, units);
   const unitPromptLabel = (service.unitLabel || 'unit').endsWith('s')
     ? service.unitLabel
@@ -347,6 +370,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         const response = await api.createServiceBookings([{
           serviceId: service._id,
           partsSource: 'customer',
+          ...(selectedMechanicId ? { mechanicId: selectedMechanicId } : {}),
           date: bookingDate,
           startTime: timeSlot,
           ...(service.pricePerUnit ? { units } : {}),
@@ -355,7 +379,14 @@ export default function ServiceBookingForm({ service: providedService = null, pa
           customerPartsNote: customerPartsNote.trim()
         }]);
         const result = response.results?.[0];
-        if (!result?.ok) throw new Error(result?.message || 'Quote request could not be sent.');
+        if (!result?.ok) {
+          if (result?.message === 'This mechanic is currently on leave. Please choose another mechanic.') {
+            setSelectedMechanicId('');
+            setMechanicError(result.message);
+            return;
+          }
+          throw new Error(result?.message || 'Quote request could not be sent.');
+        }
         setBookingSuccess('Request sent. No payment now. The mechanic will send you a price first.');
         setBookingError('');
         return;
@@ -365,6 +396,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         id: service._id,
         serviceId: service._id,
         partsSource,
+        mechanicId: selectedMechanicId || '',
         name: formatServiceName(service.name, service.pricePerUnit ? units : 1, service.unitLabel),
         price: serviceAmounts.servicePriceTotal,
         unitPrice,
@@ -386,6 +418,12 @@ export default function ServiceBookingForm({ service: providedService = null, pa
       else addCartItem(cartItem);
       navigate('/customer/cart', { state: { message: editCartKey ? 'Booking updated.' : `${service.name} booking added to your cart.` } });
     } catch (error) {
+      if (error.message === 'This mechanic is currently on leave. Please choose another mechanic.') {
+        setSelectedMechanicId('');
+        setMechanicError(error.message);
+        setBookingError('');
+        return;
+      }
       setBookingError(error.message || 'That booking time could not be checked. Please try again.');
       await loadSlots(bookingDate);
     }
@@ -447,6 +485,38 @@ export default function ServiceBookingForm({ service: providedService = null, pa
               setBookingError('');
             }}
           />
+          <div className="customer-mechanic-field">
+            <label htmlFor="service-mechanic">Mechanic</label>
+            <div className="customer-mechanic-select-wrap">
+              <span
+                className={`customer-mechanic-status-dot is-${selectedMechanicStatus}`}
+                aria-hidden="true"
+              />
+              <select
+                id="service-mechanic"
+                value={selectedMechanicId}
+                aria-describedby={mechanicError ? 'service-mechanic-error' : selectedMechanicStatus === 'busy' ? 'service-mechanic-busy-note' : undefined}
+                onChange={(event) => {
+                  setSelectedMechanicId(event.target.value);
+                  setMechanicError('');
+                  setBookingError('');
+                }}
+              >
+                <option value="">Any available mechanic</option>
+                {availableMechanics.map((mechanic) => {
+                  const status = mechanic.availabilityStatus || 'available';
+                  const onLeave = status === 'on-leave';
+                  return <option key={mechanic.id} value={mechanic.id} disabled={onLeave}>
+                    {`${mechanic.displayName} - ${mechanicStatusLabel(status)}${onLeave ? ' (On leave)' : ''}`}
+                  </option>;
+                })}
+              </select>
+            </div>
+            {mechanicsLoadError && <small className="customer-field-error" role="alert">{mechanicsLoadError}</small>}
+            {mechanicError && <small className="customer-field-error" id="service-mechanic-error" role="alert">{mechanicError}</small>}
+            {!mechanicError && selectedMechanicStatus === 'busy' && <small className="customer-mechanic-busy-note" id="service-mechanic-busy-note">This mechanic is busy right now. Your booking may take longer to confirm.</small>}
+            {selectedMechanicStatus === 'on-leave' && <small className="customer-mechanic-busy-note">On leave</small>}
+          </div>
           <div className="customer-motorcycle-field">
             <label htmlFor="service-motorcycle">Motorcycle</label>
             {vehicles.length > 0 && !showVehicleForm

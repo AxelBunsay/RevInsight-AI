@@ -788,6 +788,49 @@
   color: #82756c;
 }
 
+.customer-booking-fields > .customer-mechanic-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 7px;
+  color: #544941;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.customer-mechanic-select-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.customer-mechanic-select-wrap select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 34px 0 32px;
+  border: 1px solid #e8dcd2;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #322a25;
+  font: 16px 'Segoe UI', sans-serif;
+}
+
+.customer-mechanic-status-dot {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1f7a3d;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.customer-mechanic-status-dot.is-busy { background: #c17a00; }
+.customer-mechanic-status-dot.is-on-leave { background: #8a929b; }
+.customer-mechanic-busy-note { color: #765342; font-size: 12px; font-weight: 500; line-height: 1.4; }
+
 .customer-no-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; }
 .customer-no-slots p,
 .customer-shop-closed-message { margin: 0; color: #765342; font-size: 12px; font-weight: 700; }

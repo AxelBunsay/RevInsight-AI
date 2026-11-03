@@ -869,6 +869,51 @@
   font-size: 16px;
   font-weight: 800;
 }
+.admin-root .admin-management-page .mechanic-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.admin-root .admin-management-page .mechanic-availability-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.admin-root .admin-management-page .mechanic-availability-pill.is-available {
+  border-color: #b7dfc2;
+  background: #e8f5eb;
+  color: #1f7a3d;
+}
+.admin-root .admin-management-page .mechanic-availability-pill.is-busy {
+  border-color: #f0d39a;
+  background: #fff3d8;
+  color: #7a4f00;
+}
+.admin-root .admin-management-page .mechanic-availability-pill.is-on-leave {
+  border-color: #d7dce2;
+  background: #eef0f3;
+  color: #56616d;
+}
+.admin-root .admin-management-page .mechanic-availability-updated {
+  display: block;
+  margin-top: 3px;
+  color: #6b5440;
+  font-size: 11px;
+}
+.admin-root .admin-management-page .mechanic-availability-summary {
+  margin: 0 0 14px;
+  color: #6b5440;
+  font-size: 13px;
+  font-weight: 700;
+}
 .admin-root .admin-management-page .stat-label {
   color: #6b5440;
   font-size: 13px;

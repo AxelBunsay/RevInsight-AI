@@ -140,7 +140,8 @@ const createMechanic = async (req, res) => {
         bio: mechanic.bio,
         availabilityStatus: mechanic.availabilityStatus,
         totalRepairs: mechanic.totalRepairs,
-        successRate: mechanic.successRate
+        averageRating: mechanic.averageRating,
+        ratingCount: mechanic.ratingCount || 0
       }
     });
   } catch (error) {
@@ -218,7 +219,7 @@ const getProfile = async (req, res) => {
         availabilityStatus: mechanic.availabilityStatus,
         totalRepairs: mechanic.totalRepairs,
         averageRating: mechanic.averageRating,
-        successRate: mechanic.successRate,
+        ratingCount: mechanic.ratingCount || 0,
         isActive: mechanic.isActive
       }
     });
@@ -232,6 +233,8 @@ const getProfile = async (req, res) => {
 const updateProfile = async (req, res) => {
   try {
     const { firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications, photoUrl, bio, availabilityStatus } = req.body;
+    const existingMechanic = await Mechanic.findById(req.user.userId).select('availabilityStatus');
+    if (!existingMechanic) return res.status(404).json({ message: 'Mechanic not found.' });
     const update = {
       firstName,
       lastName,
@@ -242,6 +245,10 @@ const updateProfile = async (req, res) => {
       bio,
       availabilityStatus
     };
+    if (availabilityStatus !== undefined
+      && (existingMechanic.availabilityStatus || 'available') !== availabilityStatus) {
+      update.availabilityUpdatedAt = new Date();
+    }
     if (phoneNumber !== undefined && !req.phoneNumberUnchanged) update.phoneNumber = phoneNumber;
 
     const mechanic = await Mechanic.findByIdAndUpdate(
@@ -263,7 +270,8 @@ const updateProfile = async (req, res) => {
         certifications: mechanic.certifications,
         photoUrl: mechanic.photoUrl,
         bio: mechanic.bio,
-        availabilityStatus: mechanic.availabilityStatus
+        availabilityStatus: mechanic.availabilityStatus || 'available',
+        availabilityUpdatedAt: mechanic.availabilityUpdatedAt
       }
     });
   } catch (error) {
@@ -274,7 +282,7 @@ const updateProfile = async (req, res) => {
 
 const listAllMechanics = async (req, res) => {
   try {
-    const mechanics = await Mechanic.find({ isActive: { $ne: false } }).select('firstName lastName username phoneNumber email specialization totalRepairs averageRating isActive createdBy photoUrl bio availabilityStatus successRate yearsOfExperience');
+    const mechanics = await Mechanic.find({ isActive: { $ne: false } }).select('firstName lastName username phoneNumber email specialization totalRepairs averageRating ratingCount isActive createdBy photoUrl bio availabilityStatus availabilityUpdatedAt yearsOfExperience');
 
     const formatted = mechanics.map(m => ({
       id: m._id,
@@ -287,12 +295,13 @@ const listAllMechanics = async (req, res) => {
       yearsOfExperience: m.yearsOfExperience,
       totalRepairs: m.totalRepairs || 0,
       averageRating: m.averageRating || 0,
-      successRate: m.successRate || 0,
+      ratingCount: m.ratingCount || 0,
       isActive: m.isActive,
       availabilityStatus: m.availabilityStatus,
       photoUrl: m.photoUrl,
       bio: m.bio,
-      createdBy: m.createdBy
+      createdBy: m.createdBy,
+      availabilityUpdatedAt: m.availabilityUpdatedAt
     }));
 
     res.status(200).json({ mechanics: formatted });
@@ -304,7 +313,18 @@ const listAllMechanics = async (req, res) => {
 
 const listAvailableMechanics = async (req, res) => {
   try {
-    const mechanics = await Mechanic.find({ isActive: { $ne: false } }).select('firstName lastName specialization isActive availabilityStatus');
+    const records = await Mechanic.find({ isActive: { $ne: false } })
+      .select('_id firstName lastName specialization availabilityStatus')
+      .lean();
+    const availabilityOrder = { available: 0, busy: 1, 'on-leave': 2 };
+    const mechanics = records.map((mechanic) => ({
+      id: String(mechanic._id),
+      displayName: `${mechanic.firstName || ''} ${mechanic.lastName || ''}`.trim() || 'Mechanic',
+      specialization: mechanic.specialization,
+      availabilityStatus: mechanic.availabilityStatus || 'available'
+    })).sort((left, right) =>
+      availabilityOrder[left.availabilityStatus] - availabilityOrder[right.availabilityStatus]
+    );
     res.status(200).json({ mechanics });
   } catch (error) {
     console.error('[listAvailableMechanics] error', error);
@@ -348,7 +368,7 @@ const deleteMechanic = async (req, res) => {
 const updateMechanic = async (req, res) => {
   try {
     const { id } = req.params;
-    const { username, firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications, password, photoUrl, bio, availabilityStatus, successRate } = req.body;
+    const { username, firstName, lastName, phoneNumber, specialization, yearsOfExperience, certifications, password, photoUrl, bio, availabilityStatus } = req.body;
 
     const mechanic = await Mechanic.findById(id);
     if (!mechanic) {
@@ -365,9 +385,12 @@ const updateMechanic = async (req, res) => {
       certifications: certifications !== undefined ? certifications : mechanic.certifications,
       photoUrl: photoUrl !== undefined ? photoUrl : mechanic.photoUrl,
       bio: bio !== undefined ? bio : mechanic.bio,
-      availabilityStatus: availabilityStatus !== undefined ? availabilityStatus : mechanic.availabilityStatus,
-      successRate: successRate !== undefined ? successRate : mechanic.successRate
+      availabilityStatus: availabilityStatus !== undefined ? availabilityStatus : mechanic.availabilityStatus
     };
+    if (availabilityStatus !== undefined
+      && (mechanic.availabilityStatus || 'available') !== availabilityStatus) {
+      update.availabilityUpdatedAt = new Date();
+    }
     if (phoneNumber === undefined || req.phoneNumberUnchanged) delete update.phoneNumber;
 
     if (password) {
@@ -399,8 +422,10 @@ const updateMechanic = async (req, res) => {
       certifications: updated.certifications,
       photoUrl: updated.photoUrl,
       bio: updated.bio,
-      availabilityStatus: updated.availabilityStatus,
-      successRate: updated.successRate
+      availabilityStatus: updated.availabilityStatus || 'available',
+      availabilityUpdatedAt: updated.availabilityUpdatedAt,
+      averageRating: updated.averageRating || 0,
+      ratingCount: updated.ratingCount || 0
     }});
   } catch (error) {
     console.error('[updateMechanic] error', error);

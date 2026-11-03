@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { JobDialog, JobTable } from './MechanicJobTable';
 import { getJobActions, getMechanicJobs, getMechanicProfile, performJobAction, updateMechanicAvailability } from './mechanicService';
 
@@ -70,7 +69,7 @@ export default function MechanicDashboard() {
       <section className="mechanic-panel availability-panel"><div className="mechanic-panel-heading"><h2>Availability</h2></div><label className="visually-hidden" htmlFor="mechanic-availability">Availability status</label><select id="mechanic-availability" value={profile.availabilityStatus || 'available'} onChange={(event) => changeAvailability(event.target.value)}><option value="available">Available</option><option value="busy">Busy</option><option value="on-leave">On leave</option></select><p>Specialization: {profile.specialization || 'General service'} · {activeJobs.length} active jobs</p></section>
     </div>
     <section className="mechanic-panel queue-panel"><div className="mechanic-panel-heading"><h2>My queue</h2></div><div className="mechanic-queue-grid">{queueGroups.map((group) => <div className="mechanic-queue-tile" key={group.label}><strong>{jobs.filter((job) => group.statuses.includes(job.status)).length}</strong><span>{group.label}</span></div>)}<div className="mechanic-queue-tile overdue-tile"><strong>{overdue}</strong><span>Overdue</span></div></div></section>
-    <section className="mechanic-panel active-jobs-panel"><div className="mechanic-panel-heading"><h2>My active jobs</h2><Link to="/mechanic/jobs">All jobs <span aria-hidden="true">→</span></Link></div><JobTable jobs={activeJobs} onSelect={setSelectedJob} /></section>
+    <section className="mechanic-panel active-jobs-panel"><div className="mechanic-panel-heading"><h2>My active jobs</h2></div><JobTable jobs={activeJobs} onSelect={setSelectedJob} emptyMessage="No active jobs right now." /></section>
     <JobDialog job={selectedJob} onClose={() => setSelectedJob(null)} actions={selectedJob ? getJobActions(selectedJob) : []} onAction={runAction} busy={busy} error={selectedJob ? error : ''} />
   </>;
 }

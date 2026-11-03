@@ -152,7 +152,7 @@ const validateCreateMechanic = async (req, res, next) => {
 };
 
 const validateUpdateMechanic = async (req, res, next) => {
-  const { firstName, lastName, username, phoneNumber, specialization, yearsOfExperience, availabilityStatus, successRate } = req.body || {};
+  const { firstName, lastName, username, phoneNumber, specialization, yearsOfExperience, availabilityStatus } = req.body || {};
 
   if (firstName === '' || lastName === '') {
     return res.status(400).json({ message: 'Fields cannot be empty' });
@@ -203,10 +203,6 @@ const validateUpdateMechanic = async (req, res, next) => {
     if (!validStatuses.includes(availabilityStatus)) {
       return res.status(400).json({ message: 'Invalid availability status' });
     }
-  }
-
-  if (successRate !== undefined && (successRate < 0 || successRate > 100)) {
-    return res.status(400).json({ message: 'Success rate must be between 0 and 100' });
   }
 
   next();

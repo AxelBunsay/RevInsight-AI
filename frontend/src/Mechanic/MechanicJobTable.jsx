@@ -52,8 +52,8 @@ export function StatusBadge({ status = '' }) {
   return <span className={`mechanic-status status-${key}`}>{label}</span>;
 }
 
-export function JobTable({ jobs, onSelect }) {
-  if (!jobs.length) return <p className="mechanic-empty-state">No jobs match these filters.</p>;
+export function JobTable({ jobs, onSelect, emptyMessage = 'No jobs match these filters.' }) {
+  if (!jobs.length) return <p className="mechanic-empty-state">{emptyMessage}</p>;
   return <>
     <div className="mechanic-table-scroll">
       <table className="mechanic-job-table">

@@ -1,5 +1,6 @@
 const Service = require('../models/service');
 const ServiceRequest = require('../models/serviceRequest');
+const Mechanic = require('../models/mechanic');
 const ReservationSettings = require('../models/reservationSettings');
 const mongoose = require('mongoose');
 const { calculateServicePayment } = require('../utils/servicePayment');
@@ -224,8 +225,12 @@ const createServiceBookings = async (req, res) => {
           throw Object.assign(new Error('A booking must include service and schedule details.'), { status: 400 });
         }
         const partsSource = booking.partsSource === undefined ? 'shop' : booking.partsSource;
+        const selectedMechanicId = booking.mechanicId || booking.mechanic || null;
         if (!['shop', 'customer'].includes(partsSource)) {
           throw Object.assign(new Error('Choose whether parts come from the shop or the customer.'), { status: 400 });
+        }
+        if (selectedMechanicId && !mongoose.Types.ObjectId.isValid(selectedMechanicId)) {
+          throw Object.assign(new Error('Choose a valid mechanic.'), { status: 400 });
         }
         if (!mongoose.Types.ObjectId.isValid(booking.serviceId)) {
           throw Object.assign(new Error('A selected service could not be found.'), { status: 400 });
@@ -274,6 +279,15 @@ const createServiceBookings = async (req, res) => {
             }).session(session).lean();
             if (!configuredService) {
               throw Object.assign(new Error('This service is no longer available.'), { status: 400 });
+            }
+            if (selectedMechanicId) {
+              const mechanic = await Mechanic.findById(selectedMechanicId).session(session).lean();
+              if (!mechanic || mechanic.isActive === false) {
+                throw Object.assign(new Error('This mechanic is no longer available. Please choose another mechanic.'), { status: 400 });
+              }
+              if ((mechanic.availabilityStatus || 'available') === 'on-leave') {
+                throw Object.assign(new Error('This mechanic is currently on leave. Please choose another mechanic.'), { status: 400 });
+              }
             }
             const hasLaborPriceRange = configuredService.laborPriceMin != null || configuredService.laborPriceMax != null;
             const quoteRequired = partsSource === 'customer'
@@ -327,8 +341,8 @@ const createServiceBookings = async (req, res) => {
                 : `Customer booking for ${configuredService.name}`,
               notes: typeof booking.notes === 'string' ? booking.notes.trim() : '',
               vehicle: booking.vehicle.trim(),
-              mechanic: null,
-              mechanicId: null,
+              mechanic: selectedMechanicId,
+              mechanicId: selectedMechanicId,
               units,
               pricePerUnit: configuredService.pricePerUnit === true,
               unitLabel: configuredService.pricePerUnit ? configuredService.unitLabel : '',
