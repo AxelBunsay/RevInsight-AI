@@ -3,6 +3,7 @@
   --customer-page-background: radial-gradient(circle at 85% 8%, #ffe1ca 0, transparent 28%), #fff7ed;
   --c-bg: #FAF1E8;
   --c-card-border: #F3D9C2;
+  --c-card-media-h: 110px;
   --c-accent-tint: #FDEEDF;
   --c-primary: #C2410C;
   --c-primary-hover: #9A3412;
@@ -327,6 +328,12 @@
 .customer-product-modal .customer-detail-success {
   color: #226b37;
   line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .customer-page {
+    --c-card-media-h: 96px;
+  }
 }
 
 @media (max-width: 1024px) {

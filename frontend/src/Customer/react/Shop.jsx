@@ -331,7 +331,6 @@ export default function Shop() {
                   downPayment={downPayment === null || isSettingsLoading ? null : downPayment}
                   downPaymentPercent={downPaymentPercent}
                   isOutOfStock={isOutOfStock}
-                  categoryIcon={categoryIcon}
                   onOpen={saveShopView}
                 />;
               })}

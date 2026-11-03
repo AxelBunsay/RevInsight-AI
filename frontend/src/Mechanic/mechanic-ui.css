@@ -12,32 +12,6 @@
 
 html,body{width:100%;max-width:100%}
 .mechanic-shell{width:100%;max-width:100%;overflow-x:clip}
-.mechanic-nav-label{position:relative;display:block}
-.mechanic-nav-quote-count{position:absolute;top:-8px;right:-16px;display:grid;min-width:18px;height:18px;place-items:center;padding:0 4px;border:2px solid #5b49e9;border-radius:20px;background:#fff;color:#4a38b8;font-size:10px;font-weight:800;line-height:1}
-.mechanic-quote-requests-panel{min-width:0;overflow:hidden}
-.mechanic-quote-count{display:grid;min-width:24px;height:24px;place-items:center;padding:0 7px;border-radius:20px;background:#eeedff;color:#5141d2;font-size:12px;font-weight:800}
-.mechanic-quote-request-list{display:grid;min-width:0;gap:12px;padding:0 16px 16px}
-.mechanic-quote-request-card{display:grid;min-width:0;gap:10px;padding:14px;border:1px solid #e1defa;border-radius:9px;background:#fff}
-.mechanic-quote-request-card p{min-width:0;margin:0;color:#46536d;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
-.mechanic-quote-request-card p strong{color:#28344b}
-.mechanic-quote-request-header{display:flex;min-width:0;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:8px}
-.mechanic-quote-request-header>div{display:grid;min-width:0;gap:3px}
-.mechanic-quote-request-header>div>strong{color:#182136;font-size:15px}
-.mechanic-quote-request-header>div>span,.mechanic-quote-request-schedule{color:#71809b;font-size:12px}
-.mechanic-quote-request-range{max-width:100%;padding:6px 9px;border-radius:7px;background:#f1efff;color:#5141d2;font-size:12px;font-weight:700;overflow-wrap:anywhere}
-.mechanic-quote-request-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
-.mechanic-quote-request-fields .mechanic-field{min-width:0}
-.mechanic-quote-request-fields .mechanic-field input,.mechanic-quote-request-fields .mechanic-field textarea{min-height:44px;font-size:16px}
-.mechanic-quote-request-fields .mechanic-field textarea{resize:vertical}
-.mechanic-quote-request-actions{display:flex;flex-wrap:wrap;gap:8px}
-.mechanic-quote-request-actions button{min-width:120px;min-height:44px}
-.mechanic-quote-history{min-width:0;border:1px solid #e2e6f0;border-radius:9px;background:#fff}
-.mechanic-quote-history>summary{min-height:44px;padding:12px 15px;color:#4a38b8;font-size:13px;font-weight:700;cursor:pointer}
-.mechanic-quote-history-list{display:grid;gap:8px;padding:0 12px 12px}
-.mechanic-quote-history-list article{display:grid;min-width:0;gap:3px;padding:10px;border-radius:7px;background:#f7f7fc;color:#52617a;font-size:12px;overflow-wrap:anywhere}
-.mechanic-quote-history-list article strong{color:#25314a}
-.mechanic-quote-history-list article time{color:#8a94a8;font-size:11px}
-@media(max-width:620px){.mechanic-nav-quote-count{top:-8px;right:-12px}.mechanic-quote-request-list{padding:0 10px 12px}.mechanic-quote-request-fields{grid-template-columns:minmax(0,1fr)}.mechanic-quote-request-actions{display:grid;grid-template-columns:1fr}.mechanic-quote-request-actions button{width:100%;min-height:44px}}
 .mechanic-workspace{min-width:0}
 .mechanic-main{width:100%;min-width:0}
 .mechanic-table-scroll{min-width:0}

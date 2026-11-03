@@ -478,29 +478,13 @@
   }
 }
 
-@media (min-width: 600px) and (max-width: 900px) {
-  .customer-page.shop-page .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));
-  }
-}
-
 @media (max-width: 380px) {
   .customer-page .customer-brand__copy small {
     display: none;
   }
 }
 
-@media (min-width: 600px) and (max-width: 900px) {
-  .customer-page.shop-page .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));
-  }
-}
-
 @media (max-width: 340px) {
-  .customer-page.shop-page .product-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .customer-page .customer-booking-footer {
     grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr);
     gap: 6px;

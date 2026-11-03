@@ -33,9 +33,6 @@ export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = fal
     <div className="service-card-art">
       <span className="service-code">Code: {service.code}</span>
       <span className="service-duration">{formatDuration(service.durationMinutes)}</span>
-      <p className="service-card-description" title={service.description || 'Service details available at the shop.'}>
-        {service.description || 'Service details available at the shop.'}
-      </p>
       <div className={`service-icon${useInlineIcon ? ' is-inline' : ''}`} aria-hidden="true">
         <svg viewBox="0 0 48 48" focusable="false">
           <path d="M29.8 6.5a13 13 0 0 0-17.1 17.1L5.5 30.8a4.1 4.1 0 0 0 5.8 5.8l7.2-7.2a13 13 0 0 0 17.1-17.1l-8.1 8.1-7.2-7.2 8.1-8.1Z" />
