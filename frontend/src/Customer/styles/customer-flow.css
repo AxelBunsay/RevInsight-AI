@@ -17,13 +17,6 @@
   font: 700 24px/1.2 'Segoe UI', sans-serif;
 }
 
-.customer-page .customer-heading-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .customer-page .customer-heading > p:last-child {
   color: #82756c;
   font: 12px/1.5 'Segoe UI', sans-serif;
@@ -310,7 +303,7 @@
 
 .customer-primary-button,
 .customer-secondary-button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 10px 16px;
   border: 0;
   border-radius: 8px;
@@ -647,7 +640,7 @@
   border-radius: 8px;
   background: #fff;
   color: #322a25;
-  font: 13px 'Segoe UI', sans-serif;
+  font: 16px 'Segoe UI', sans-serif;
 }
 
 .customer-booking-fields > label,
@@ -694,8 +687,9 @@
 .customer-shop-closed-message { margin: 0; color: #765342; font-size: 12px; font-weight: 700; }
 .customer-booking-summary { display: grid; gap: 10px; }
 .customer-booking-summary > p { margin: 0; color: #55473e; font-size: 13px; font-weight: 700; }
-.customer-booking-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.customer-booking-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
 .customer-booking-footer button:disabled { background: #b8b1aa; color: #fff; cursor: not-allowed; }
+.customer-quote-payment-note { margin: 0; color: #765342; font-size: 14px; line-height: 1.45; }
 .customer-booking-hint { color: #82756c; font-size: 11px; }
 .customer-booking-fields .customer-motorcycle-field,
 .customer-motorcycle-field,
@@ -768,6 +762,11 @@
 
 .customer-cart-item-art.is-service {
   background: linear-gradient(135deg, #ddcffd, #b9a1ed);
+}
+.customer-cart-item-art.is-service svg {
+  width: 52px;
+  height: 52px;
+  fill: #543c85;
 }
 .customer-inline-product-image,
 .customer-inline-product-placeholder {

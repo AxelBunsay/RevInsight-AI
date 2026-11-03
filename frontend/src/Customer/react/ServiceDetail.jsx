@@ -366,7 +366,6 @@ export default function ServiceDetail() {
         category: service.category,
         duration: durationLabel,
         durationMinutes: service.durationMinutes,
-        icon: '🔧',
         bookingDate,
         startTime: timeSlot,
         timeSlot: localTimeLabel(timeSlot),
@@ -402,7 +401,7 @@ export default function ServiceDetail() {
       </p>}
       <nav className="customer-breadcrumbs" aria-label="Breadcrumb"><Link to="/customer/services">Services</Link><span>/</span><span>{service.category || 'General'}</span><span>/</span><span>{service.name}</span></nav>
       <section className="customer-detail-layout customer-service-detail">
-        <div className="customer-detail-art tone-sun" aria-label={`${service.name} service illustration`}><span aria-hidden="true">🔧</span><small>{durationLabel}</small></div>
+        <div className="customer-detail-art tone-sun" aria-label={`${service.name} service illustration`}><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M29.8 6.5a13 13 0 0 0-17.1 17.1L5.5 30.8a4.1 4.1 0 0 0 5.8 5.8l7.2-7.2a13 13 0 0 0 17.1-17.1l-8.1 8.1-7.2-7.2 8.1-8.1Z" /></svg><small>{durationLabel}</small></div>
         <div className="customer-detail-copy"><p className="customer-eyebrow">{service.category || 'General'} · {durationLabel}</p><h1>{service.name}</h1><p>{service.description}</p><strong className="customer-detail-price">{quoteRequired ? laborEstimate : `${partsSource === 'customer' ? 'Labor-only total' : 'Total'} ₱${Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}`}</strong>
           <h2>What&apos;s included</h2><ul className="customer-inclusion-list"><li>{service.description || 'Service details available at the shop.'}</li></ul>
         </div>
@@ -455,6 +454,7 @@ export default function ServiceDetail() {
         {bookingError && <p className="customer-error" role="alert">{bookingError}</p>}
         {closedMessage && <p className="customer-shop-closed-message" role="status">{closedMessage}</p>}
         {allSlotsUnavailable && <div className="customer-no-slots"><p>No slots left on this date</p><button type="button" className="customer-secondary-button" onClick={handleNextAvailable} disabled={isFindingNext}>{isFindingNext ? 'Finding a date...' : 'Show next available'}</button></div>}
+        {quoteRequired && <p className="customer-quote-payment-note">No payment now. The mechanic will send you a price first.</p>}
         {quoteRequired && <label className="customer-notes-field">Parts you will bring<textarea required value={customerPartsNote} onChange={(event) => { setCustomerPartsNote(event.target.value); setBookingSuccess(''); }} rows="3" placeholder="For example: Brake pads" /><small>Tell the mechanic which parts you will provide.</small></label>}
         <label className="customer-notes-field">Notes{quoteRequired ? ' (optional)' : ' for the mechanic'}<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" />{!quoteRequired && <small>{service.pricePerUnit ? 'Notes do not change the price. Choose the quantity above.' : 'Notes do not change the service price.'}</small>}</label>
         {bookingSuccess && <p className="customer-success" role="status">{bookingSuccess} <Link to="/my-purchases?tab=services">View my bookings</Link></p>}

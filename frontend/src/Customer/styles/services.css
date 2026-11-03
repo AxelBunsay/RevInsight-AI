@@ -123,10 +123,18 @@
   height: 82px;
   place-items: center;
   color: #d4540a;
-  font-size: 46px;
+}
+.service-icon svg {
+  width: 52px;
+  height: 52px;
+  fill: currentColor;
 }
 .service-card-body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 10px 10px;
 }
 .service-category-label {
   margin: 0 0 7px;
@@ -162,7 +170,7 @@
   flex: 0 0 auto;
   gap: 10px;
   margin-top: auto;
-  padding: 0 10px 10px;
+  padding: 0;
 }
 .service-card-footer strong {
   display: -webkit-box;

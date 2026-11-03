@@ -36,9 +36,11 @@ export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = fal
       <p className="service-card-description" title={service.description || 'Service details available at the shop.'}>
         {service.description || 'Service details available at the shop.'}
       </p>
-      <div className="service-icon" aria-hidden="true">{useInlineIcon
-    <div className={`service-card-footer${partsSource === 'customer' ? ' is-quote' : ''}`}>
-        : '🔧'}</div>
+      <div className={`service-icon${useInlineIcon ? ' is-inline' : ''}`} aria-hidden="true">
+        <svg viewBox="0 0 48 48" focusable="false">
+          <path d="M29.8 6.5a13 13 0 0 0-17.1 17.1L5.5 30.8a4.1 4.1 0 0 0 5.8 5.8l7.2-7.2a13 13 0 0 0 17.1-17.1l-8.1 8.1-7.2-7.2 8.1-8.1Z" />
+        </svg>
+      </div>
     </div>
     <div className="service-card-body">
       <p className="service-category-label">{service.category || 'General'}</p>
@@ -46,12 +48,12 @@ export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = fal
       <p className="service-card-description" title={service.description || 'Service details available at the shop.'}>
         {service.description || 'Service details available at the shop.'}
       </p>
-    </div>
-    <div className="service-card-footer">
-      {partsSource === 'customer'
-        ? <div className="service-quote-estimate"><strong>{laborRange}</strong><small>Final price is set by the mechanic</small></div>
-        : <strong>₱{unitTotal.toLocaleString('en-PH')} total{service.pricePerUnit ? ` / ${service.unitLabel || 'unit'}` : ''}</strong>}
-      <Link to={`/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`} className="service-book-link">{partsSource === 'customer' ? 'Request quote' : 'Book service'}</Link>
+      <div className={`service-card-footer${partsSource === 'customer' ? ' is-quote' : ''}`}>
+        {partsSource === 'customer'
+          ? <div className="service-quote-estimate"><strong>{laborRange}</strong><small>Final price is set by the mechanic</small></div>
+          : <strong>₱{unitTotal.toLocaleString('en-PH')} total{service.pricePerUnit ? ` / ${service.unitLabel || 'unit'}` : ''}</strong>}
+        <Link to={`/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`} className="service-book-link">{partsSource === 'customer' ? 'Request quote' : 'Book service'}</Link>
+      </div>
     </div>
   </article>;
 }

@@ -213,8 +213,9 @@ export function CustomerHeader() {
   };
 
   return <header ref={headerRef} className="customer-header">
-    <Link className="customer-brand" to={hasCustomerAccount ? '/customer/shop' : '/'} aria-label="Manoy's Motorcycle Parts, Accessories & Services"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="40" height="40" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
-    <div className="customer-header-actions">
+    <div className="customer-header-inner">
+      <Link className="customer-brand" to={hasCustomerAccount ? '/customer/shop' : '/'} aria-label="Manoy's Motorcycle Parts, Accessories & Services"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="40" height="40" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
+      <div className="customer-header-actions">
       <Link className="customer-header-icon-button customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
         <svg viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(0.5 -0.1)"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></g></svg>
         {cartCount > 0 && <span className="customer-header-cart-count">{cartCount}</span>}
@@ -247,8 +248,8 @@ export function CustomerHeader() {
       <button ref={menuToggleRef} type="button" className="customer-header-icon-button customer-menu-toggle" aria-expanded={isMenuOpen} aria-controls="customer-navigation" aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'} onClick={() => { dispatchCustomerMenu({ type: 'close' }); setMenuOpenPath(isMenuOpen ? null : location.pathname); }}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg>
       </button>
-    </div>
-    <nav ref={menuRef} id="customer-navigation" aria-label="Customer navigation" className={`customer-nav${isMenuOpen ? ' is-open' : ''}`}>
+      </div>
+      <nav ref={menuRef} id="customer-navigation" aria-label="Customer navigation" className={`customer-nav${isMenuOpen ? ' is-open' : ''}`}>
       {!hasCustomerAccount && <Link onClick={closeNavigation} className={isHomePage ? 'active' : ''} aria-current={isHomePage ? 'page' : undefined} to="/">Home</Link>}
       <Link onClick={closeNavigation} className={isShopPage ? 'active' : ''} aria-current={isShopPage ? 'page' : undefined} to="/customer/shop">Shop</Link>
       <Link onClick={closeNavigation} className={isServicesPage ? 'active' : ''} aria-current={isServicesPage ? 'page' : undefined} to="/customer/services">Services</Link>
@@ -269,7 +270,8 @@ export function CustomerHeader() {
         <Link onClick={closeNavigation} className={currentPath.startsWith('/customer/login') ? 'active' : ''} aria-current={currentPath.startsWith('/customer/login') ? 'page' : undefined} to="/customer/login">Sign in</Link>
         <Link onClick={closeNavigation} className={currentPath.startsWith('/customer/register') ? 'active' : ''} aria-current={currentPath.startsWith('/customer/register') ? 'page' : undefined} to="/customer/register">Register</Link>
       </div>}
-    </nav>
+      </nav>
+    </div>
   </header>;
 }
 

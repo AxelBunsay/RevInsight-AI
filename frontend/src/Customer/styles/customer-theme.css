@@ -230,3 +230,94 @@
 .customer-page.customer-page .service-category-label {
   color: var(--c-brand-text);
 }
+
+.customer-page.customer-page {
+  padding-top: 0;
+}
+
+.customer-page .customer-header {
+  position: sticky !important;
+  z-index: 180 !important;
+  top: 0 !important;
+  display: block !important;
+  box-sizing: border-box;
+  width: 100vw !important;
+  height: 72px;
+  min-height: 72px;
+  max-width: none !important;
+  margin: 0 0 0 calc(50% - 50vw) !important;
+  padding: 0 !important;
+  border: 0;
+  border-bottom: 1px solid var(--c-card-border) !important;
+  background: var(--c-bg) !important;
+}
+
+.customer-page .customer-header-inner {
+  display: flex;
+  width: min(calc(100% - 2 * var(--customer-wide-content-padding)), 1760px);
+  height: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  margin: 0 auto;
+}
+
+.customer-page .customer-header-inner > .customer-nav {
+  padding-top: 0;
+}
+
+.customer-page .route-content-transition {
+  padding-top: 24px;
+}
+
+.customer-page.customer-page :is(
+  .customer-primary-button,
+  .customer-checkout-button,
+  .service-booking-form > button,
+  .service-card-footer button,
+  .service-card-footer .service-book-link,
+  .shop-no-results button,
+  .shop-load-error button,
+  .shop-settings-error button,
+  .customer-site-footer-map-link,
+  .customer-modal-footer .customer-primary-button,
+  .customer-account-shortcuts .customer-primary-button
+) {
+  background-color: var(--c-primary) !important;
+  color: var(--c-on-primary) !important;
+}
+
+.customer-page.customer-page :is(
+  .customer-primary-button,
+  .customer-checkout-button,
+  .service-booking-form > button,
+  .service-card-footer button,
+  .service-card-footer .service-book-link,
+  .shop-no-results button,
+  .shop-load-error button,
+  .shop-settings-error button,
+  .customer-site-footer-map-link,
+  .customer-modal-footer .customer-primary-button,
+  .customer-account-shortcuts .customer-primary-button
+):is(:hover, :focus, :focus-visible, :active, :disabled) {
+  background-color: var(--c-primary) !important;
+  color: var(--c-on-primary) !important;
+}
+
+@media (max-width: 1024px) {
+  .customer-page .customer-header {
+    height: calc(64px + env(safe-area-inset-top));
+    min-height: calc(64px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top) !important;
+  }
+
+  .customer-page .customer-header-inner {
+    display: grid;
+    width: calc(100% - 2 * (12px + var(--customer-wide-content-padding)));
+    height: 64px;
+    min-height: 64px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+}

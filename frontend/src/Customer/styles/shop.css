@@ -32,7 +32,6 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  padding-top: 75px;
   gap: 8px;
 }
 
@@ -59,7 +58,6 @@
   color: #d94d22;
 }
 
-.customer-heading,
 .customer-page > form,
 .customer-page > .shop-toolbar,
 .customer-page > .category-pills,
@@ -911,4 +909,3 @@
   }
 
 }
-
