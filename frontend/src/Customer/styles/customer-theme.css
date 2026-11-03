@@ -101,7 +101,8 @@
   color: var(--c-dark);
 }
 
-.customer-page :is(.customer-product-categories button.active, .category-pills button.active, .services-parts-mode button.active, .customer-reservation-tabs button.is-active, .customer-purchases-tabs button.is-active, .customer-account-tabs button.is-active, .customer-pagination button.is-active, .customer-nav > a.active, .customer-account-menu-trigger.active),
+.customer-page .customer-product-categories:not(.services-parts-mode) button.active,
+.customer-page :is(.category-pills button.active, .customer-reservation-tabs button.is-active, .customer-purchases-tabs button.is-active, .customer-account-tabs button.is-active, .customer-pagination button.is-active, .customer-nav > a.active, .customer-account-menu-trigger.active),
 .customer-auth-page .customer-auth-tab-indicator {
   border-color: var(--c-accent);
   background-color: var(--c-accent);
@@ -110,10 +111,6 @@
 
 .customer-page :is(.customer-product-categories button.active small, .customer-account-tabs button.is-active .customer-account-tab-count) {
   background-color: var(--c-accent-tint);
-  color: var(--c-dark);
-}
-
-.customer-page .services-parts-mode button.active .service-labor-only-label {
   color: var(--c-dark);
 }
 
@@ -270,6 +267,10 @@
 
 .customer-page .route-content-transition {
   padding-top: 24px;
+}
+
+.customer-page.service-detail-page .route-content-transition {
+  padding-top: 40px;
 }
 
 .customer-page.customer-page :is(

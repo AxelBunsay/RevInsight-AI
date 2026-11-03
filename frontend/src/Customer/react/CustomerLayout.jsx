@@ -44,6 +44,7 @@ export function CustomerAccountMenu({ isOpen, onSelect, onSignOut, canSignOut = 
         {canSignOut && <>
           <Link role="menuitem" to="/customer/profile" onClick={onSelect}>My profile</Link>
           <Link role="menuitem" to="/my-purchases?tab=all" onClick={onSelect}>My purchases</Link>
+          <Link role="menuitem" to="/my-purchases?tab=services" onClick={onSelect}>My bookings</Link>
           <div className="customer-account-menu-divider" role="separator" />
           <button type="button" className="customer-account-menu-signout" role="menuitem" onClick={() => { onSelect?.(); onSignOut?.(); }}>Sign out</button>
         </>}
@@ -309,7 +310,7 @@ function CustomerFooter() {
   </footer>;
 }
 
-export function CustomerPage({ title, description, children, preserveScrollOnMount = false, actions = null }) {
+export function CustomerPage({ title, description, children, preserveScrollOnMount = false, actions = null, hideHeading = false }) {
   const location = useLocation();
   useDocumentTitle(getCustomerDocumentTitle(title));
 
@@ -327,13 +328,15 @@ export function CustomerPage({ title, description, children, preserveScrollOnMou
   }, [preserveScrollOnMount]);
 
   return <>
-      <section className="customer-heading">
+      {hideHeading
+        ? <h1 className="customer-sr-only">{title}</h1>
+        : <section className="customer-heading">
         {title !== 'Account' && <p className="customer-eyebrow">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}
         {actions
           ? <div className="customer-heading-title-row"><h1>{title}</h1>{actions}</div>
           : <h1>{title}</h1>}
         <p>{description}</p>
-      </section>
+        </section>}
       {children}
   </>;
 }
@@ -344,6 +347,7 @@ export function CustomerRouteLayout() {
     pathname === '/' ? 'home-page' : '',
     pathname === '/customer/shop' || pathname.startsWith('/customer/products/') ? 'shop-page' : '',
     pathname === '/customer/services' ? 'services-page' : '',
+    pathname.startsWith('/customer/services/') ? 'service-detail-page' : '',
     pathname.startsWith('/my-purchases') ? 'orders-page reservations-page' : '',
     pathname === '/customer/profile' ? 'profile-page' : ''
   ].filter(Boolean).join(' ');

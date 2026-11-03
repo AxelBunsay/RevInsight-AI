@@ -5,6 +5,7 @@ import { CustomerPage } from "./CustomerLayout";
 import CustomerPagination from "./CustomerPagination.jsx";
 import { CUSTOMER_PAGE_SIZES, getCustomerPageItems } from "./customerPagination";
 import { useCustomerPagination } from "./useCustomerPagination";
+import ServiceBookingModal from "./ServiceBookingModal";
 import { getServicePartsSource, servicesForPartsSource, withServicePartsSource } from "./servicePartsMode";
 import "../styles/services.css";
 
@@ -22,18 +23,21 @@ function ServiceSkeleton() {
   </article>;
 }
 
-export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = false }) {
+export function ServiceCard({ service, partsSource = 'shop', onBook }) {
   const unitPrice = partsSource === 'customer' ? service.laborOnlyPrice : service.price;
   const unitTotal = Number(unitPrice || 0) + Number(service.mechanicFee || 0);
   const hasLaborRange = service.laborPriceMin != null || service.laborPriceMax != null;
   const laborRange = hasLaborRange
     ? `Est. PHP ${Number(service.laborPriceMin || 0).toLocaleString('en-PH')} - PHP ${Number(service.laborPriceMax || service.laborPriceMin || 0).toLocaleString('en-PH')}`
     : 'Price set by mechanic';
-  return <article className="service-card tone-sun" key={service._id}>
+  return <article
+    className="service-card tone-sun"
+    key={service._id}
+  >
     <div className="service-card-art">
       <span className="service-code">Code: {service.code}</span>
       <span className="service-duration">{formatDuration(service.durationMinutes)}</span>
-      <div className={`service-icon${useInlineIcon ? ' is-inline' : ''}`} aria-hidden="true">
+      <div className="service-icon" aria-hidden="true">
         <svg viewBox="0 0 48 48" focusable="false">
           <path d="M29.8 6.5a13 13 0 0 0-17.1 17.1L5.5 30.8a4.1 4.1 0 0 0 5.8 5.8l7.2-7.2a13 13 0 0 0 17.1-17.1l-8.1 8.1-7.2-7.2 8.1-8.1Z" />
         </svg>
@@ -49,7 +53,14 @@ export function ServiceCard({ service, partsSource = 'shop', useInlineIcon = fal
         {partsSource === 'customer'
           ? <div className="service-quote-estimate"><strong>{laborRange}</strong><small>Final price is set by the mechanic</small></div>
           : <strong>₱{unitTotal.toLocaleString('en-PH')} total{service.pricePerUnit ? ` / ${service.unitLabel || 'unit'}` : ''}</strong>}
-        <Link to={`/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`} className="service-book-link">{partsSource === 'customer' ? 'Request quote' : 'Book service'}</Link>
+        <Link
+          to={`/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`}
+          className="service-book-link"
+          onClick={(event) => {
+            event.preventDefault();
+            onBook?.(service, event.currentTarget);
+          }}
+        >{partsSource === 'customer' ? 'Request quote' : 'Book service'}</Link>
       </div>
     </div>
   </article>;
@@ -65,6 +76,9 @@ export default function Services() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState('featured');
   const [category, setCategory] = useState("All");
+  const [hasSwitchedPartsMode, setHasSwitchedPartsMode] = useState(false);
+  const [selectedService, setSelectedService] = useState(null);
+  const serviceCardOpenerRef = useRef(null);
   const servicesListRef = useRef(null);
   const modeServices = useMemo(
     () => servicesForPartsSource(services, partsSource),
@@ -116,20 +130,21 @@ export default function Services() {
   });
   const pageServices = getCustomerPageItems(visibleServices, page, servicesPageSize);
   const choosePartsSource = (nextPartsSource) => {
+    if (nextPartsSource !== partsSource) setHasSwitchedPartsMode(true);
     setSearchParams(withServicePartsSource(searchParams, nextPartsSource));
+  };
+  const openServiceBooking = (service, opener) => {
+    serviceCardOpenerRef.current = opener;
+    setSelectedService(service);
   };
 
   return (
     <CustomerPage
       title="Motorcycle Services"
       description="Book expert care for your motorcycle."
-      actions={<Link className="customer-secondary-button services-bookings-link services-my-bookings" to="/my-purchases?tab=services">My bookings</Link>}
+      hideHeading
     >
       <div className="shop-content">
-        <div className="customer-product-categories services-parts-mode" role="tablist" aria-label="Service parts source">
-          <button type="button" role="tab" aria-selected={partsSource === "shop"} className={partsSource === "shop" ? "active" : ""} onClick={() => choosePartsSource("shop")}>With shop parts</button>
-          <button type="button" role="tab" aria-selected={partsSource === "customer"} className={partsSource === "customer" ? "active" : ""} onClick={() => choosePartsSource("customer")}>Labor only (I have my own parts)</button>
-        </div>
         <section className="customer-compact-banner services-compact-banner" aria-label="Services introduction">
           <div>
             <h2>Everything your ride needs.</h2>
@@ -137,6 +152,10 @@ export default function Services() {
           </div>
           <Link to="/customer/shop">Explore shop</Link>
         </section>
+        <div className="customer-product-categories services-parts-mode" role="tablist" aria-label="Service parts source">
+          <button type="button" role="tab" aria-selected={partsSource === "shop"} className={partsSource === "shop" ? "active" : ""} onClick={() => choosePartsSource("shop")}>With shop parts</button>
+          <button type="button" role="tab" aria-selected={partsSource === "customer"} className={partsSource === "customer" ? "active" : ""} onClick={() => choosePartsSource("customer")}>Labor only (I have my own parts)</button>
+        </div>
         <div className="shop-toolbar">
           <input
             value={search}
@@ -164,13 +183,20 @@ export default function Services() {
           <div><strong>3. A mechanic handles the rest</strong></div>
         </section>
 
-        <div className="customer-product-results">
+        <div
+          key={partsSource}
+          className={`customer-product-results${hasSwitchedPartsMode ? ' is-mode-transition' : ''}`}
+        >
           <h2>All services</h2>
           <span>{isLoading ? 'Loading services' : `${visibleServices.length} services`}</span>
         </div>
 
         {isLoading
-          ? <div className="product-grid" aria-label="Loading services">{Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)}</div>
+          ? <div
+            key={partsSource}
+            className={`product-grid${hasSwitchedPartsMode ? ' is-mode-transition' : ''}`}
+            aria-label="Loading services"
+          >{Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)}</div>
           : error
             ? <div className="shop-load-error" role="alert">
               <p>Could not load services. Try again.</p>
@@ -181,8 +207,17 @@ export default function Services() {
               }}>Try again</button>
             </div>
             : visibleServices.length
-              ? <div className="service-card-grid" ref={servicesListRef}>
-                {pageServices.map((service) => <ServiceCard service={service} partsSource={partsSource} key={service._id} />)}
+              ? <div
+                key={partsSource}
+                className={`service-card-grid${hasSwitchedPartsMode ? ' is-mode-transition' : ''}`}
+                ref={servicesListRef}
+              >
+                {pageServices.map((service) => <ServiceCard
+                  service={service}
+                  partsSource={partsSource}
+                  onBook={openServiceBooking}
+                  key={service._id}
+                />)}
               </div>
               : <div className="shop-no-results">
                 <p>{modeServices.length ? 'No services match your search.' : 'No services available.'}</p>
@@ -197,6 +232,12 @@ export default function Services() {
           label="Services"
         />}
       </div>
+      <ServiceBookingModal
+        service={selectedService}
+        partsSource={partsSource}
+        openerRef={serviceCardOpenerRef}
+        onClose={() => setSelectedService(null)}
+      />
     </CustomerPage>
   );
 }

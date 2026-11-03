@@ -249,6 +249,7 @@ export default function Shop() {
   return <CustomerPage
     title="Motorcycle Shop"
     description="Browse available parts and accessories."
+    hideHeading
     preserveScrollOnMount={Boolean(restoredShopView)}
   >
     <div className="shop-content">
