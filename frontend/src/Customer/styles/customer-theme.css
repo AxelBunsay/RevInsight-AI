@@ -305,6 +305,30 @@
   color: var(--c-on-primary) !important;
 }
 
+.customer-product-modal {
+  --c-primary: #C2410C;
+  --c-primary-hover: #9A3412;
+  --c-on-primary: #FFFFFF;
+  --c-dark: #2B1608;
+}
+
+.customer-product-modal .customer-detail-actions .customer-primary-button {
+  min-height: 44px;
+  border-color: transparent;
+  background-color: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.customer-product-modal .customer-detail-actions .customer-primary-button:is(:hover, :focus, :focus-visible, :active, :disabled) {
+  background-color: var(--c-primary-hover);
+  color: var(--c-on-primary);
+}
+
+.customer-product-modal .customer-detail-success {
+  color: #226b37;
+  line-height: 1.5;
+}
+
 @media (max-width: 1024px) {
   .customer-page .customer-header {
     height: calc(64px + env(safe-area-inset-top));

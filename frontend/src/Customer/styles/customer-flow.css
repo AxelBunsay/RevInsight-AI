@@ -188,6 +188,16 @@
   color: #4f3b31;
   font-size: 86px;
 }
+.customer-product-placeholder-icon {
+  width: 56px;
+  height: 56px;
+  fill: none;
+  stroke: #6f5647;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  opacity: .48;
+}
 .customer-detail-product-image { width: 100%; height: 100%; min-height: 340px; object-fit: cover; }
 
 .customer-detail-art small {
@@ -381,7 +391,9 @@
   position: relative;
   width: min(880px, 100%);
   max-height: 90vh;
+  max-height: 90dvh;
   overflow: hidden;
+  padding: 24px;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 24px 80px rgba(0, 0, 0, .28);
@@ -389,9 +401,28 @@
 }
 
 .customer-product-modal-scroll {
-  max-height: 90vh;
+  max-height: calc(90vh - 48px);
+  max-height: calc(90dvh - 48px);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.customer-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.customer-product-modal-header {
+  position: absolute;
+  z-index: 3;
+  inset: 0 0 auto;
+  height: 56px;
+  pointer-events: none;
 }
 
 .customer-product-modal-close {
@@ -410,6 +441,7 @@
   font-size: 25px;
   line-height: 1;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .customer-product-modal-close:focus-visible {
@@ -420,30 +452,35 @@
 .customer-product-modal .customer-detail-layout {
   grid-template-columns: minmax(0, 45%) minmax(0, 1fr);
   gap: 28px;
-  align-items: center;
-  padding: 30px;
+  align-items: start;
+  padding: 0;
   border: 0;
   border-radius: 0;
+  background: transparent;
 }
 
 .customer-product-modal .customer-detail-art {
   width: 100%;
   min-height: 0;
+  max-height: 340px;
   aspect-ratio: 4 / 3;
-  font-size: 64px;
+  font-size: 0;
 }
 
 .customer-product-modal .customer-detail-product-image {
+  width: 100%;
+  height: 100%;
   min-height: 0;
+  object-fit: contain;
 }
 
 .customer-product-modal .customer-detail-copy {
   min-width: 0;
-  padding-right: 22px;
+  padding: 0;
 }
 
 .customer-product-modal .customer-detail-copy h1 {
-  padding-right: 12px;
+  padding-right: 40px;
   overflow-wrap: anywhere;
 }
 
@@ -460,15 +497,23 @@
   margin: 16px 0;
 }
 
+.customer-product-modal .customer-quantity-control > span {
+  color: var(--c-dark);
+  font: 600 14px/1.4 'Segoe UI', sans-serif;
+}
+
 .customer-product-modal .customer-detail-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
   gap: 10px;
   margin-top: 12px;
 }
 
 .customer-product-modal .customer-detail-actions button {
   min-width: 0;
+  width: 100%;
+  min-height: 44px;
   padding-right: 10px;
   padding-left: 10px;
 }
@@ -483,7 +528,7 @@
   border-radius: 8px;
   background: #eff8f1;
   color: #226b37;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -531,42 +576,48 @@
 }
 @media (max-width: 767px) {
   .customer-product-modal-overlay {
-    align-items: flex-end;
-    padding: 0;
+    align-items: center;
+    padding: 12px;
   }
 
   .customer-product-modal {
     width: 100%;
-    max-height: 92vh;
-    max-height: 92dvh;
-    border-radius: 20px 20px 0 0;
+    max-height: 90vh;
+    max-height: 90dvh;
   }
 
   .customer-product-modal-scroll {
-    max-height: 92vh;
-    max-height: 92dvh;
+    max-height: calc(90vh - 48px);
+    max-height: calc(90dvh - 48px);
   }
 
   .customer-product-modal .customer-detail-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 18px;
-    padding: 20px 18px 26px;
+    gap: 16px;
+    padding: 0;
   }
 
   .customer-product-modal .customer-detail-art {
-    aspect-ratio: 4 / 3;
-    max-height: 36vh;
+    width: 100%;
+    height: min(220px, 30dvh);
+    min-height: 0;
+    max-height: 220px;
+    aspect-ratio: auto;
   }
 
   .customer-product-modal .customer-detail-copy {
     padding: 0;
+  }
+
+  .customer-product-modal .customer-detail-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 380px) {
   .customer-product-modal .customer-detail-layout {
     gap: 14px;
-    padding: 16px 14px 22px;
+    padding: 0;
   }
 
   .customer-product-modal .customer-detail-copy h1 {
@@ -574,7 +625,7 @@
   }
 
   .customer-product-modal .customer-detail-actions {
-    gap: 7px;
+    gap: 8px;
   }
   background: #fff;
   color: #2b241f;

@@ -346,8 +346,8 @@
   .customer-product-modal {
     display: flex;
     width: min(880px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
+    max-height: 90vh;
+    max-height: 90dvh;
     flex-direction: column;
     font-family: 'Segoe UI', sans-serif;
   }
@@ -364,7 +364,8 @@
 
   .customer-product-modal-scroll {
     min-height: 0;
-    max-height: none;
+    max-height: calc(90vh - 48px);
+    max-height: calc(90dvh - 48px);
     flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -382,8 +383,7 @@
   }
 
   .customer-product-modal .customer-detail-layout {
-    padding-top: 18px;
-    padding-bottom: 22px;
+    padding: 0;
   }
 
   .customer-product-modal .customer-detail-copy {
@@ -404,32 +404,6 @@
     min-width: 44px;
     min-height: 44px;
     height: 44px;
-  }
-
-  .customer-product-modal-footer {
-    position: sticky;
-    z-index: 3;
-    bottom: 0;
-    display: grid;
-    flex: 0 0 auto;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    min-width: 0;
-    margin: 0;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid #eee3da;
-    background: #fff;
-    box-shadow: 0 -8px 18px rgba(48, 31, 20, .08);
-  }
-
-  .customer-product-modal-footer .customer-detail-actions {
-    display: contents;
-  }
-
-  .customer-product-modal-footer .customer-detail-actions button {
-    min-width: 0;
-    min-height: 48px;
-    font-size: 14px;
   }
 
   .customer-page .customer-booking-panel {
@@ -1014,14 +988,15 @@
   .customer-product-modal {
     display: flex;
     width: min(880px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
+    max-height: 90vh;
+    max-height: 90dvh;
     flex-direction: column;
   }
 
   .customer-product-modal-scroll {
     min-height: 0;
-    max-height: none;
+    max-height: calc(90vh - 48px);
+    max-height: calc(90dvh - 48px);
     flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -1046,25 +1021,6 @@
     pointer-events: auto;
   }
 
-  .customer-product-modal-footer {
-    display: grid;
-    flex: 0 0 auto;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-    border-top: 1px solid #eee3da;
-    background: #fff;
-  }
-
-  .customer-product-modal-footer .customer-detail-actions {
-    display: contents;
-  }
-
-  .customer-product-modal-footer button {
-    min-width: 0;
-    min-height: 44px;
-    font-size: 14px;
-  }
 }
 
 .customer-page :is(p, li),

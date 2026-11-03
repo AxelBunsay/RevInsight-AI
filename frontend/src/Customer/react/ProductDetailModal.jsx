@@ -10,8 +10,6 @@ const CLOSE_ANIMATION_MS = 180;
 export default function ProductDetailModal({ productId, onClose, openerRef }) {
   const [visibleProductId, setVisibleProductId] = useState(productId || '');
   const [isClosing, setIsClosing] = useState(false);
-  const [isCompactLayout, setIsCompactLayout] = useState(() => typeof window !== 'undefined' && window.matchMedia?.('(max-width: 1024px)').matches === true);
-  const [modalFooter, setModalFooter] = useState(null);
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -20,14 +18,6 @@ export default function ProductDetailModal({ productId, onClose, openerRef }) {
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia?.('(max-width: 1024px)');
-    if (!mediaQuery) return undefined;
-    const updateLayout = (event) => setIsCompactLayout(event.matches);
-    mediaQuery.addEventListener?.('change', updateLayout);
-    return () => mediaQuery.removeEventListener?.('change', updateLayout);
-  }, []);
 
   useEffect(() => {
     if (productId) {
@@ -113,7 +103,7 @@ export default function ProductDetailModal({ productId, onClose, openerRef }) {
       tabIndex={-1}
     >
       <header className="customer-product-modal-header">
-        <span className="customer-sr-only">Product details</span>
+        <h2 id="product-detail-title" className="customer-sr-only">Product details</h2>
         <button
           ref={closeButtonRef}
           type="button"
@@ -123,9 +113,8 @@ export default function ProductDetailModal({ productId, onClose, openerRef }) {
         >×</button>
       </header>
       <div className="customer-product-modal-scroll">
-        <ProductDetailContent key={visibleProductId} productId={visibleProductId} isModal modalFooter={isCompactLayout ? modalFooter : null} />
+        <ProductDetailContent key={visibleProductId} productId={visibleProductId} isModal headingId="product-detail-name" />
       </div>
-      <footer ref={setModalFooter} className="customer-product-modal-footer" />
     </section>
   </div>;
   return typeof document === 'undefined' ? modal : createPortal(modal, document.body);
