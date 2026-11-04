@@ -1,5 +1,11 @@
 const { createHash } = require('crypto');
-const { generateCardInsights, generateRevenueInsights } = require('../../services/aiService');
+const {
+  CARD_INSIGHT_FIELDS,
+  CARD_INSIGHT_KEYS,
+  generateCardInsights,
+  generateRevenueInsights,
+  isValidCardInsights
+} = require('../../services/aiService');
 const dashboardController = require('./dashboardController');
 const {
   REVENUE_TIMEZONE,
@@ -170,11 +176,20 @@ async function getRevenueCardInsights(req, res, dependencies = {}) {
 
     let generation = !refresh ? requests.get(cacheKey) : null;
     if (!generation) {
-      generation = Promise.resolve(insightGenerator(analysisData)).then((generated) => ({
-        insights: generated.insights,
-        source: generated.source,
-        generatedAt: now.toISOString()
-      }));
+      generation = Promise.resolve(insightGenerator(analysisData)).then((generated) => {
+        if (!isValidCardInsights(generated?.insights)) {
+          throw new Error('Card insight generator returned an invalid response schema.');
+        }
+        const insights = Object.fromEntries(CARD_INSIGHT_KEYS.map((key) => [
+          key,
+          Object.fromEntries(CARD_INSIGHT_FIELDS.map((field) => [field, generated.insights[key][field]]))
+        ]));
+        return {
+          insights,
+          source: generated.source === 'ai' ? 'ai' : 'template',
+          generatedAt: now.toISOString()
+        };
+      });
       requests.set(cacheKey, generation);
     }
 

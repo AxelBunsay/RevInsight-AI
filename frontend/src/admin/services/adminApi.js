@@ -4,6 +4,8 @@ import inventoryConfig from '../../../../shared/inventory.json';
 import serviceCategories from '../../../../shared/serviceCategories.json';
 
 const confirmedStatuses = new Set(['completed', 'paid']);
+const revenueCardKeys = ['trend', 'risk', 'concentration', 'service', 'forecast'];
+const revenueCardInsightFields = ['summary', 'recommendation', 'ifFollowed', 'ifIgnored'];
 const { LOW_STOCK_THRESHOLD } = inventoryConfig;
 // Set VITE_ADMIN_USE_MOCKS=true to use demo data in development.
 const useDemoData = import.meta.env.DEV && import.meta.env.VITE_ADMIN_USE_MOCKS === 'true';
@@ -17,6 +19,17 @@ function request(path, options = {}) {
 
 function unwrapRows(response) {
   return Array.isArray(response?.data) ? response.data : [];
+}
+
+export function mapRevenueCardInsights(response) {
+  const insights = Object.fromEntries(revenueCardKeys.map((key) => {
+    const card = response?.insights?.[key];
+    return [key, Object.fromEntries(revenueCardInsightFields.map((field) => [
+      field,
+      typeof card?.[field] === 'string' ? card[field] : undefined
+    ]))];
+  }));
+  return { ...response, insights };
 }
 
 async function getAllPages(fetchPage) {
@@ -211,7 +224,7 @@ export const adminApi = {
   getRevenueCardInsights: (refresh = false) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
     method: 'POST',
     body: JSON.stringify({})
-  }),
+  }).then(mapRevenueCardInsights),
   getRevenueAnalysisData: async () => {
     const [quarterly, risk, concentration] = await Promise.all([
       adminApi.getQuarterlySales(),

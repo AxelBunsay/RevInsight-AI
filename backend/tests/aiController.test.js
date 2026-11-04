@@ -186,7 +186,16 @@ describe('revenue AI controller helpers', () => {
       dashboardController,
       generateCardInsights: async () => {
         generationCount += 1;
-        return { insights: { trend: { descriptive: 'Revenue is stable.' } }, source: 'ai' };
+        const card = {
+          summary: 'Revenue is stable.',
+          recommendation: 'Review the next quarterly sales plan.',
+          ifFollowed: 'Reviewing the plan may preserve stability.',
+          ifIgnored: 'Ignoring it could leave emerging changes unaddressed.'
+        };
+        return {
+          insights: Object.fromEntries(['trend', 'risk', 'concentration', 'service', 'forecast'].map((key) => [key, card])),
+          source: 'ai'
+        };
       },
       now: new Date('2026-11-04T00:00:00.000Z'),
       cache: new Map(),
@@ -213,6 +222,12 @@ describe('revenue AI controller helpers', () => {
     const second = await call();
     expect(first.result).toEqual(second.result);
     expect(first.result).toMatchObject({ source: 'ai', generatedAt: '2026-11-04T00:00:00.000Z' });
+    expect(first.result.insights.trend).toEqual({
+      summary: 'Revenue is stable.',
+      recommendation: 'Review the next quarterly sales plan.',
+      ifFollowed: 'Reviewing the plan may preserve stability.',
+      ifIgnored: 'Ignoring it could leave emerging changes unaddressed.'
+    });
     expect(generationCount).toBe(1);
 
     dependencies.now = new Date('2026-11-04T00:00:31.000Z');
