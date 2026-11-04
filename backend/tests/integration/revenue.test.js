@@ -228,4 +228,107 @@ describe('revenue integration', () => {
     expect(insufficient.body.data.availableQuarters).toBeLessThan(5);
     expect(insufficient.body.data.projection).toEqual([]);
   });
+
+  it('breaks down completed service revenue by category and resolves missing snapshots by service name', async () => {
+    fixtures.service.category = 'Repair';
+    await fixtures.service.save();
+    await ServiceRequest.create([
+      {
+        user: fixtures.customer._id,
+        customerId: fixtures.customer._id,
+        serviceId: fixtures.service._id,
+        serviceType: fixtures.service.name,
+        description: 'Completed repair',
+        estimatedPrice: 700,
+        status: 'completed',
+        completedAt: new Date('2026-10-20T10:00:00+08:00')
+      },
+      {
+        user: fixtures.customer._id,
+        customerId: fixtures.customer._id,
+        serviceType: 'Scheduled maintenance',
+        serviceCategory: 'Maintenance',
+        description: 'Completed maintenance',
+        estimatedPrice: 300,
+        status: 'completed',
+        completedAt: new Date('2026-10-21T10:00:00+08:00')
+      }
+    ]);
+
+    const response = await api.get('/api/admin/dashboard/service-revenue?period=monthly')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    const data = response.body.data;
+    expect(data.totalServiceRevenue).toBe(1000);
+    expect(data.completedJobs).toBe(2);
+    expect(data.averagePerJob).toBe(500);
+    expect(data.categories.find((category) => category.name === 'Repair')).toMatchObject({
+      revenue: 700,
+      jobs: 1
+    });
+    expect(data.categories.find((category) => category.name === 'Maintenance')).toMatchObject({
+      revenue: 300,
+      jobs: 1
+    });
+    expect(data.categories.reduce((sum, category) => sum + category.revenue, 0)).toBe(data.totalServiceRevenue);
+  });
+
+  it('counts an accepted labor-only quote at its quoted price', async () => {
+    await ServiceRequest.create({
+      user: fixtures.customer._id,
+      customerId: fixtures.customer._id,
+      serviceType: 'Labor-only repair',
+      serviceCategory: 'Repair',
+      partsSource: 'customer',
+      quoteStatus: 'accepted',
+      quotedPrice: 800,
+      description: 'Accepted labor-only quote',
+      estimatedPrice: 600,
+      status: 'completed',
+      completedAt: new Date('2026-10-20T10:00:00+08:00')
+    });
+
+    const response = await api.get('/api/admin/dashboard/service-revenue?period=monthly')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      totalServiceRevenue: 800,
+      completedJobs: 1,
+      averagePerJob: 800,
+      percentOfTotalRevenue: 100
+    });
+    expect(response.body.data.topServices).toContainEqual({
+      name: 'Labor-only repair',
+      revenue: 800,
+      jobs: 1
+    });
+  });
+
+  it('returns an empty service revenue report when the selected period has no completed jobs', async () => {
+    await ServiceRequest.create({
+      user: fixtures.customer._id,
+      customerId: fixtures.customer._id,
+      serviceType: 'Historic service',
+      description: 'Outside the selected period',
+      estimatedPrice: 500,
+      status: 'completed',
+      completedAt: new Date('2025-01-15T10:00:00+08:00')
+    });
+
+    const response = await api.get('/api/admin/dashboard/service-revenue?period=daily')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({
+      totalServiceRevenue: 0,
+      completedJobs: 0,
+      averagePerJob: 0,
+      percentOfTotalRevenue: 0,
+      topServices: []
+    });
+    expect(response.body.data.categories).toHaveLength(5);
+    expect(response.body.data.categories.every((category) => category.revenue === 0 && category.jobs === 0)).toBe(true);
+  });
 });

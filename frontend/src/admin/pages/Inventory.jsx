@@ -3,6 +3,7 @@ import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import ProductImage from "../../Customer/react/ProductImage";
 import { LOW_STOCK_THRESHOLD, PRODUCT_CATEGORIES } from "../../../../shared/inventory.json";
+import SERVICE_CATEGORIES from "../../../../shared/serviceCategories.json";
 
 const stockClass = (available) => available <= 0
   ? "stock-text out"
@@ -85,7 +86,7 @@ const validateServiceForm = (form) => {
   const maxUnits = Number(form.maxUnits);
 
   if (name.length < 2 || name.length > 80) errors.name = "Name must be 2 to 80 characters.";
-  if (category.length < 1 || category.length > 80) errors.category = "Category must be 1 to 80 characters.";
+  if (!SERVICE_CATEGORIES.includes(category)) errors.category = "Choose a valid service category.";
   if (form.description.length > 300) errors.description = "Description must be 300 characters or fewer.";
   if (form.price === "" || !Number.isFinite(price) || price < 0.01 || price > 999999.99) {
     errors.price = "Price must be from 0.01 to 999,999.99.";
@@ -418,7 +419,7 @@ function Inventory() {
           laborPriceMin: service.laborPriceMin == null ? "" : String(service.laborPriceMin),
           laborPriceMax: service.laborPriceMax == null ? "" : String(service.laborPriceMax),
           mechanicFee: String(service.mechanicFee ?? 0),
-          category: service.category || "General",
+          category: SERVICE_CATEGORIES.includes(service.category) ? service.category : "General",
           durationMinutes: String(service.durationMinutes || 60),
           pricePerUnit: service.pricePerUnit === true,
           unitLabel: service.unitLabel || "",
@@ -1198,15 +1199,16 @@ function Inventory() {
             </label>
             <label>
               Category
-              <input
-                maxLength="80"
+              <select
                 aria-invalid={Boolean(serviceFormErrors.category)}
                 value={serviceForm.category}
                 onChange={(event) => {
                   setServiceForm({ ...serviceForm, category: event.target.value });
                   setServiceFormErrors((errors) => ({ ...errors, category: "" }));
                 }}
-              />
+              >
+                {SERVICE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
               {serviceFormErrors.category && <small className="inventory-field-error">{serviceFormErrors.category}</small>}
             </label>
             <label>

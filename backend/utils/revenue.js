@@ -89,7 +89,10 @@ function buildRevenuePipelines({ startDate, endDate } = {}) {
         $project: {
           revenue: '$estimatedPrice',
           ...dateFields('completedAt'),
+          serviceCategory: 1,
           serviceType: 1,
+          quoteStatus: 1,
+          quotedPrice: 1,
           source: { $literal: 'service' }
         }
       }
@@ -147,7 +150,10 @@ function normalizeRevenueSources({ orders = [], reservations = [], services = []
         revenue,
         name: row.serviceType || 'Service',
         contributorType: 'Labor service',
-        category: null
+        category: null,
+        serviceCategory: row.serviceCategory,
+        quoteStatus: row.quoteStatus,
+        quotedPrice: row.quotedPrice
       }];
     }
 

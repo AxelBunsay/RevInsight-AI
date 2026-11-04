@@ -1,6 +1,7 @@
 import dashboardMock from '../data/dashboardMock.json';
 import { request as apiRequest } from '../../services/api';
 import inventoryConfig from '../../../../shared/inventory.json';
+import serviceCategories from '../../../../shared/serviceCategories.json';
 
 const confirmedStatuses = new Set(['completed', 'paid']);
 const { LOW_STOCK_THRESHOLD } = inventoryConfig;
@@ -176,6 +177,21 @@ function makeDashboardData(stats, orders, inventory) {
 export const adminApi = {
   loginAdmin: (credentials) => request('/api/admin/login', { method: 'POST', body: JSON.stringify(credentials), tokenKey: null }),
   getDashboardStats: () => request('/api/dashboard/dashboard'),
+  getServiceRevenue: async (period) => {
+    if (useDemoData) {
+      return {
+        period,
+        totalServiceRevenue: 0,
+        completedJobs: 0,
+        averagePerJob: 0,
+        percentOfTotalRevenue: 0,
+        categories: serviceCategories.map((name) => ({ name, revenue: 0, jobs: 0, percent: 0 })),
+        topServices: []
+      };
+    }
+    const response = await request(`/api/admin/dashboard/service-revenue?period=${encodeURIComponent(period)}`);
+    return response.data;
+  },
   getSalesReport: (query = {}) => {
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => {

@@ -2,6 +2,7 @@ const {
   normalizeProductCategory,
   productCategoryErrorMessage
 } = require('./productCategories');
+const { isServiceCategory, normalizeServiceCategory } = require('./serviceCategories');
 
 const validateProductInput = (input, { hasVariants = false } = {}) => {
   const fieldErrors = {};
@@ -45,7 +46,9 @@ const validateServiceInput = (input, current = {}) => {
   const laborPriceMinValue = input.laborPriceMin !== undefined ? input.laborPriceMin : current.laborPriceMin ?? null;
   const laborPriceMaxValue = input.laborPriceMax !== undefined ? input.laborPriceMax : current.laborPriceMax ?? null;
   const mechanicFeeValue = input.mechanicFee ?? current.mechanicFee;
-  const categoryValue = input.category ?? current.category ?? 'General';
+  const categoryValue = input.category === undefined
+    ? normalizeServiceCategory(current.category || 'General')
+    : input.category;
   const durationMinutesValue = input.durationMinutes ?? current.durationMinutes ?? 60;
   const pricePerUnitValue = input.pricePerUnit ?? current.pricePerUnit ?? false;
   const unitLabelValue = input.unitLabel ?? current.unitLabel ?? '';
@@ -96,8 +99,8 @@ const validateServiceInput = (input, current = {}) => {
   } else if (Number.isFinite(price) && mechanicFee > price) {
     fieldErrors.mechanicFee = 'Mechanic fee cannot be greater than the service price.';
   }
-  if (typeof categoryValue !== 'string' || !categoryValue.trim() || categoryValue.length > 80) {
-    fieldErrors.category = 'Category must be between 1 and 80 characters.';
+  if (!isServiceCategory(categoryValue)) {
+    fieldErrors.category = 'Choose a valid service category.';
   }
   if (!hasNumber(durationMinutesValue) || !Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 1440) {
     fieldErrors.durationMinutes = 'Duration must be a whole number from 1 to 1,440 minutes.';

@@ -244,6 +244,55 @@
 .admin-root .admin-inventory-panel {
   padding: 18px 20px;
 }
+.admin-root .admin-service-revenue-panel {
+  margin-top: 14px;
+}
+.admin-root .admin-service-revenue__stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 17px;
+}
+.admin-root .admin-service-revenue__stats .admin-stat-cell h2 {
+  white-space: nowrap;
+}
+.admin-root .admin-service-revenue__section + .admin-service-revenue__section {
+  margin-top: 22px;
+}
+.admin-root .admin-service-revenue__section h3 {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.admin-root .admin-service-revenue__top-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding-left: 22px;
+}
+.admin-root .admin-service-revenue__top-list li {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink);
+  font-size: 13px;
+}
+.admin-root .admin-service-revenue__top-list li strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.admin-root .admin-service-revenue__top-list li span {
+  flex: 0 0 auto;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.admin-root .admin-service-revenue__top-list small {
+  margin-left: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
 .admin-root .admin-category-list {
   display: grid;
   gap: 17px;
@@ -271,6 +320,9 @@
   color: var(--ink);
   font-size: 12px;
   font-weight: 700;
+}
+.admin-root .admin-service-revenue-panel .admin-category-row__top > span {
+  white-space: nowrap;
 }
 .admin-root .admin-category-row__top small {
   margin-left: 5px;
@@ -1588,6 +1640,19 @@
 @media (max-width: 900px) {
   .admin-root .ai-revenue-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 650px) {
+  .admin-root .admin-service-revenue__stats {
+    grid-template-columns: 1fr;
+  }
+  .admin-root .admin-service-revenue__stats .admin-stat-cell {
+    min-height: 120px;
+    border-right: 0;
+    border-bottom: 1px solid #f3dcc3;
+  }
+  .admin-root .admin-service-revenue__stats .admin-stat-cell:last-child {
+    border-bottom: 0;
   }
 }
 @media (max-width: 600px) {
