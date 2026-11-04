@@ -21,6 +21,7 @@ const {
 } = require('./helpers');
 const reservationController = require('../../controllers/reservationController');
 const Service = require('../../models/service');
+const Mechanic = require('../../models/mechanic');
 const ReservationSettings = require('../../models/reservationSettings');
 const revenueUtils = require('../../utils/revenue');
 const { getServicePaymentSummary } = require('../../utils/servicePayment');
@@ -229,6 +230,116 @@ describe('service booking business flow integration', () => {
       balanceDue: Math.round((fixtures.service.price + fixtures.service.mechanicFee) * 0.7 * 100) / 100,
       laborFee: fixtures.service.mechanicFee
     });
+  });
+
+  it('rejects a booking for an on-leave mechanic with a per-booking 400 error', async () => {
+    await Mechanic.updateOne(
+      { _id: fixtures.mechanic._id },
+      { $set: { availabilityStatus: 'on-leave' } }
+    );
+
+    const response = await createBookings(customerToken, [
+      booking(fixtures.service._id, { mechanicId: String(fixtures.mechanic._id) })
+    ]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results[0]).toMatchObject({
+      ok: false,
+      status: 400,
+      message: 'This mechanic is currently on leave. Please choose another mechanic.'
+    });
+    expect(await ServiceRequest.countDocuments()).toBe(0);
+  });
+
+  it('allows a booking for a busy mechanic', async () => {
+    await Mechanic.updateOne(
+      { _id: fixtures.mechanic._id },
+      { $set: { availabilityStatus: 'busy' } }
+    );
+
+    const response = await createBookings(customerToken, [
+      booking(fixtures.service._id, { mechanicId: String(fixtures.mechanic._id) })
+    ]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results[0].ok).toBe(true);
+    expect(String(response.body.results[0].serviceRequest.mechanic)).toBe(String(fixtures.mechanic._id));
+    expect(String(response.body.results[0].serviceRequest.mechanicId)).toBe(String(fixtures.mechanic._id));
+  });
+
+  it('returns only safe mechanic fields, ordered by availability, and treats missing status as available', async () => {
+    await Mechanic.updateOne(
+      { _id: fixtures.mechanic._id },
+      { $set: { availabilityStatus: 'busy' } }
+    );
+    const [onLeave, legacy] = await Mechanic.create([
+      {
+        username: 'integration.onleave',
+        email: 'integration.onleave@example.com',
+        password: 'MechanicPass1',
+        firstName: 'On',
+        lastName: 'Leave',
+        phoneNumber: '09201234567',
+        specialization: 'engine',
+        yearsOfExperience: 3,
+        availabilityStatus: 'on-leave',
+        createdBy: fixtures.admin._id
+      },
+      {
+        username: 'integration.legacy',
+        email: 'integration.legacy@example.com',
+        password: 'MechanicPass1',
+        firstName: 'Legacy',
+        lastName: 'Available',
+        phoneNumber: '09211234567',
+        specialization: 'brakes',
+        yearsOfExperience: 2,
+        createdBy: fixtures.admin._id
+      }
+    ]);
+    await Mechanic.updateOne({ _id: legacy._id }, { $unset: { availabilityStatus: 1 } });
+
+    const response = await api.get('/api/mechanics/available')
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.mechanics.map((mechanic) => mechanic.availabilityStatus))
+      .toEqual(['available', 'busy', 'on-leave']);
+    expect(response.body.mechanics[0]).toMatchObject({
+      id: String(legacy._id),
+      displayName: 'Legacy Available',
+      specialization: 'brakes',
+      availabilityStatus: 'available'
+    });
+    for (const mechanic of response.body.mechanics) {
+      expect(Object.keys(mechanic).sort()).toEqual(['availabilityStatus', 'displayName', 'id', 'specialization']);
+      expect(mechanic).not.toHaveProperty('email');
+      expect(mechanic).not.toHaveProperty('phoneNumber');
+      expect(mechanic).not.toHaveProperty('password');
+      expect(mechanic).not.toHaveProperty('username');
+    }
+    expect(response.body.mechanics.at(-1).id).toBe(String(onLeave._id));
+  });
+
+  it('records when mechanic availability changes through mechanic and admin profile updates', async () => {
+    await Mechanic.updateOne(
+      { _id: fixtures.mechanic._id },
+      { $set: { availabilityStatus: 'available' }, $unset: { availabilityUpdatedAt: 1 } }
+    );
+
+    const mechanicUpdate = await api.put('/api/mechanics/profile')
+      .set('Authorization', `Bearer ${mechanicToken}`)
+      .send({ availabilityStatus: 'busy' });
+    expect(mechanicUpdate.status).toBe(200);
+    expect(mechanicUpdate.body.mechanic.availabilityUpdatedAt).toBeTruthy();
+
+    const adminUpdate = await api.put(`/api/mechanics/${fixtures.mechanic._id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ availabilityStatus: 'on-leave' });
+    expect(adminUpdate.status).toBe(200);
+    expect(adminUpdate.body.mechanic.availabilityStatus).toBe('on-leave');
+    expect(new Date(adminUpdate.body.mechanic.availabilityUpdatedAt).getTime())
+      .toBeGreaterThanOrEqual(new Date(mechanicUpdate.body.mechanic.availabilityUpdatedAt).getTime());
   });
 
   it('prices labor-only units from the saved option, leaves inventory unchanged, and records completion revenue once', async () => {

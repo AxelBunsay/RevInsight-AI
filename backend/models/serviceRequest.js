@@ -33,6 +33,27 @@ const serviceRequestSchema = new mongoose.Schema({
     enum: ['shop', 'customer'],
     default: 'shop'
   },
+  quoteStatus: {
+    type: String,
+    enum: ['', 'quote_requested', 'quoted', 'accepted', 'rejected', 'declined', 'cancelled'],
+    default: ''
+  },
+  quotedPrice: { type: Number, min: 0, default: null },
+  quoteNote: { type: String, trim: true, maxlength: 1000, default: '' },
+  quotedAt: { type: Date, default: null },
+  respondedAt: { type: Date, default: null },
+  declineReason: { type: String, trim: true, maxlength: 500, default: '' },
+  customerPartsNote: { type: String, trim: true, maxlength: 1000, default: '' },
+  mechanicRating: {
+    type: Number,
+    min: 1,
+    max: 5,
+    validate: { validator: Number.isInteger, message: 'Mechanic rating must be a whole number.' }
+  },
+  mechanicRatingComment: { type: String, trim: true, maxlength: 300 },
+  mechanicRatedAt: { type: Date },
+  laborPriceMinSnapshot: { type: Number, min: 0, default: null },
+  laborPriceMaxSnapshot: { type: Number, min: 0, default: null },
   mechanic: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Mechanic',

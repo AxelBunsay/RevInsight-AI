@@ -5,6 +5,20 @@ import { getMechanicFormError } from "./mechanicFormValidation";
 import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from "../../../../shared/mobileNumber.mjs";
 import PasswordInput from "../../components/PasswordInput";
 
+function formatAvailabilityUpdatedAt(value) {
+  if (!value) return "Update time unavailable";
+  const updatedAt = new Date(value);
+  if (Number.isNaN(updatedAt.getTime())) return "Update time unavailable";
+  const minutes = Math.floor((Date.now() - updatedAt.getTime()) / 60000);
+  if (minutes < 1) return "Updated just now";
+  if (minutes < 60) return `Updated ${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Updated ${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `Updated ${days} day${days === 1 ? "" : "s"} ago`;
+  return `Updated ${new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(updatedAt)}`;
+}
+
 function Mechanics() {
   const [mechanics, setMechanics] = useState([]);
   const [totalMechanics, setTotalMechanics] = useState(0);
@@ -156,8 +170,15 @@ function Mechanics() {
       busy: "Busy",
       "on-leave": "On leave",
     };
-    return statuses[status] || status;
+    return statuses[status] || statuses.available;
   };
+  const availabilityCounts = mechanics.reduce((counts, mechanic) => {
+    const status = ["busy", "on-leave"].includes(mechanic.availabilityStatus)
+      ? mechanic.availabilityStatus
+      : "available";
+    counts[status] += 1;
+    return counts;
+  }, { available: 0, busy: 0, "on-leave": 0 });
 
   const closeMechanicDialog = () => {
     setEditingMechanic(null);
@@ -209,6 +230,9 @@ function Mechanics() {
               <div className="stat-label">Total Labor Today</div>
             </div>
           </div>
+          <p className="mechanic-availability-summary" role="status">
+            {isLoading ? "Loading availability..." : `${availabilityCounts.available} Available - ${availabilityCounts.busy} Busy - ${availabilityCounts["on-leave"]} On leave`}
+          </p>
           {mechanics.map((mechanic, index) => (
             <div key={mechanic.id} className="mechanic-card">
               <div className="mechanic-header-row">
@@ -219,10 +243,16 @@ function Mechanics() {
                     {getMechanicInitial(mechanic.firstName)}
                   </div>
                   <div>
-                    <div className="mechanic-name">
-                      {`${mechanic.firstName || ""} ${mechanic.lastName || ""}`.trim() ||
-                        "Unknown"}
+                    <div className="mechanic-name-row">
+                      <div className="mechanic-name">
+                        {`${mechanic.firstName || ""} ${mechanic.lastName || ""}`.trim() ||
+                          "Unknown"}
+                      </div>
+                      <span className={`mechanic-availability-pill is-${mechanic.availabilityStatus || "available"}`}>
+                        {getAvailabilityStatus(mechanic.availabilityStatus)}
+                      </span>
                     </div>
+                    <small className="mechanic-availability-updated">{formatAvailabilityUpdatedAt(mechanic.availabilityUpdatedAt)}</small>
                     <div className="mechanic-specialty">
                       {mechanic.specialization || "General Service"}
                     </div>
@@ -258,7 +288,9 @@ function Mechanics() {
                 </div>
                 <div className="mechanic-stat">
                   <div className="mechanic-stat-number">
-                    {mechanic.averageRating || 0}
+                    {mechanic.ratingCount
+                      ? `${Number(mechanic.averageRating || 0).toFixed(1)} (${mechanic.ratingCount})`
+                      : "- (0)"}
                   </div>
                   <div className="mechanic-stat-label">Average Rating</div>
                 </div>

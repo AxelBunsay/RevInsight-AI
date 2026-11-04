@@ -27,6 +27,24 @@ const serviceSchema = new mongoose.Schema({
     max: 999999.99,
     default: null
   },
+  laborPriceMin: {
+    type: Number,
+    min: 0,
+    max: 999999.99,
+    default: null
+  },
+  laborPriceMax: {
+    type: Number,
+    min: 0,
+    max: 999999.99,
+    default: null,
+    validate: {
+      validator(value) {
+        return value == null || this.laborPriceMin == null || value >= this.laborPriceMin;
+      },
+      message: 'Maximum labor price must be greater than or equal to minimum labor price.'
+    }
+  },
   category: {
     type: String,
     default: 'General',

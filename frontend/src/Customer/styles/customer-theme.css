@@ -1,7 +1,9 @@
 .customer-page,
 .customer-auth-page {
+  --customer-page-background: radial-gradient(circle at 85% 8%, #ffe1ca 0, transparent 28%), #fff7ed;
   --c-bg: #FAF1E8;
   --c-card-border: #F3D9C2;
+  --c-card-media-h: 110px;
   --c-accent-tint: #FDEEDF;
   --c-primary: #C2410C;
   --c-primary-hover: #9A3412;
@@ -11,16 +13,15 @@
   --c-dark: #2B1608;
 }
 
-.customer-page.customer-page,
+.customer-page.customer-page {
+  background: var(--customer-page-background);
+  color: var(--c-dark);
+  font-family: 'Segoe UI', sans-serif;
+}
+
 .customer-auth-page.customer-auth-page {
   background-color: var(--c-bg);
   color: var(--c-dark);
-}
-
-.customer-page.customer-page:not(.shop-page):not(.services-page),
-.customer-page.customer-page.shop-page,
-.customer-page.customer-page.services-page {
-  background-color: var(--c-bg);
 }
 
 .customer-page .customer-header {
@@ -38,7 +39,7 @@
   border: 1px solid var(--c-card-border);
 }
 
-.customer-page :is(.shop-motorcycle-filter, .customer-reservation-detail-meta, .customer-confirmation-order, .customer-account-records article) {
+.customer-page :is(.customer-reservation-detail-meta, .customer-confirmation-order, .customer-account-records article) {
   background-color: var(--c-bg);
   color: var(--c-dark);
 }
@@ -68,7 +69,7 @@
 }
 
 .customer-page :is(.product-price, .customer-detail-price, .customer-booking-footer strong, .service-card-footer strong, .customer-reservation-card-bottom strong, .customer-reservation-card-bottom a, .customer-account-identity-stats strong, .customer-flow-section-heading a, .customer-related-product small),
-.customer-page :is(.customer-eyebrow, .service-category-label, .landing-section-heading > a, .services-my-bookings, .shop-section-heading a),
+.customer-page :is(.customer-eyebrow, .service-category-label, .landing-section-heading > a, .shop-section-heading a),
 .customer-page .shop-content a:not(.customer-primary-button):not(.customer-secondary-button):not(.product-card):not(.shop-compact-banner a),
 .customer-auth-page .customer-auth-content .customer-link a {
   color: var(--c-brand-text);
@@ -88,19 +89,20 @@
   color: var(--c-on-primary);
 }
 
-.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .shop-motorcycle-filter button, .customer-account-shortcuts .customer-secondary-button) {
+.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .customer-account-shortcuts .customer-secondary-button) {
   min-height: 44px;
   border: 1px solid var(--c-card-border);
   background-color: #fff;
   color: var(--c-dark);
 }
 
-.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .shop-motorcycle-filter button, .customer-account-shortcuts .customer-secondary-button):hover:not(:disabled) {
+.customer-page :is(.customer-secondary-button, .customer-detail-actions .customer-secondary-button, .customer-modal-footer .customer-secondary-button, .customer-account-shortcuts .customer-secondary-button):hover:not(:disabled) {
   background-color: var(--c-accent-tint);
   color: var(--c-dark);
 }
 
-.customer-page :is(.customer-product-categories button.active, .category-pills button.active, .service-category-pills button.active, .services-parts-mode button.active, .customer-reservation-tabs button.is-active, .customer-purchases-tabs button.is-active, .customer-account-tabs button.is-active, .customer-pagination button.is-active, .customer-nav > a.active, .customer-account-menu-trigger.active),
+.customer-page .customer-product-categories:not(.services-parts-mode) button.active,
+.customer-page :is(.category-pills button.active, .customer-reservation-tabs button.is-active, .customer-purchases-tabs button.is-active, .customer-account-tabs button.is-active, .customer-pagination button.is-active, .customer-nav > a.active, .customer-account-menu-trigger.active),
 .customer-auth-page .customer-auth-tab-indicator {
   border-color: var(--c-accent);
   background-color: var(--c-accent);
@@ -109,10 +111,6 @@
 
 .customer-page :is(.customer-product-categories button.active small, .customer-account-tabs button.is-active .customer-account-tab-count) {
   background-color: var(--c-accent-tint);
-  color: var(--c-dark);
-}
-
-.customer-page .services-parts-mode button.active .service-labor-only-label {
   color: var(--c-dark);
 }
 
@@ -229,4 +227,129 @@
 .customer-page.customer-page .customer-eyebrow,
 .customer-page.customer-page .service-category-label {
   color: var(--c-brand-text);
+}
+
+.customer-page.customer-page {
+  padding-top: 0;
+}
+
+.customer-page .customer-header {
+  position: sticky !important;
+  z-index: 180 !important;
+  top: 0 !important;
+  display: block !important;
+  box-sizing: border-box;
+  width: 100vw !important;
+  height: 72px;
+  min-height: 72px;
+  max-width: none !important;
+  margin: 0 0 0 calc(50% - 50vw) !important;
+  padding: 0 !important;
+  border: 0;
+  border-bottom: 1px solid var(--c-card-border) !important;
+  background: var(--c-bg) !important;
+}
+
+.customer-page .customer-header-inner {
+  display: flex;
+  width: min(calc(100% - 2 * var(--customer-wide-content-padding)), 1760px);
+  height: 100%;
+  min-height: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  margin: 0 auto;
+}
+
+.customer-page .customer-header-inner > .customer-nav {
+  padding-top: 0;
+}
+
+.customer-page .route-content-transition {
+  padding-top: 24px;
+}
+
+.customer-page.service-detail-page .route-content-transition {
+  padding-top: 40px;
+}
+
+.customer-page.customer-page :is(
+  .customer-primary-button,
+  .customer-checkout-button,
+  .service-booking-form > button,
+  .service-card-footer button,
+  .service-card-footer .service-book-link,
+  .shop-no-results button,
+  .shop-load-error button,
+  .shop-settings-error button,
+  .customer-site-footer-map-link,
+  .customer-modal-footer .customer-primary-button,
+  .customer-account-shortcuts .customer-primary-button
+) {
+  background-color: var(--c-primary) !important;
+  color: var(--c-on-primary) !important;
+}
+
+.customer-page.customer-page :is(
+  .customer-primary-button,
+  .customer-checkout-button,
+  .service-booking-form > button,
+  .service-card-footer button,
+  .service-card-footer .service-book-link,
+  .shop-no-results button,
+  .shop-load-error button,
+  .shop-settings-error button,
+  .customer-site-footer-map-link,
+  .customer-modal-footer .customer-primary-button,
+  .customer-account-shortcuts .customer-primary-button
+):is(:hover, :focus, :focus-visible, :active, :disabled) {
+  background-color: var(--c-primary) !important;
+  color: var(--c-on-primary) !important;
+}
+
+.customer-product-modal {
+  --c-primary: #C2410C;
+  --c-primary-hover: #9A3412;
+  --c-on-primary: #FFFFFF;
+  --c-dark: #2B1608;
+}
+
+.customer-product-modal .customer-detail-actions .customer-primary-button {
+  min-height: 44px;
+  border-color: transparent;
+  background-color: var(--c-primary);
+  color: var(--c-on-primary);
+}
+
+.customer-product-modal .customer-detail-actions .customer-primary-button:is(:hover, :focus, :focus-visible, :active, :disabled) {
+  background-color: var(--c-primary-hover);
+  color: var(--c-on-primary);
+}
+
+.customer-product-modal .customer-detail-success {
+  color: #226b37;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .customer-page {
+    --c-card-media-h: 96px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .customer-page .customer-header {
+    height: calc(64px + env(safe-area-inset-top));
+    min-height: calc(64px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top) !important;
+  }
+
+  .customer-page .customer-header-inner {
+    display: grid;
+    width: calc(100% - 2 * (12px + var(--customer-wide-content-padding)));
+    height: 64px;
+    min-height: 64px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
 }

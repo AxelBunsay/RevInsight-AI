@@ -36,6 +36,15 @@ export function getServicePaymentSummary(booking = {}) {
 }
 
 export function getServiceBookingStatus(booking = {}) {
+  const quoteStatuses = {
+    quote_requested: 'Awaiting quote',
+    quoted: 'Quote ready',
+    accepted: 'Accepted',
+    rejected: 'Rejected',
+    declined: 'Declined by mechanic',
+    cancelled: 'Cancelled'
+  };
+  if (quoteStatuses[booking.quoteStatus]) return quoteStatuses[booking.quoteStatus];
   if (booking.status === 'completed') return 'Completed';
   if (booking.status === 'cancelled') return 'Cancelled';
   if (booking.paymentStatus === 'Payment Submitted') return 'Payment Submitted';

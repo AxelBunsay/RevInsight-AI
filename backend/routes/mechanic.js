@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mechanicController = require('../controllers/mechanic');
+const notifications = require('../controllers/notificationController');
 const createLoginRateLimit = require('../middleware/loginRateLimit');
 const { adminOnly } = require('../middleware/auth');
 const { authorizeRoles } = require('../middleware/authorize');
@@ -23,6 +24,9 @@ router.get('/available', authorizeRoles('customer'), mechanicController.listAvai
 // Protected routes (mechanic only) - SPECIFIC /profile routes
 router.get('/profile', authorizeRoles('mechanic'), mechanicController.getProfile);
 router.put('/profile', authorizeRoles('mechanic'), validateUpdateMechanic, mechanicController.updateProfile);
+router.get('/notifications', authorizeRoles('mechanic'), notifications.getMechanicNotifications);
+router.delete('/notifications', authorizeRoles('mechanic'), notifications.clearMechanicNotifications);
+router.post('/notifications/:id/read', authorizeRoles('mechanic'), notifications.markMechanicNotificationRead);
 
 // POST fallback delete endpoint for clients that can't send DELETE
 router.post('/delete', adminOnly, async (req, res) => {

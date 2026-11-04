@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
 import { getServiceBookingStatus, getServicePaymentSummary } from '../../utils/servicePayment';
 import ProductImage from './ProductImage';
+import CustomerQuoteActions from './CustomerQuoteActions';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
@@ -85,7 +86,14 @@ export function ItemReservationCard({ reservation, showType = false }) {
   </article>;
 }
 
-export function ServiceBookingCard({ booking, prototype = false, showType = false }) {
+export function ServiceBookingCard({
+  booking,
+  prototype = false,
+  showType = false,
+  settings,
+  onBookingUpdate,
+  redirectAfterAccept = false
+}) {
   const reference = serviceReference(booking, prototype);
   const status = serviceStatus(booking, prototype);
   const date = serviceDate(booking, prototype);
@@ -93,14 +101,17 @@ export function ServiceBookingCard({ booking, prototype = false, showType = fals
     ? booking.timeSlot
     : [booking.startTime, booking.endTime].filter(Boolean).join(' - ');
   const pathId = prototype ? booking.id : booking._id;
+  const quotePending = !prototype && ['quote_requested', 'quoted'].includes(booking.quoteStatus);
   const payment = getServicePaymentSummary(booking);
   const hasPaymentSnapshot = booking.downPaymentAmount !== undefined && booking.downPaymentAmount !== null
     && booking.balanceDue !== undefined && booking.balanceDue !== null;
-  const total = prototype ? serviceTotal(booking, true) : payment.totalAmount;
+  const total = prototype ? serviceTotal(booking, true)
+    : booking.quoteStatus === 'quoted' ? Number(booking.quotedPrice || 0) : payment.totalAmount;
   const paid = hasPaymentSnapshot ? payment.amountPaid : total;
   const balance = hasPaymentSnapshot ? payment.balanceDue : 0;
   const mechanicFee = Number(booking.mechanicFeeTotal || 0);
-  const servicePrice = booking.servicePriceTotal === undefined
+  const servicePrice = booking.quoteStatus === 'accepted' ? Number(booking.quotedPrice || total)
+    : booking.servicePriceTotal === undefined
     ? Number(total || 0) - mechanicFee
     : Number(booking.servicePriceTotal);
 
@@ -115,18 +126,28 @@ export function ServiceBookingCard({ booking, prototype = false, showType = fals
         <h2>{serviceName(booking, prototype)}</h2>
         <p>{!prototype && booking.pricePerUnit ? `${serviceUnitSummary(booking.units || 1, booking.unitLabel)} · ` : ''}{formatDate(date)}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
         {!prototype && booking.description && <p>{booking.description}</p>}
+        {!prototype && booking.quoteStatus && booking.customerPartsNote && <p><strong>Parts you will bring:</strong> {booking.customerPartsNote}</p>}
         {showType && !prototype && <small className="customer-purchase-date">Created {formatDate(booking.createdAt)}</small>}
       </div>
       <span className={`customer-status-pill ${statusClass(status)}`}>{status}</span>
     </div>
-    <p className="customer-service-booking-price-line">
-      Service {serviceMoney(servicePrice)} + Mechanic fee {serviceMoney(mechanicFee)}
-    </p>
-    <div className="customer-reservation-card-finances customer-purchase-card-finances customer-service-booking-finances">
-      <span>Total <strong>{serviceMoney(total)}</strong></span>
-      <span>Paid <strong>{serviceMoney(paid)}</strong></span>
-      <span>Balance due <strong>{serviceMoney(balance)}</strong></span>
-    </div>
+    {!quotePending && <p className="customer-service-booking-price-line">
+      {booking.quoteStatus === 'accepted'
+        ? `Labor quote ${serviceMoney(servicePrice)}`
+        : `Service ${serviceMoney(servicePrice)} + Mechanic fee ${serviceMoney(mechanicFee)}`}
+    </p>}
+    {quotePending
+      ? <CustomerQuoteActions
+        booking={booking}
+        settings={settings}
+        onBookingUpdate={onBookingUpdate}
+        redirectAfterAccept={redirectAfterAccept}
+      />
+      : <div className="customer-reservation-card-finances customer-purchase-card-finances customer-service-booking-finances">
+        <span>Total <strong>{serviceMoney(total)}</strong></span>
+        <span>Paid <strong>{serviceMoney(paid)}</strong></span>
+        <span>Balance due <strong>{serviceMoney(balance)}</strong></span>
+      </div>}
     <div className="customer-reservation-card-bottom customer-service-booking-card-bottom">
       <Link to={`/customer/reservations/${pathId}`}>View booking <span aria-hidden="true">→</span></Link>
     </div>

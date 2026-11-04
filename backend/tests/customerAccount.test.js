@@ -43,6 +43,7 @@ describe('customer profile phone validation', () => {
     it('requires a strong password and valid mobile number for registration', async () => {
       const body = {
         email: 'rider@example.com',
+        username: 'alex_rider',
         password: 'Password1',
         firstName: 'Alex',
         lastName: 'Rider',

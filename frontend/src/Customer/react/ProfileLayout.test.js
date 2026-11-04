@@ -41,6 +41,10 @@ describe('customer account responsive layout', () => {
     expect(profilePage).toContain('className="customer-password-toggle"');
   });
 
+  it('renders username as a read-only profile field', () => {
+    expect(profilePage).toContain('Username<input type="text" readOnly title="Your username can\'t be changed here."');
+  });
+
   it('uses the navbar brand tagline and omits the duplicate eyebrow only on Account', () => {
     expect(customerLayout).toContain('<strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small>');
     expect(customerLayout).toContain("{title !== 'Account' && <p className=\"customer-eyebrow\">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}");

@@ -7,7 +7,6 @@
 
 .customer-page:not(.shop-page):not(.services-page) {
   padding: 0 16px 0;
-  background: #f8f5f1;
   color: #24252a;
   font-family: 'Segoe UI', sans-serif;
 }
@@ -189,6 +188,16 @@
   color: #4f3b31;
   font-size: 86px;
 }
+.customer-product-placeholder-icon {
+  width: 56px;
+  height: 56px;
+  fill: none;
+  stroke: #6f5647;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  opacity: .48;
+}
 .customer-detail-product-image { width: 100%; height: 100%; min-height: 340px; object-fit: cover; }
 
 .customer-detail-art small {
@@ -304,7 +313,7 @@
 
 .customer-primary-button,
 .customer-secondary-button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 10px 16px;
   border: 0;
   border-radius: 8px;
@@ -382,7 +391,9 @@
   position: relative;
   width: min(880px, 100%);
   max-height: 90vh;
+  max-height: 90dvh;
   overflow: hidden;
+  padding: 24px;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 24px 80px rgba(0, 0, 0, .28);
@@ -390,9 +401,28 @@
 }
 
 .customer-product-modal-scroll {
-  max-height: 90vh;
+  max-height: calc(90vh - 48px);
+  max-height: calc(90dvh - 48px);
   overflow: auto;
   overscroll-behavior: contain;
+}
+
+.customer-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.customer-product-modal-header {
+  position: absolute;
+  z-index: 3;
+  inset: 0 0 auto;
+  height: 56px;
+  pointer-events: none;
 }
 
 .customer-product-modal-close {
@@ -411,6 +441,7 @@
   font-size: 25px;
   line-height: 1;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .customer-product-modal-close:focus-visible {
@@ -419,32 +450,40 @@
 }
 
 .customer-product-modal .customer-detail-layout {
-  grid-template-columns: minmax(0, 45%) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);
   gap: 28px;
-  align-items: center;
-  padding: 30px;
+  align-items: start;
+  padding: 0;
   border: 0;
   border-radius: 0;
+  background: transparent;
 }
 
 .customer-product-modal .customer-detail-art {
   width: 100%;
   min-height: 0;
-  aspect-ratio: 4 / 3;
-  font-size: 64px;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  background: var(--c-accent-tint);
+  font-size: 0;
 }
 
 .customer-product-modal .customer-detail-product-image {
+  display: block;
+  width: 100%;
+  height: 100%;
   min-height: 0;
+  object-fit: cover;
+  object-position: center;
 }
 
 .customer-product-modal .customer-detail-copy {
   min-width: 0;
-  padding-right: 22px;
+  padding: 0;
 }
 
 .customer-product-modal .customer-detail-copy h1 {
-  padding-right: 12px;
+  padding-right: 40px;
   overflow-wrap: anywhere;
 }
 
@@ -461,17 +500,77 @@
   margin: 16px 0;
 }
 
+.customer-product-modal .customer-quantity-control > span {
+  color: var(--c-dark);
+  font: 600 14px/1.4 'Segoe UI', sans-serif;
+}
+
 .customer-product-modal .customer-detail-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
   gap: 10px;
   margin-top: 12px;
 }
 
 .customer-product-modal .customer-detail-actions button {
   min-width: 0;
+  width: 100%;
+  min-height: 44px;
   padding-right: 10px;
   padding-left: 10px;
+}
+
+.customer-service-modal-category {
+  margin: 0;
+  color: var(--c-brand-text);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.customer-service-modal-copy h1 {
+  margin: 5px 40px 10px 0;
+  color: var(--c-dark);
+  font-size: 26px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.customer-service-modal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.customer-service-modal-chips span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--c-accent-tint);
+  color: var(--c-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.customer-page.service-detail-page .customer-service-detail > .customer-detail-art {
+  background: linear-gradient(135deg, #FDEEDF, #F6D6BB);
+  font-size: 0;
+}
+
+.customer-page.service-detail-page .customer-service-detail > .customer-detail-art > svg {
+  width: 56px;
+  height: 56px;
+  fill: none;
+  stroke: #6f5647;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+  opacity: .48;
+}
+
+.customer-page.service-detail-page .customer-service-detail > .customer-detail-art > small {
+  display: none;
 }
 
 .customer-detail-success {
@@ -484,7 +583,7 @@
   border-radius: 8px;
   background: #eff8f1;
   color: #226b37;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -532,42 +631,48 @@
 }
 @media (max-width: 767px) {
   .customer-product-modal-overlay {
-    align-items: flex-end;
-    padding: 0;
+    align-items: center;
+    padding: 12px;
   }
 
   .customer-product-modal {
     width: 100%;
-    max-height: 92vh;
-    max-height: 92dvh;
-    border-radius: 20px 20px 0 0;
+    max-height: 90vh;
+    max-height: 90dvh;
   }
 
   .customer-product-modal-scroll {
-    max-height: 92vh;
-    max-height: 92dvh;
+    max-height: calc(90vh - 48px);
+    max-height: calc(90dvh - 48px);
   }
 
   .customer-product-modal .customer-detail-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 18px;
-    padding: 20px 18px 26px;
+    gap: 16px;
+    padding: 0;
   }
 
   .customer-product-modal .customer-detail-art {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: 260px;
     aspect-ratio: 4 / 3;
-    max-height: 36vh;
   }
 
   .customer-product-modal .customer-detail-copy {
     padding: 0;
+  }
+
+  .customer-product-modal .customer-detail-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 380px) {
   .customer-product-modal .customer-detail-layout {
     gap: 14px;
-    padding: 16px 14px 22px;
+    padding: 0;
   }
 
   .customer-product-modal .customer-detail-copy h1 {
@@ -575,7 +680,7 @@
   }
 
   .customer-product-modal .customer-detail-actions {
-    gap: 7px;
+    gap: 8px;
   }
   background: #fff;
   color: #2b241f;
@@ -641,7 +746,7 @@
   border-radius: 8px;
   background: #fff;
   color: #322a25;
-  font: 13px 'Segoe UI', sans-serif;
+  font: 16px 'Segoe UI', sans-serif;
 }
 
 .customer-booking-fields > label,
@@ -683,13 +788,57 @@
   color: #82756c;
 }
 
+.customer-booking-fields > .customer-mechanic-field {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 7px;
+  color: #544941;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.customer-mechanic-select-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.customer-mechanic-select-wrap select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 34px 0 32px;
+  border: 1px solid #e8dcd2;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #322a25;
+  font: 16px 'Segoe UI', sans-serif;
+}
+
+.customer-mechanic-status-dot {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #1f7a3d;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.customer-mechanic-status-dot.is-busy { background: #c17a00; }
+.customer-mechanic-status-dot.is-on-leave { background: #8a929b; }
+.customer-mechanic-busy-note { color: #765342; font-size: 12px; font-weight: 500; line-height: 1.4; }
+
 .customer-no-slots { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 14px; }
 .customer-no-slots p,
 .customer-shop-closed-message { margin: 0; color: #765342; font-size: 12px; font-weight: 700; }
 .customer-booking-summary { display: grid; gap: 10px; }
 .customer-booking-summary > p { margin: 0; color: #55473e; font-size: 13px; font-weight: 700; }
-.customer-booking-footer { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.customer-booking-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
 .customer-booking-footer button:disabled { background: #b8b1aa; color: #fff; cursor: not-allowed; }
+.customer-quote-payment-note { margin: 0; color: #765342; font-size: 14px; line-height: 1.45; }
 .customer-booking-hint { color: #82756c; font-size: 11px; }
 .customer-booking-fields .customer-motorcycle-field,
 .customer-motorcycle-field,
@@ -714,6 +863,126 @@
 
 .customer-booking-footer p { margin: 0; color: #766a61; font-size: 12px; }
 .customer-booking-footer strong { display: block; margin-top: 4px; color: #e85e15; font-size: 20px; }
+
+.customer-service-booking-modal {
+  --c-primary: #C2410C;
+  --c-on-primary: #FFFFFF;
+  --c-dark: #2B1608;
+  --c-brand-text: #B33A00;
+  --c-accent-tint: #FDEEDF;
+  --c-card-border: #F3D9C2;
+  width: min(940px, 100%);
+}
+
+.customer-service-booking-modal .customer-product-modal-scroll {
+  max-height: calc(90vh - 48px);
+  max-height: calc(90dvh - 48px);
+}
+
+.customer-service-booking-form {
+  display: grid;
+  gap: 18px;
+}
+
+.customer-service-booking-modal-heading {
+  display: grid;
+  gap: 7px;
+  padding-right: 42px;
+}
+
+.customer-service-booking-modal-heading h1 {
+  margin: 0;
+  color: var(--c-dark);
+  font: 700 24px/1.2 'Segoe UI', sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.customer-service-booking-modal-heading > p:last-child {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #766a61;
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.customer-booking-panel.is-modal {
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.customer-booking-panel.is-modal .customer-booking-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.customer-booking-panel.is-modal .customer-booking-fields > label input,
+.customer-booking-panel.is-modal .customer-booking-fields > .customer-motorcycle-field > select,
+.customer-booking-panel.is-modal .customer-booking-fields > .customer-booking-time-field > select,
+.customer-booking-panel.is-modal .customer-vehicle-inline-form input,
+.customer-booking-panel.is-modal .customer-notes-field textarea {
+  font-size: 16px;
+}
+
+.customer-booking-summary .service-price-breakdown.is-modal-summary {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-card-border);
+  border-radius: 10px;
+  background: #fffaf6;
+}
+
+.service-price-breakdown.is-modal-summary p {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: #62564e;
+  font-size: 13px;
+}
+
+.service-price-breakdown.is-modal-summary p:last-child {
+  padding-top: 6px;
+  border-top: 1px solid var(--c-card-border);
+  color: var(--c-dark);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.customer-booking-panel.is-modal .customer-booking-footer {
+  display: block;
+}
+
+.customer-booking-panel.is-modal .customer-booking-footer > p {
+  display: none;
+}
+
+.customer-page.service-detail-page .customer-flow-page {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 0 var(--customer-wide-content-padding);
+}
+
+.customer-booking-panel.is-modal .customer-booking-footer button {
+  width: 100%;
+  min-height: 44px;
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+  font-size: 14px;
+}
+
+.customer-booking-panel.is-modal .customer-booking-footer button:is(:hover, :focus, :focus-visible, :active, :disabled) {
+  background: var(--c-primary);
+  color: var(--c-on-primary);
+}
 
 .customer-cart-layout,
 .customer-checkout-layout {
@@ -762,6 +1031,11 @@
 
 .customer-cart-item-art.is-service {
   background: linear-gradient(135deg, #ddcffd, #b9a1ed);
+}
+.customer-cart-item-art.is-service svg {
+  width: 52px;
+  height: 52px;
+  fill: #543c85;
 }
 .customer-inline-product-image,
 .customer-inline-product-placeholder {
@@ -1995,6 +2269,59 @@
 .customer-reservation-card-bottom strong { color: #d95e19; font-size: 14px; }
 .customer-reservation-card-bottom a { color: #d95e19; font-weight: 700; text-decoration: none; }
 .customer-status-pill { flex: 0 0 auto; padding: 6px 9px; border-radius: 999px; background: #fff2dc; color: #946100; font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.customer-status-pill.status-awaiting-quote { background: #f3ebE2; color: #6b5444; }
+.customer-status-pill.status-quote-ready { background: #c2410c; color: #fff; }
+.customer-status-pill.status-accepted { background: #e7f6eb; color: #24633a; }
+.customer-status-pill.status-rejected,
+.customer-status-pill.status-declined-by-mechanic,
+.customer-status-pill.status-cancelled { background: #f3e8e4; color: #805245; }
+
+.customer-quote-actions {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #f0d9c7;
+  border-radius: 10px;
+  background: #fff8f1;
+  color: #4b392c;
+}
+
+.customer-quote-actions > div:not(.customer-quote-actions-buttons) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.customer-quote-actions > div > span {
+  color: #76665a;
+  font-size: 13px;
+}
+
+.customer-quote-actions > div > strong {
+  color: #2b1608;
+  font-size: 15px;
+  text-align: right;
+}
+
+.customer-quote-actions > p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.customer-quote-actions-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.customer-quote-actions-buttons > button {
+  min-height: 44px;
+  flex: 1 1 120px;
+}
 .customer-reservation-detail-card { max-width: 820px; margin: 0 auto; }
 .customer-reservation-detail-card .customer-reservation-card-top h1 { margin: 5px 0; color: #29231f; font-size: 24px; }
 .customer-reservation-detail-card > h2 { margin-top: 24px; color: #29231f; font-size: 15px; }
@@ -2363,7 +2690,6 @@
   display: flex;
   min-height: 100vh;
   flex-direction: column;
-  background: #f8f5f1;
 }
 
 .customer-page.shop-page .customer-compact-banner,
@@ -2581,19 +2907,60 @@
 
 .customer-header-cart-count {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  display: grid;
-  min-width: 17px;
-  height: 17px;
-  place-items: center;
-  padding: 0 4px;
-  border: 2px solid #f8f5f1;
+  top: -2px;
+  right: -2px;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border: 2px solid #fff;
   border-radius: 999px;
-  background: #ef6415;
+  background: var(--c-primary);
   color: #fff;
-  font-size: 9px;
-  line-height: 1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.customer-page .customer-header,
+.customer-page .customer-header-inner,
+.customer-page .customer-header-actions,
+.customer-page .customer-notification-area,
+.customer-page .customer-header-cart,
+.customer-page .customer-notification-bell {
+  overflow: visible;
+}
+
+.customer-page .customer-header-cart-count,
+.customer-page .customer-notification-count {
+  top: -2px;
+  right: -2px;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.customer-page .customer-header-actions,
+.customer-page .customer-header-inner,
+.customer-page .customer-header {
+  overflow: visible !important;
+}
+
+.customer-page .customer-header-actions {
+  box-sizing: border-box;
+  padding-top: 6px;
 }
 
 .customer-site-footer {
@@ -2760,18 +3127,6 @@
   }
 }
 
-.services-my-bookings {
-  display: inline-flex;
-  margin-top: 16px;
-  color: #c64f12;
-  font: 700 12px 'Segoe UI', sans-serif;
-  text-decoration: none;
-}
-
-.services-my-bookings:hover {
-  text-decoration: underline;
-}
-
 @media (max-width: 760px) {
   .customer-page.customer-page .customer-header,
   .customer-auth-page .customer-header {
@@ -2875,7 +3230,6 @@
 
     .customer-account-tabs button,
     .customer-reservation-tabs button,
-    .service-category-pills button,
     .customer-page button,
     .customer-auth-page button {
       min-height: 44px;
@@ -2884,7 +3238,6 @@
     .customer-primary-button,
     .customer-secondary-button,
     .service-book-link,
-    .services-my-bookings,
     .customer-reservation-card-bottom a {
       min-height: 44px;
     }
@@ -3019,6 +3372,10 @@
 
 @media (max-width: 480px) {
   .customer-purchases-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-booking-panel.is-modal .customer-booking-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 

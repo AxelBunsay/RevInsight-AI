@@ -1,0 +1,19 @@
+.mechanic-login-page.mechanic-login-page {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  height: auto;
+  place-items: center;
+  overflow-x: clip;
+  box-sizing: border-box;
+  background: transparent;
+}
+
+.mechanic-login-page.mechanic-login-page > .mechanic-login-wrap {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 400px);
+}

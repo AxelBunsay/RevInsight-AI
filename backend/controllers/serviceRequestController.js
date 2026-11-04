@@ -14,7 +14,7 @@ const {
   removeReceipt
 } = require("../utils/paymentReceipt");
 const { createPaymentDecisionNotification } = require("../utils/paymentNotifications");
-const { getServicePaymentSummary } = require("../utils/servicePayment");
+const { calculateServicePayment, getServicePaymentSummary } = require("../utils/servicePayment");
 const EXPIRY_BATCH_SIZE = 200;
 const MAX_EXPIRY_ROUNDS = 20;
 const PAID_SERVICE_STATUSES = ["Confirmed", "Paid at shop"];
@@ -113,11 +113,15 @@ const syncCompletedServiceBusinessRecord = async (serviceRequest, session = null
     mechanicName: mechanic
       ? `${mechanic.firstName || ""} ${mechanic.lastName || ""}`.trim()
       : "",
-    amount: Number(serviceRequest.estimatedPrice) || 0,
-    laborFee: Number(serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
-    servicePriceTotal: Number(serviceRequest.servicePriceTotal) || 0,
-    mechanicFeeTotal: Number(serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
-    estimatedPrice: Number(serviceRequest.estimatedPrice) || 0,
+    amount: Number(serviceRequest.quotedPrice ?? serviceRequest.estimatedPrice) || 0,
+    laborFee: Number(serviceRequest.quoteStatus === 'accepted'
+      ? serviceRequest.quotedPrice
+      : serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
+    servicePriceTotal: serviceRequest.quoteStatus === 'accepted' ? 0 : Number(serviceRequest.servicePriceTotal) || 0,
+    mechanicFeeTotal: Number(serviceRequest.quoteStatus === 'accepted'
+      ? serviceRequest.quotedPrice
+      : serviceRequest.mechanicFeeTotal ?? serviceRequest.laborFee) || 0,
+    estimatedPrice: Number(serviceRequest.quotedPrice ?? serviceRequest.estimatedPrice) || 0,
     downPaymentAmount: Number(serviceRequest.downPaymentAmount) || 0,
     amountPaid: Number(serviceRequest.amountPaid) || 0,
     balanceDue: Number(serviceRequest.balanceDue) || 0,
@@ -266,6 +270,7 @@ const expireServiceBookings = async () => {
       candidates = await ServiceRequest.find({
         status: { $in: UNPAID_BOOKING_EXPIRY_STATUSES },
         paymentStatus: "Payment Pending",
+        quoteStatus: { $nin: ['quote_requested', 'quoted'] },
         $or: [
           { paymentDueAt: { $lte: now } },
           {
@@ -288,7 +293,8 @@ const expireServiceBookings = async () => {
           const booking = await ServiceRequest.findOne({
             _id: candidate._id,
             status: { $in: UNPAID_BOOKING_EXPIRY_STATUSES },
-            paymentStatus: "Payment Pending"
+            paymentStatus: "Payment Pending",
+            quoteStatus: { $nin: ['quote_requested', 'quoted'] }
           }).session(session);
           if (!booking) return;
           const dueAt = booking.paymentDueAt
@@ -564,6 +570,17 @@ const assignMechanic = async (req, res) => {
     serviceRequest.mechanicId = mechanicId;
     serviceRequest.status = "assigned";
     await serviceRequest.save();
+    if (serviceRequest.quoteStatus === 'quote_requested') {
+      await Notification.create({
+        audience: 'mechanic',
+        mechanicId,
+        type: 'service_quote_requested',
+        message: `New labor-only quote request: ${serviceRequest.serviceType}`,
+        link: '/mechanic/jobs',
+        recordId: serviceRequest._id,
+        recordType: 'service'
+      });
+    }
 
     res.status(200).json({
       message: "Mechanic assigned",
@@ -647,7 +664,7 @@ const getAllServiceRequests = async (req, res) => {
       shouldPaginate ? ServiceRequest.countDocuments(filter) : Promise.resolve(null),
       shouldPaginate
         ? ServiceRequest.aggregate([
-          { $match: filter },
+          { $match: { $and: [filter, { status: 'completed' }] } },
           { $group: { _id: null, total: { $sum: "$estimatedPrice" } } }
         ])
         : Promise.resolve([]),
@@ -807,6 +824,199 @@ const updateBookingStatus = async (req, res) => {
   }
 };
 
+const getMechanicQuoteRequests = async (req, res) => {
+  try {
+    const mechanicId = req.user?.userId;
+    const requests = await ServiceRequest.find({
+      quoteStatus: 'quote_requested',
+      $or: [{ mechanic: mechanicId }, { mechanicId }]
+    }).populate('user', 'firstName lastName email').sort({ createdAt: -1 });
+    res.status(200).json({ requests });
+  } catch (error) {
+    console.error('[getMechanicQuoteRequests] error', error);
+    res.status(500).json({ message: 'Quote requests could not be loaded.' });
+  }
+};
+
+const submitMechanicQuote = async (req, res) => {
+  const price = Number(req.body?.price);
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+  if (!Number.isFinite(price) || price <= 0 || price > 999999.99) {
+    return res.status(400).json({ message: 'Quote price must be greater than zero.' });
+  }
+  if (!note || note.length > 1000) {
+    return res.status(400).json({ message: 'Provide a quote note up to 1,000 characters.' });
+  }
+
+  const session = await mongoose.startSession();
+  let request;
+  try {
+    await session.withTransaction(async () => {
+      request = await ServiceRequest.findById(req.params.id).session(session);
+      if (!request) throw Object.assign(new Error('Service request not found.'), { status: 404 });
+      if (String(request.mechanic || request.mechanicId) !== String(req.user.userId)) {
+        throw Object.assign(new Error('You can only quote requests assigned to you.'), { status: 403 });
+      }
+      if (request.quoteStatus !== 'quote_requested') {
+        throw Object.assign(new Error('This quote request is no longer awaiting a quote.'), { status: 409 });
+      }
+      request.quoteStatus = 'quoted';
+      request.quotedPrice = price;
+      request.quoteNote = note;
+      request.quotedAt = new Date();
+      request.respondedAt = null;
+      await request.save({ session });
+      await Notification.create([{
+        audience: 'customer',
+        customerId: request.customerId || request.user,
+        type: 'service_quote_ready',
+        message: `Quote ready: ${request.serviceType} - PHP ${price.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Accept or reject.`,
+        link: `/customer/reservations/${request._id}`,
+        recordId: request._id,
+        recordType: 'service'
+      }], { session });
+    });
+    res.status(200).json({ message: 'Quote submitted.', serviceRequest: request });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('[submitMechanicQuote] error', error);
+    res.status(500).json({ message: 'Quote could not be submitted.' });
+  } finally {
+    await session.endSession();
+  }
+};
+
+const declineMechanicQuoteRequest = async (req, res) => {
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (reason.length < 3 || reason.length > 500) {
+    return res.status(400).json({ message: 'Provide a decline reason between 3 and 500 characters.' });
+  }
+  const session = await mongoose.startSession();
+  let request;
+  try {
+    await session.withTransaction(async () => {
+      request = await ServiceRequest.findById(req.params.id).session(session);
+      if (!request) throw Object.assign(new Error('Service request not found.'), { status: 404 });
+      if (String(request.mechanic || request.mechanicId) !== String(req.user.userId)) {
+        throw Object.assign(new Error('You can only update requests assigned to you.'), { status: 403 });
+      }
+      if (request.quoteStatus !== 'quote_requested') {
+        throw Object.assign(new Error('This quote request is no longer awaiting a response.'), { status: 409 });
+      }
+      const now = new Date();
+      request.quoteStatus = 'declined';
+      request.status = 'declined';
+      request.declineReason = reason;
+      request.respondedAt = now;
+      request.statusHistory.push({ status: 'declined', timestamp: now, note: 'Mechanic declined the quote request.' });
+      await request.save({ session });
+      await Notification.create([{
+        audience: 'customer',
+        customerId: request.customerId || request.user,
+        type: 'service_quote_declined',
+        message: `Your mechanic declined the quote request for ${request.serviceType}. ${reason}`,
+        link: `/customer/reservations/${request._id}`,
+        recordId: request._id,
+        recordType: 'service'
+      }], { session });
+    });
+    res.status(200).json({ message: 'Quote request declined.', serviceRequest: request });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('[declineMechanicQuoteRequest] error', error);
+    res.status(500).json({ message: 'Quote request could not be declined.' });
+  } finally {
+    await session.endSession();
+  }
+};
+
+const respondToServiceQuote = async (req, res) => {
+  const action = req.params.action || req.path.split('/').pop();
+  if (!['accept', 'reject', 'cancel'].includes(action)) {
+    return res.status(404).json({ message: 'Quote action not found.' });
+  }
+  const session = await mongoose.startSession();
+  let request;
+  try {
+    await session.withTransaction(async () => {
+      request = await ServiceRequest.findById(req.params.id).session(session);
+      if (!request) throw Object.assign(new Error('Service booking not found.'), { status: 404 });
+      if (String(request.user) !== String(req.user.userId)
+        && String(request.customerId) !== String(req.user.userId)) {
+        throw Object.assign(new Error('Service booking not found.'), { status: 404 });
+      }
+      const expectedStatus = action === 'cancel' ? 'quote_requested' : 'quoted';
+      if (request.quoteStatus !== expectedStatus) {
+        throw Object.assign(new Error('This quote is no longer available for a response.'), { status: 409 });
+      }
+
+      const now = new Date();
+      request.respondedAt = now;
+      if (action === 'accept') {
+        const mechanicId = request.mechanicId || request.mechanic;
+        if (!mechanicId) throw Object.assign(new Error('A mechanic must be assigned before accepting this quote.'), { status: 409 });
+        const settings = await ReservationSettings.getDefaults();
+        const payment = getServicePaymentSummary(calculateServicePayment(
+          request.quotedPrice,
+          settings.serviceDownPaymentPercent ?? settings.downPaymentPercent
+        ));
+        request.quoteStatus = 'accepted';
+        request.totalAmount = payment.totalAmount;
+        request.estimatedPrice = payment.totalAmount;
+        request.servicePriceTotal = 0;
+        request.mechanicFeeTotal = payment.totalAmount;
+        request.laborFee = payment.totalAmount;
+        request.downPaymentPercent = payment.downPaymentPercent;
+        request.downPaymentAmount = payment.downPaymentAmount;
+        request.balanceDue = payment.balanceDue;
+        request.amountPaid = 0;
+        request.paymentStatus = payment.downPaymentAmount === 0 ? 'Confirmed' : 'Payment Pending';
+        request.paymentMethod = payment.downPaymentAmount === 0 ? 'No upfront payment required' : '';
+        request.paymentDueAt = payment.downPaymentAmount === 0
+          ? null
+          : new Date(now.getTime() + settings.pendingPaymentHours * 60 * 60 * 1000);
+        await request.save({ session });
+        await Notification.create([{
+          audience: 'mechanic',
+          mechanicId,
+          type: 'service_quote_accepted',
+          message: `Customer accepted your quote for ${request.serviceType}.`,
+          link: '/mechanic/jobs',
+          recordId: request._id,
+          recordType: 'service'
+        }], { session });
+      } else {
+        request.quoteStatus = action === 'reject' ? 'rejected' : 'cancelled';
+        request.status = 'cancelled';
+        request.cancelReason = action === 'reject' ? 'Customer rejected the quote.' : 'Customer cancelled before a quote was submitted.';
+        request.statusHistory.push({ status: 'cancelled', timestamp: now, note: request.cancelReason });
+        await request.save({ session });
+        const mechanicId = request.mechanicId || request.mechanic;
+        if (mechanicId) {
+          await Notification.create([{
+            audience: 'mechanic',
+            mechanicId,
+            type: action === 'reject' ? 'service_quote_rejected' : 'service_quote_cancelled',
+            message: action === 'reject'
+              ? `Customer rejected your quote for ${request.serviceType}.`
+              : `Customer cancelled the quote request for ${request.serviceType}.`,
+            link: '/mechanic/jobs',
+            recordId: request._id,
+            recordType: 'service'
+          }], { session });
+        }
+      }
+    });
+    res.status(200).json({ message: `Quote ${action}ed.`, serviceRequest: request });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('[respondToServiceQuote] error', error);
+    res.status(500).json({ message: 'Quote response could not be saved.' });
+  } finally {
+    await session.endSession();
+  }
+};
+
 // User gets their own service requests
 const getUserServiceRequests = async (req, res) => {
   try {
@@ -824,6 +1034,101 @@ const getUserServiceRequests = async (req, res) => {
   }
 };
 
+const rateServiceRequest = async (req, res) => {
+  const { id } = req.params;
+  const rating = req.body?.rating;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(404).json({ message: 'Service booking not found.' });
+  }
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: 'Rating must be a whole number from 1 to 5.' });
+  }
+  if (req.body?.comment !== undefined && typeof req.body.comment !== 'string') {
+    return res.status(400).json({ message: 'Rating comment must be text.' });
+  }
+  const comment = (req.body?.comment || '').trim();
+  if (comment.length > 300) {
+    return res.status(400).json({ message: 'Rating comment must be 300 characters or fewer.' });
+  }
+
+  const session = await mongoose.startSession();
+  let updatedRequest;
+  try {
+    await session.withTransaction(async () => {
+      const request = await ServiceRequest.findOne({
+        _id: id,
+        $or: [{ user: req.user.userId }, { customerId: req.user.userId }]
+      }).session(session);
+      if (!request) throw Object.assign(new Error('Service booking not found.'), { status: 404 });
+      if (request.status !== 'completed') {
+        throw Object.assign(new Error('You can rate a mechanic only after the service is completed.'), { status: 400 });
+      }
+      if (request.mechanicRating != null) {
+        throw Object.assign(new Error('You have already rated this service.'), { status: 400 });
+      }
+      const mechanicId = request.mechanicId || request.mechanic;
+      if (!mechanicId) {
+        throw Object.assign(new Error('This completed service has no assigned mechanic to rate.'), { status: 400 });
+      }
+
+      updatedRequest = await ServiceRequest.findOneAndUpdate({
+        _id: id,
+        status: 'completed',
+        $and: [
+          { $or: [{ user: req.user.userId }, { customerId: req.user.userId }] },
+          { $or: [{ mechanicRating: { $exists: false } }, { mechanicRating: null }] }
+        ]
+      }, {
+        $set: {
+          mechanicRating: rating,
+          mechanicRatingComment: comment,
+          mechanicRatedAt: new Date()
+        }
+      }, { new: true, runValidators: true, session });
+      if (!updatedRequest) {
+        throw Object.assign(new Error('This service has already been rated.'), { status: 400 });
+      }
+
+      const [summary] = await ServiceRequest.aggregate([
+        {
+          $match: {
+            status: 'completed',
+            mechanicRating: { $gte: 1, $lte: 5 },
+            $or: [{ mechanic: mechanicId }, { mechanicId }]
+          }
+        },
+        { $group: { _id: null, average: { $avg: '$mechanicRating' }, count: { $sum: 1 } } }
+      ]).session(session);
+      if (!summary) throw new Error('Mechanic rating summary could not be calculated.');
+      const averageRating = Math.round(summary.average * 10) / 10;
+      const mechanic = await Mechanic.findByIdAndUpdate(mechanicId, {
+        $set: { averageRating, ratingCount: summary.count }
+      }, { new: true, session });
+      if (!mechanic) throw Object.assign(new Error('Assigned mechanic could not be found.'), { status: 404 });
+
+      await Notification.create([{
+        audience: 'mechanic',
+        mechanicId,
+        type: 'mechanic_rating_received',
+        message: `You received a new rating: ${rating}/5 stars.`,
+        link: '/mechanic/profile#performance',
+        recordId: updatedRequest._id,
+        recordType: 'service'
+      }], { session });
+    });
+    return res.status(200).json({
+      message: 'Your rating was submitted.',
+      serviceRequest: customerServiceRequestPayload(updatedRequest)
+    });
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
+    console.error('[rateServiceRequest] error', error);
+    return res.status(500).json({ message: 'Your rating could not be submitted. Please try again.' });
+  } finally {
+    await session.endSession();
+  }
+};
+
 // Mechanic gets their assigned jobs
 const getMechanicJobs = async (req, res) => {
   try {
@@ -833,6 +1138,7 @@ const getMechanicJobs = async (req, res) => {
         { mechanic: mechanicId },
         { mechanic: null, status: "pending" },
       ],
+      quoteStatus: { $nin: ['quote_requested', 'quoted', 'rejected', 'declined', 'cancelled'] }
     })
       .populate("user", "firstName lastName email")
       .sort({ createdAt: -1 });
@@ -863,7 +1169,12 @@ module.exports = {
   expireServiceBookings,
   updateJobStatus,
   getUserServiceRequests,
+  rateServiceRequest,
   getMechanicJobs,
+  getMechanicQuoteRequests,
+  submitMechanicQuote,
+  declineMechanicQuoteRequest,
+  respondToServiceQuote,
   mechanicAcceptJob,
   updateBookingStatus,
   syncCompletedServiceBusinessRecord,

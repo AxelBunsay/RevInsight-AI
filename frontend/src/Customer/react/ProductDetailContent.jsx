@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import { api } from '../../services/api';
@@ -14,7 +13,6 @@ const formatPrice = (price) => `₱${Number(price || 0).toLocaleString('en-PH', 
 export default function ProductDetailContent({
   productId,
   isModal = false,
-  modalFooter = null,
   headingId = 'product-detail-title',
   onProductLoaded
 }) {
@@ -190,7 +188,12 @@ export default function ProductDetailContent({
           alt={product.name}
           className="customer-detail-product-image"
           loading="eager"
-          fallback={<><span aria-hidden="true">{product.icon}</span><small>{product.category}</small></>}
+          fallback={isModal
+            ? <svg className="customer-product-placeholder-icon" viewBox="0 0 56 56" aria-hidden="true">
+              <path d="M6 17.5 28 7l22 10.5v21L28 49 6 38.5v-21Z" />
+              <path d="M6.5 18 28 28.5 49.5 18M28 29v19M17 12.5l22 11" />
+            </svg>
+            : <><span aria-hidden="true">{product.icon}</span><small>{product.category}</small></>}
         />
       </div>
       <div className="customer-detail-copy">
@@ -233,9 +236,7 @@ export default function ProductDetailContent({
             <button type="button" aria-label="Increase quantity" disabled={isOutOfStock || quantity >= availableStock} onClick={() => setQuantity((value) => Math.min(availableStock, value + 1))}>+</button>
           </div>
         </div>
-        {isModal
-          ? modalFooter ? createPortal(detailActions, modalFooter) : null
-          : detailActions}
+        {detailActions}
         {actionNotice === 'Added to Reservation Cart' && <div className={isModal ? 'customer-detail-success' : 'shop-added-toast'} role="status" aria-live="polite">
           <span>Added to Reservation Cart</span>
           <Link to="/customer/cart">View cart</Link>

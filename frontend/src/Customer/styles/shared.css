@@ -3,9 +3,8 @@
   min-height: 100vh;
   max-height: none;
   padding: 22px clamp(16px, 4vw, 64px) 64px;
-  background: radial-gradient(circle at 85% 8%, #ffe1ca 0, transparent 28%), #fff7ed;
   color: #fdfdfd;
-  font-family: Georgia, 'Times New Roman', serif;
+  font-family: 'Segoe UI', sans-serif;
   transition: filter 0.2s ease, transform 0.2s ease;
 }
 
@@ -25,6 +24,17 @@
   border-bottom: 1px solid rgba(217, 77, 34, 0.18);
 }
 
+.customer-header-inner {
+  display: flex;
+  width: min(calc(100% - 2 * var(--customer-wide-content-padding)), 1760px);
+  min-width: 0;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  margin: 0 auto;
+}
+
 .customer-brand {
   color: #3d2b24;
   font: 900 18px 'Segoe UI', sans-serif;
@@ -41,8 +51,8 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  padding-top: 75px;
   gap: 8px;
+  font-family: 'Segoe UI', sans-serif;
 }
 
 .customer-nav a,
@@ -68,7 +78,6 @@
   color: #d94d22;
 }
 
-.customer-heading,
 .customer-page > form,
 .customer-page > .shop-toolbar,
 .customer-page > .category-pills,
@@ -81,6 +90,24 @@
   max-width: 1280px;
   margin-left: auto;
   margin-right: auto;
+}
+
+.customer-heading {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0 var(--customer-wide-content-padding);
+  text-align: left;
+}
+
+.customer-heading-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .customer-heading > p:last-child {

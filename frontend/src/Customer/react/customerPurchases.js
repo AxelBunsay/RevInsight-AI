@@ -34,7 +34,7 @@ function isCompleted(status) {
 }
 
 function isCancelledOrExpired(status) {
-  return ['cancelled', 'declined', 'expired'].includes(String(status || '').toLowerCase());
+  return ['cancelled', 'declined', 'declined by mechanic', 'rejected', 'expired'].includes(String(status || '').toLowerCase());
 }
 
 export function filterPurchaseRecords(records, statusFilter, query) {

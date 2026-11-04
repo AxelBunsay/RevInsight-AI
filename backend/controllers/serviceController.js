@@ -34,7 +34,9 @@ const publicServicePayload = (service) => {
     name: value.name,
     description: value.description || '',
     price: value.price,
-    laborOnlyPrice: value.laborOnlyPrice ?? null,
+    laborOnlyPrice: value.laborOnlyPrice ?? value.laborPriceMin ?? 0,
+    laborPriceMin: value.laborPriceMin ?? null,
+    laborPriceMax: value.laborPriceMax ?? null,
     mechanicFee: value.mechanicFee ?? 0,
     category: value.category || 'General',
     durationMinutes: Number(value.durationMinutes) || 60,
@@ -113,6 +115,12 @@ const createService = async (req, res) => {
       laborOnlyPrice: req.body.laborOnlyPrice === '' || req.body.laborOnlyPrice == null
         ? null
         : Number(req.body.laborOnlyPrice),
+      laborPriceMin: req.body.laborPriceMin === '' || req.body.laborPriceMin == null
+        ? null
+        : Number(req.body.laborPriceMin),
+      laborPriceMax: req.body.laborPriceMax === '' || req.body.laborPriceMax == null
+        ? null
+        : Number(req.body.laborPriceMax),
       mechanicFee: Number(req.body.mechanicFee),
       category: (req.body.category || 'General').trim(),
       durationMinutes: Number(req.body.durationMinutes ?? 60),
@@ -150,6 +158,16 @@ const updateService = async (req, res) => {
       service.laborOnlyPrice = req.body.laborOnlyPrice === '' || req.body.laborOnlyPrice === null
         ? null
         : Number(req.body.laborOnlyPrice);
+    }
+    if (req.body.laborPriceMin !== undefined) {
+      service.laborPriceMin = req.body.laborPriceMin === '' || req.body.laborPriceMin === null
+        ? null
+        : Number(req.body.laborPriceMin);
+    }
+    if (req.body.laborPriceMax !== undefined) {
+      service.laborPriceMax = req.body.laborPriceMax === '' || req.body.laborPriceMax === null
+        ? null
+        : Number(req.body.laborPriceMax);
     }
     service.mechanicFee = Number(req.body.mechanicFee ?? service.mechanicFee);
     service.category = (req.body.category ?? service.category ?? 'General').trim();

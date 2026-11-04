@@ -4,11 +4,7 @@ export function getServicePartsSource(search) {
 }
 
 export function servicesForPartsSource(services, partsSource) {
-  if (partsSource !== 'customer') return services;
-  return services.filter((service) => service.laborOnlyPrice !== null
-    && service.laborOnlyPrice !== undefined
-    && service.laborOnlyPrice !== ''
-    && Number.isFinite(Number(service.laborOnlyPrice)));
+  return services;
 }
 
 export function withServicePartsSource(searchParams, partsSource) {

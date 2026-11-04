@@ -103,7 +103,17 @@ function formatServiceRequestRecord(request) {
   const customer = request.user || {};
   const customerName = `${customer.firstName || ""} ${customer.lastName || ""}`.trim();
   const paymentSummary = getServicePaymentSummary(request);
-  const status = getServiceBookingStatus(request);
+  const quotePrice = Number(request.quotedPrice || 0);
+  const quoteStatusLabels = {
+    quote_requested: 'Awaiting quote',
+    quoted: `Quoted PHP ${quotePrice.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+    accepted: 'Accepted',
+    rejected: 'Rejected by customer',
+    declined: 'Declined by mechanic',
+    cancelled: 'Cancelled'
+  };
+  const status = quoteStatusLabels[request.quoteStatus] || getServiceBookingStatus(request);
+  const totalAmount = request.quotedPrice == null ? paymentSummary.totalAmount : quotePrice;
   return {
     ...request,
     id: request.code || request._id,
@@ -116,8 +126,9 @@ function formatServiceRequestRecord(request) {
       ? new Date(request.scheduledDate).toLocaleDateString("en-PH")
       : new Date(request.createdAt).toLocaleDateString("en-PH"),
     items: formatServiceName(request.serviceType || "Service booking", request.units, request.unitLabel),
-    amount: paymentSummary.totalAmount,
-    totalAmount: paymentSummary.totalAmount,
+    amount: totalAmount,
+    totalAmount,
+    estimatedPrice: request.quotedPrice == null ? request.estimatedPrice : quotePrice,
     paid: paymentSummary.amountPaid,
     balance: Math.max(0, paymentSummary.totalAmount - paymentSummary.amountPaid),
     downPaymentAmount: paymentSummary.downPaymentAmount,
@@ -985,8 +996,8 @@ function Transactions() {
                     </td>
                     {activeTab === "services" && <td className="transaction-col-mechanic">{transaction.mechanic}</td>}
                     <td className="price-text transaction-col-total">
-                      {activeTab === "services" && transaction.isServiceRequest ? null : formatMoney(transaction.amount)}
-                      {activeTab === "services" && transaction.isServiceRequest && (
+                      {activeTab === "services" && transaction.isServiceRequest && !transaction.quoteStatus ? null : transaction.quoteStatus && transaction.quotedPrice == null ? "—" : formatMoney(transaction.amount)}
+                      {activeTab === "services" && transaction.isServiceRequest && !transaction.quoteStatus && (
                         <ServicePriceBreakdown
                           servicePriceTotal={transaction.servicePriceTotal}
                           mechanicFeeTotal={transaction.mechanicFeeTotal}

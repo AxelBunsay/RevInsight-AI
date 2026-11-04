@@ -155,6 +155,8 @@ const registerRequest = async (req, res) => {
   try {
     const {
       email,
+      username,
+      usernameLower,
       password,
       firstName,
       lastName,
@@ -167,6 +169,14 @@ const registerRequest = async (req, res) => {
       return res.status(400).json({
         message: 'Email already in use'
       });
+    }
+
+    const [existingUsername, pendingUsername] = await Promise.all([
+      User.findOne({ usernameLower }).select('_id').lean(),
+      PendingUser.findOne({ usernameLower, email: { $ne: email } }).select('_id').lean()
+    ]);
+    if (existingUsername || pendingUsername) {
+      return res.status(409).json({ message: 'Username is already taken' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -183,6 +193,8 @@ const registerRequest = async (req, res) => {
       { email },
       {
         email,
+        username,
+        usernameLower,
         password: hashedPassword,
         firstName,
         lastName,
@@ -210,6 +222,10 @@ const registerRequest = async (req, res) => {
     });
   } catch (error) {
     console.error('[registerRequest] error:', error);
+
+    if (error.code === 11000 && error.keyPattern?.usernameLower) {
+      return res.status(409).json({ message: 'Username is already taken' });
+    }
 
     return res.status(500).json({
       message: 'Failed to register user'
@@ -271,6 +287,8 @@ const verifyOtp = async (req, res) => {
 
     const user = await User.create({
       email: pendingUser.email,
+      username: pendingUser.username,
+      usernameLower: pendingUser.usernameLower,
       password: pendingUser.password,
       firstName: pendingUser.firstName,
       lastName: pendingUser.lastName,
@@ -295,6 +313,7 @@ const verifyOtp = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         phoneNumber: user.phoneNumber,
@@ -379,16 +398,22 @@ const resendOtp = async (req, res) => {
 // Login (unchanged - only for verified users)
 const login = async (req, res) => {
   try {
-    const { email, password, rememberMe } = req.body;
+    const { password, rememberMe } = req.body;
+    const identifier = req.body.identifier ?? req.body.email;
+    const normalizedIdentifier = typeof identifier === 'string' ? identifier.trim() : '';
+    const isEmailIdentifier = normalizedIdentifier.includes('@');
 
-    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-    let user = normalizedEmail
-      ? await User.findOne({ email: normalizedEmail }).select('+password')
-      : null;
-    if (!user && normalizedEmail) {
-      user = await User.findOne({ email: normalizedEmail })
-        .collation({ locale: 'en', strength: 2 })
-        .select('+password');
+    let user = null;
+    if (normalizedIdentifier && isEmailIdentifier) {
+      const normalizedEmail = normalizedIdentifier.toLowerCase();
+      user = await User.findOne({ email: normalizedEmail }).select('+password');
+      if (!user) {
+        user = await User.findOne({ email: normalizedEmail })
+          .collation({ locale: 'en', strength: 2 })
+          .select('+password');
+      }
+    } else if (normalizedIdentifier) {
+      user = await User.findOne({ usernameLower: normalizedIdentifier.toLowerCase() }).select('+password');
     }
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -423,6 +448,7 @@ const login = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
@@ -447,6 +473,7 @@ const getProfile = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         phoneNumber: user.phoneNumber,
@@ -491,6 +518,7 @@ const updateProfile = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         phoneNumber: user.phoneNumber
@@ -525,6 +553,7 @@ const updateMyProfile = async (req, res) => {
       user: {
         id: user._id,
         email: user.email,
+        username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
         phoneNumber: user.phoneNumber

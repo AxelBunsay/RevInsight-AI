@@ -42,6 +42,8 @@ const validateServiceInput = (input, current = {}) => {
   const laborOnlyPriceValue = input.laborOnlyPrice !== undefined
     ? input.laborOnlyPrice
     : current.laborOnlyPrice ?? null;
+  const laborPriceMinValue = input.laborPriceMin !== undefined ? input.laborPriceMin : current.laborPriceMin ?? null;
+  const laborPriceMaxValue = input.laborPriceMax !== undefined ? input.laborPriceMax : current.laborPriceMax ?? null;
   const mechanicFeeValue = input.mechanicFee ?? current.mechanicFee;
   const categoryValue = input.category ?? current.category ?? 'General';
   const durationMinutesValue = input.durationMinutes ?? current.durationMinutes ?? 60;
@@ -71,6 +73,18 @@ const validateServiceInput = (input, current = {}) => {
   if (laborOnlyPriceText !== null && laborOnlyPriceText !== ''
     && (!hasNumber(laborOnlyPriceText) || Number(laborOnlyPriceText) < 0 || Number(laborOnlyPriceText) > 999999.99)) {
     fieldErrors.laborOnlyPrice = 'Labor-only price must be between 0 and 999,999.99.';
+  }
+  const laborPriceMinText = typeof laborPriceMinValue === 'string' ? laborPriceMinValue.trim() : laborPriceMinValue;
+  const laborPriceMaxText = typeof laborPriceMaxValue === 'string' ? laborPriceMaxValue.trim() : laborPriceMaxValue;
+  const hasLaborPriceMin = laborPriceMinText !== null && laborPriceMinText !== '';
+  const hasLaborPriceMax = laborPriceMaxText !== null && laborPriceMaxText !== '';
+  if (hasLaborPriceMin && (!hasNumber(laborPriceMinText) || Number(laborPriceMinText) < 0 || Number(laborPriceMinText) > 999999.99)) {
+    fieldErrors.laborPriceMin = 'Minimum labor price must be between 0 and 999,999.99.';
+  }
+  if (hasLaborPriceMax && (!hasNumber(laborPriceMaxText) || Number(laborPriceMaxText) < 0 || Number(laborPriceMaxText) > 999999.99)) {
+    fieldErrors.laborPriceMax = 'Maximum labor price must be between 0 and 999,999.99.';
+  } else if (hasLaborPriceMin && hasLaborPriceMax && Number(laborPriceMaxText) < Number(laborPriceMinText)) {
+    fieldErrors.laborPriceMax = 'Maximum labor price must be greater than or equal to minimum labor price.';
   }
   if (
     !hasNumber(mechanicFeeValue) ||

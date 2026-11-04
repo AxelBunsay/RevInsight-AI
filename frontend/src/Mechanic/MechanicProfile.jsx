@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { getMechanicProfile, saveMechanicProfile } from './mechanicService';
 import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from '../../../shared/mobileNumber.mjs';
+import './mechanic-ratings.css';
 
 const emptyProfile = { username: '', firstName: '', lastName: '', email: '', phoneNumber: '', specialization: 'general', yearsOfExperience: 0, certifications: [], bio: '', availabilityStatus: 'available' };
 
@@ -13,6 +14,8 @@ export default function MechanicProfile() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [phoneNumberError, setPhoneNumberError] = useState('');
+  const ratingCount = stats?.ratingCount ?? profile.ratingCount ?? 0;
+  const averageRating = Number(profile.averageRating || 0);
 
   useEffect(() => {
     let active = true;
@@ -51,12 +54,20 @@ export default function MechanicProfile() {
   return <>
     {error && <p className="mechanic-alert" role="alert">{error}</p>}{message && <p className="mechanic-success" role="status">{message}</p>}
     {loading ? <p className="mechanic-loading">Loading profile…</p> : <>
-      <section className="mechanic-panel workload-panel">
+      <section className="mechanic-panel workload-panel" id="performance">
         <div className="mechanic-panel-heading"><h2>Performance</h2></div>
         <div className="mechanic-workload-stats">
           <div><strong>{stats?.completedJobs ?? 0}</strong><span>Completed repairs</span></div>
-          <div><strong>{Number(profile.averageRating || 0).toFixed(1)}</strong><span>Average rating</span></div>
-          <div><strong>{Number(profile.successRate || 0)}%</strong><span>Success rate</span></div>
+          <div><strong>{ratingCount ? averageRating.toFixed(1) : '-'}</strong><span>Average rating</span><small>{ratingCount ? `from ${ratingCount} rating${ratingCount === 1 ? '' : 's'}` : 'No ratings yet'}</small></div>
+        </div>
+        <div className="mechanic-recent-ratings">
+          <h3>Recent ratings</h3>
+          {stats?.recentRatings?.length
+            ? <ul>{stats.recentRatings.map((rating, index) => <li key={`${rating.date || 'rating'}-${index}`}>
+              <div className="mechanic-rating-heading"><strong>{'★'.repeat(rating.rating)}{'☆'.repeat(5 - rating.rating)}</strong><span>{rating.serviceName} · {rating.date ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(rating.date)) : 'Date unavailable'}</span></div>
+              <small>{rating.customerFirstName || 'Customer'}{rating.comment ? ` · ${rating.comment}` : ''}</small>
+            </li>)}</ul>
+            : <p>No ratings yet.</p>}
         </div>
       </section>
       <form className="mechanic-panel mechanic-profile-form" onSubmit={save}>

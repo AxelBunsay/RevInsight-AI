@@ -1,0 +1,70 @@
+#performance .mechanic-workload-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mechanic-workload-stats > div small {
+  color: #66758f;
+  font-size: 10px;
+  text-align: center;
+}
+
+.mechanic-recent-ratings {
+  padding: 0 16px 16px;
+}
+
+.mechanic-recent-ratings h3 {
+  margin: 0 0 8px;
+  color: #1a2437;
+  font-size: 13px;
+}
+
+.mechanic-recent-ratings ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mechanic-recent-ratings li {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #f5f5fa;
+}
+
+.mechanic-rating-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+}
+
+.mechanic-rating-heading strong {
+  color: #a76b00;
+  letter-spacing: 1px;
+}
+
+.mechanic-rating-heading span,
+.mechanic-recent-ratings li small,
+.mechanic-recent-ratings > p {
+  color: #66758f;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.mechanic-recent-ratings li small {
+  overflow-wrap: anywhere;
+}
+
+.mechanic-recent-ratings > p {
+  margin: 0;
+}
+
+@media (max-width: 620px) {
+  .mechanic-recent-ratings {
+    padding: 0 11px 11px;
+  }
+}

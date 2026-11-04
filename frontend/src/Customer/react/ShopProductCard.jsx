@@ -12,7 +12,6 @@ export default function ShopProductCard({
   downPayment,
   downPaymentPercent,
   isOutOfStock,
-  categoryIcon,
   onOpen
 }) {
   return <Link
@@ -29,7 +28,10 @@ export default function ShopProductCard({
   >
     <div className="product-image">
       <ProductImage src={product.imageUrl || product.image} alt="" className="product-image-photo" fallback={<div className="product-image-placeholder" aria-hidden="true">
-        <span>{categoryIcon(product.category)}</span>
+        <svg viewBox="0 0 48 48" focusable="false">
+          <path d="M5 14.5 24 5l19 9.5v20L24 44 5 34.5v-20Z" />
+          <path d="m5.5 15 18.5 9.5L42.5 15M24 25v18M15 10l18 10" />
+        </svg>
       </div>} />
       <span className="product-badge">{product.category}</span>
     </div>

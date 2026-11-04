@@ -19,10 +19,9 @@ describe('customer service parts mode', () => {
     expect(getServicePartsSource('?parts=own&page=2')).toBe('customer');
   });
 
-  it('filters unavailable services but keeps zero-price labor-only offers', () => {
+  it('keeps every active service visible in both parts modes', () => {
     expect(servicesForPartsSource(services, 'shop')).toEqual(services);
-    expect(servicesForPartsSource(services, 'customer').map((service) => service._id))
-      .toEqual(['labor-option', 'free-labor']);
+    expect(servicesForPartsSource(services, 'customer')).toEqual(services);
   });
 
   it('sets the parts URL mode and resets pagination without dropping other filters', () => {

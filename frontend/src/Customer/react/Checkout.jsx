@@ -136,6 +136,7 @@ export default function Checkout() {
         cartKey: item.key,
         serviceId: item.serviceId || item.id,
         partsSource: item.partsSource || 'shop',
+        ...(item.mechanicId ? { mechanicId: item.mechanicId } : {}),
         date: item.bookingDate,
         startTime: item.startTime,
         ...(item.units ? { units: item.units } : {}),

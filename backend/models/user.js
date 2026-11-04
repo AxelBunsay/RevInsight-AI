@@ -10,6 +10,15 @@ const userSchema = new mongoose.Schema({
     trim: true,
     match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Please provide a valid email']
   },
+  username: {
+    type: String,
+    trim: true
+  },
+  usernameLower: {
+    type: String,
+    lowercase: true,
+    trim: true
+  },
   password: {
     type: String,
     required: [true, 'Password is required'],
@@ -129,7 +138,21 @@ const userSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+userSchema.pre('validate', function normalizeUsernameFields() {
+  if (typeof this.username !== 'string' || !this.username.trim()) {
+    this.username = undefined;
+    this.usernameLower = undefined;
+    return;
+  }
+  this.username = this.username.trim();
+  this.usernameLower = this.username.toLowerCase();
+});
+
 // Index for faster queries
 userSchema.index({ lastPurchaseDate: 1 });
+userSchema.index(
+  { usernameLower: 1 },
+  { name: 'username_lower_partial_unique', unique: true, partialFilterExpression: { usernameLower: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('User', userSchema);

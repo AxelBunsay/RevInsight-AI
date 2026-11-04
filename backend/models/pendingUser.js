@@ -9,6 +9,15 @@ const pendingUserSchema = new mongoose.Schema(
       lowercase: true,
       trim: true
     },
+    username: {
+      type: String,
+      trim: true
+    },
+    usernameLower: {
+      type: String,
+      lowercase: true,
+      trim: true
+    },
     password: {
       type: String,
       required: true,
@@ -48,6 +57,11 @@ const pendingUserSchema = new mongoose.Schema(
     },
   },
   { timestamps: true }
+);
+
+pendingUserSchema.index(
+  { usernameLower: 1 },
+  { name: 'username_lower_partial_unique', unique: true, partialFilterExpression: { usernameLower: { $type: 'string' } } }
 );
 
 module.exports = mongoose.model('PendingUser', pendingUserSchema);
