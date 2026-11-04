@@ -199,6 +199,7 @@ const customerLoginResponse = (user, rememberMe) => {
       lastName: user.lastName,
       role: user.role,
       phoneNumber: user.phoneNumber,
+      profileImage: user.profileImage,
       twoFactorEnabled: user.twoFactorEnabled === true
     }
   };
@@ -371,6 +372,7 @@ const verifyOtp = async (req, res) => {
         firstName: user.firstName,
         lastName: user.lastName,
         phoneNumber: user.phoneNumber,
+        profileImage: user.profileImage,
         role: user.role
       }
     });
@@ -684,7 +686,8 @@ const updateProfile = async (req, res) => {
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
-        phoneNumber: user.phoneNumber
+        phoneNumber: user.phoneNumber,
+        profileImage: user.profileImage
       }
     });
   } catch (error) {
@@ -719,7 +722,8 @@ const updateMyProfile = async (req, res) => {
         username: user.username,
         firstName: user.firstName,
         lastName: user.lastName,
-        phoneNumber: user.phoneNumber
+        phoneNumber: user.phoneNumber,
+        profileImage: user.profileImage
       }
     });
   } catch (error) {

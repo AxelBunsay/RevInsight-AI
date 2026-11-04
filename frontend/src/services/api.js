@@ -107,6 +107,19 @@ export const api = {
     body: JSON.stringify(profile),
     tokenKey: 'customerToken'
   }),
+  uploadCustomerProfileImage: (file) => {
+    const body = new FormData();
+    body.append('image', file);
+    return request('/api/customers/me/profile-image', {
+      method: 'POST',
+      body,
+      tokenKey: 'customerToken'
+    });
+  },
+  removeCustomerProfileImage: () => request('/api/customers/me/profile-image', {
+    method: 'DELETE',
+    tokenKey: 'customerToken'
+  }),
   changeCustomerPassword: (passwords) => request('/api/customers/me/password', {
     method: 'POST',
     body: JSON.stringify(passwords),

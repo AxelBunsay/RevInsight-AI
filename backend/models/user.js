@@ -128,6 +128,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  profileImagePublicId: {
+    type: String,
+    default: null,
+    select: false
+  },
 
   // Customer Activity Tracking
   totalPurchases: {
