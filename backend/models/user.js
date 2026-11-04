@@ -1,5 +1,13 @@
 const mongoose = require('mongoose');
 
+const loginChallengeSchema = new mongoose.Schema({
+  codeHash: { type: String, required: true },
+  expiresAt: { type: Date, required: true },
+  attempts: { type: Number, default: 0, min: 0 },
+  lastSentAt: { type: Date, required: true },
+  rememberMe: { type: Boolean, default: false }
+}, { _id: false });
+
 const userSchema = new mongoose.Schema({
   // Authentication & Identity
   email: {
@@ -24,6 +32,14 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Password is required'],
     minlength: 6,
     select: false // Don't return password by default
+  },
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
+  },
+  loginChallenge: {
+    type: loginChallengeSchema,
+    default: undefined
   },
 
   // Personal Information

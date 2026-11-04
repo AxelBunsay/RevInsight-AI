@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useCustomerPrototype } from './useCustomerPrototype';
@@ -33,10 +33,41 @@ export function CustomerLogin() {
     password: ''
   }));
   const [rememberMe, setRememberMe] = useState(DEFAULT_REMEMBER_ME);
+  const [loginStep, setLoginStep] = useState('credentials');
+  const [loginOtp, setLoginOtp] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const pendingAction = readCustomerAuthAction();
   const signInMessage = customerActionSignInMessage(pendingAction);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = window.setTimeout(() => setResendCooldown((remaining) => Math.max(remaining - 1, 0)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
+  const completeLogin = (response) => {
+    storeAuthSession('customer', {
+      token: response.token,
+      user: response.user,
+      rememberMe,
+      identifier: credentials.identifier.trim()
+    });
+    updateProfile(response.user || {});
+    const requestedRedirect = searchParams.get('redirect');
+    const from = location.state?.from;
+    const fromPath = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : null;
+    const safeRedirect = requestedRedirect !== null
+      ? getSafeCustomerRedirectPath(requestedRedirect)
+      : getSafeCustomerRedirectPath(fromPath) || getSafeCustomerRedirectPath(searchParams.get('returnTo'));
+    navigate(pendingAction
+      ? customerActionReturnPath(pendingAction)
+      : safeRedirect || '/customer/shop', {
+      replace: true,
+      state: pendingAction ? { resumeAction: true } : undefined
+    });
+  };
 
   const submitLogin = async (event) => {
     event.preventDefault();
@@ -49,25 +80,12 @@ export function CustomerLogin() {
         credentials.password,
         rememberMe
       ));
-      storeAuthSession('customer', {
-        token: response.token,
-        user: response.user,
-        rememberMe,
-        identifier: credentials.identifier.trim()
-      });
-      updateProfile(response.user || {});
-      const requestedRedirect = searchParams.get('redirect');
-      const from = location.state?.from;
-      const fromPath = from ? `${from.pathname}${from.search || ''}${from.hash || ''}` : null;
-      const safeRedirect = requestedRedirect !== null
-        ? getSafeCustomerRedirectPath(requestedRedirect)
-        : getSafeCustomerRedirectPath(fromPath) || getSafeCustomerRedirectPath(searchParams.get('returnTo'));
-      navigate(pendingAction
-        ? customerActionReturnPath(pendingAction)
-        : safeRedirect || '/customer/shop', {
-        replace: true,
-        state: pendingAction ? { resumeAction: true } : undefined
-      });
+      if (response.requiresOtp) {
+        setLoginStep('otp');
+        setResendCooldown(60);
+        return;
+      }
+      completeLogin(response);
     } catch (loginError) {
       setError(loginError.message || 'Unable to sign in.');
     } finally {
@@ -75,16 +93,73 @@ export function CustomerLogin() {
     }
   };
 
+  const submitLoginOtp = async (event) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const response = await api.verifyCustomerLoginOtp({
+        identifier: credentials.identifier.trim(),
+        code: loginOtp
+      });
+      completeLogin(response);
+    } catch (verifyError) {
+      setError(verifyError.message || 'The login code could not be verified.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const resendLoginOtp = async () => {
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const response = await api.resendCustomerLoginOtp(credentials.identifier.trim());
+      setResendCooldown(response.retryAfterSeconds || 60);
+      setLoginOtp('');
+    } catch (resendError) {
+      setError(resendError.message || 'A new login code could not be sent.');
+      if (resendError.details?.retryAfterSeconds) setResendCooldown(resendError.details.retryAfterSeconds);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const goBackToCredentials = () => {
+    setLoginStep('credentials');
+    setLoginOtp('');
+    setError('');
+  };
+
   return <>
-    <div className="customer-auth-heading"><h2>Welcome back!</h2><p>Sign in to your customer account</p></div>
+    <div className="customer-auth-heading">
+      <h2>{loginStep === 'otp' ? 'Check your email' : 'Welcome back!'}</h2>
+      <p>{loginStep === 'otp' ? 'Enter the 6-digit code we sent to your email.' : 'Sign in to your customer account'}</p>
+    </div>
     {signInMessage && <p className="customer-auth-action-message" role="status">{signInMessage}</p>}
-    <form className="customer-auth-form" onSubmit={submitLogin}>
-      {error && <p className="customer-error" role="alert">{error}</p>}
-      <label>Username or email<input type="text" required autoComplete="username" placeholder="Username or email" value={credentials.identifier} onChange={(event) => setCredentials({ ...credentials, identifier: event.target.value })} /></label>
-      <label>Password<PasswordInput required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
-      <label className="customer-auth-remember"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
-      <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
-    </form>
+    {loginStep === 'credentials' ? (
+      <form className="customer-auth-form" onSubmit={submitLogin}>
+        {error && <p className="customer-error" role="alert">{error}</p>}
+        <label>Username or email<input type="text" required autoComplete="username" placeholder="Username or email" value={credentials.identifier} onChange={(event) => setCredentials({ ...credentials, identifier: event.target.value })} /></label>
+        <label>Password<PasswordInput required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
+        <label className="customer-auth-remember"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
+        <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
+      </form>
+    ) : (
+      <>
+        <form className="customer-auth-form" onSubmit={submitLoginOtp}>
+          {error && <p className="customer-error" role="alert">{error}</p>}
+          <label>6-digit code<input className="customer-login-otp-input" type="text" required inputMode="numeric" autoComplete="one-time-code" maxLength="6" pattern="[0-9]{6}" value={loginOtp} onChange={(event) => setLoginOtp(event.target.value.replace(/\D/g, '').slice(0, 6))} /></label>
+          <button type="submit" disabled={isSubmitting || loginOtp.length !== 6}>{isSubmitting ? 'Verifying...' : 'Verify and sign in'}</button>
+        </form>
+        <div className="customer-login-otp-actions">
+          <button type="button" onClick={resendLoginOtp} disabled={isSubmitting || resendCooldown > 0}>
+            {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Resend code'}
+          </button>
+          <button type="button" onClick={goBackToCredentials} disabled={isSubmitting}>Back</button>
+        </div>
+      </>
+    )}
   </>;
 }
 

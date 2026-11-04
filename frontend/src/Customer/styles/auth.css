@@ -1006,6 +1006,35 @@
   cursor: wait;
 }
 
+.customer-auth-page.customer-auth-page .customer-auth-form .customer-login-otp-input {
+  font-size: 16px;
+  letter-spacing: 0.5em;
+  text-align: center;
+}
+
+.customer-login-otp-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.customer-login-otp-actions button {
+  min-height: 44px;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  color: #9a3412;
+  font: 600 13px 'Segoe UI', sans-serif;
+  cursor: pointer;
+}
+
+.customer-login-otp-actions button:disabled {
+  color: #76665a;
+  cursor: not-allowed;
+}
+
 .customer-auth-spinner {
   width: 14px;
   height: 14px;

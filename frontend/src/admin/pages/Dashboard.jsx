@@ -48,6 +48,8 @@ function Dashboard() {
         <SalesChart series={seriesState.series} loading={seriesState.loading} period={period} compact={compactChart} />
       </Panel>
 
+      <ServiceRevenue period={period} state={serviceRevenueState} />
+
       {dashboard.data ? (
         <>
           <div className="admin-dashboard-lower">
@@ -59,7 +61,6 @@ function Dashboard() {
       ) : dashboard.loading ? (
         <div className="admin-dashboard-lower"><Skeleton className="admin-panel-skeleton" /><Skeleton className="admin-panel-skeleton" /></div>
       ) : <EmptyState>No dashboard data is available.</EmptyState>}
-      <ServiceRevenue state={serviceRevenueState} />
     </div>
   );
 }

@@ -47,6 +47,10 @@ export default function CustomerProfile() {
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isTwoFactorModalOpen, setIsTwoFactorModalOpen] = useState(false);
+  const [twoFactorPassword, setTwoFactorPassword] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState('');
+  const [isUpdatingTwoFactor, setIsUpdatingTwoFactor] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
@@ -57,6 +61,9 @@ export default function CustomerProfile() {
 
   useCustomerModalEffects(isDeleteModalOpen, () => {
     if (!isDeletingAccount) setIsDeleteModalOpen(false);
+  });
+  useCustomerModalEffects(isTwoFactorModalOpen, () => {
+    if (!isUpdatingTwoFactor) setIsTwoFactorModalOpen(false);
   });
 
   useEffect(() => {
@@ -177,6 +184,25 @@ export default function CustomerProfile() {
     }
   };
 
+  const updateTwoFactor = async (event) => {
+    event.preventDefault();
+    setTwoFactorError('');
+    setIsUpdatingTwoFactor(true);
+    try {
+      const response = await api.setCustomerTwoFactor(!profile.twoFactorEnabled, twoFactorPassword);
+      const updatedProfile = { ...profile, twoFactorEnabled: response.twoFactorEnabled };
+      updateProfile(updatedProfile);
+      localStorage.setItem('customerUser', JSON.stringify(updatedProfile));
+      setTwoFactorPassword('');
+      setIsTwoFactorModalOpen(false);
+      setToast(response.message || 'Two-step verification settings updated.');
+    } catch (error) {
+      setTwoFactorError(error.message || 'Two-step verification settings could not be updated.');
+    } finally {
+      setIsUpdatingTwoFactor(false);
+    }
+  };
+
   const deleteAccount = async (event) => {
     event.preventDefault();
     setDeleteError('');
@@ -250,6 +276,18 @@ export default function CustomerProfile() {
           <div className="customer-flow-section-heading">
             <div><p className="customer-eyebrow">ACCOUNT ACCESS</p><h2>Security</h2></div>
           </div>
+          <div className="customer-two-factor-setting">
+            <div>
+              <h3>Two-step verification (email code)</h3>
+              <p>When on, we email you a 6-digit code each time you sign in.</p>
+              <small role="status">{profile.twoFactorEnabled ? 'Currently on' : 'Currently off'}</small>
+            </div>
+            <button type="button" className={profile.twoFactorEnabled ? 'customer-secondary-button' : 'customer-primary-button'} onClick={() => {
+              setTwoFactorPassword('');
+              setTwoFactorError('');
+              setIsTwoFactorModalOpen(true);
+            }}>{profile.twoFactorEnabled ? 'Turn off' : 'Turn on'}</button>
+          </div>
           <form className="customer-account-form" onSubmit={changePassword} noValidate>
             <label>Current password<PasswordInput autoComplete="current-password" value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} /></label>
             <label>New password<PasswordInput autoComplete="new-password" value={passwordForm.newPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, newPassword: event.target.value }); setPasswordError(''); }} /><small className="customer-field-hint">At least 8 characters, including a letter and a number.</small></label>
@@ -296,6 +334,22 @@ export default function CustomerProfile() {
           <footer className="customer-modal-footer">
             <button type="button" className="customer-primary-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
             <button type="submit" form="delete-account-form" className="customer-danger-button" disabled={isDeletingAccount || !deletePassword || deleteConfirmation !== 'DELETE'}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
+          </footer>
+        </section>
+      </div></CustomerModalPortal>}
+      {isTwoFactorModalOpen && <CustomerModalPortal><div className="customer-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isUpdatingTwoFactor) setIsTwoFactorModalOpen(false); }}>
+        <section className="customer-confirmation-dialog customer-two-factor-dialog" role="dialog" aria-modal="true" aria-labelledby="two-factor-title">
+          <header className="customer-modal-header"><h2 id="two-factor-title">{profile.twoFactorEnabled ? 'Turn off two-step verification?' : 'Turn on two-step verification?'}</h2><button type="button" className="customer-modal-close" aria-label="Close two-step verification dialog" onClick={() => setIsTwoFactorModalOpen(false)} disabled={isUpdatingTwoFactor}>×</button></header>
+          <div className="customer-modal-body">
+            <p>Enter your current password to confirm this change.</p>
+            <form id="two-factor-form" onSubmit={updateTwoFactor}>
+              <label className="customer-delete-field">Current password<PasswordInput required autoComplete="current-password" value={twoFactorPassword} onChange={(event) => { setTwoFactorPassword(event.target.value); setTwoFactorError(''); }} /></label>
+              {twoFactorError && <p className="customer-field-error" role="alert">{twoFactorError}</p>}
+            </form>
+          </div>
+          <footer className="customer-modal-footer">
+            <button type="button" className="customer-secondary-button" onClick={() => setIsTwoFactorModalOpen(false)} disabled={isUpdatingTwoFactor}>Cancel</button>
+            <button type="submit" form="two-factor-form" className="customer-primary-button" disabled={isUpdatingTwoFactor || !twoFactorPassword}>{isUpdatingTwoFactor ? 'Saving...' : profile.twoFactorEnabled ? 'Turn off' : 'Turn on'}</button>
           </footer>
         </section>
       </div></CustomerModalPortal>}

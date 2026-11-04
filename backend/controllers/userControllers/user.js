@@ -150,6 +150,60 @@ const sendVerificationEmail = async (user, otp) => {
   });
 };
 
+const sendLoginOtpEmail = async (user, otp) => {
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: user.email,
+    subject: 'Your RevInsight login code',
+    text: `Hello ${user.firstName}, your RevInsight login code is ${otp}. It expires in 5 minutes.`,
+    html: `<p>Hello ${user.firstName},</p><p>Your RevInsight login code is <strong>${otp}</strong>.</p><p>This code expires in 5 minutes. If you did not try to sign in, you can ignore this email.</p>`
+  });
+};
+
+const resolveUserByIdentifier = async (identifier, { includePassword = false } = {}) => {
+  const normalizedIdentifier = typeof identifier === 'string' ? identifier.trim() : '';
+  if (!normalizedIdentifier) return null;
+  const selectPassword = (query) => includePassword ? query.select('+password') : query;
+
+  if (normalizedIdentifier.includes('@')) {
+    const email = normalizedIdentifier.toLowerCase();
+    const exact = await selectPassword(User.findOne({ email }));
+    return exact || selectPassword(User.findOne({ email: normalizedIdentifier }).collation({ locale: 'en', strength: 2 }));
+  }
+  return selectPassword(User.findOne({ usernameLower: normalizedIdentifier.toLowerCase() }));
+};
+
+const hashLoginCode = (code) => crypto.createHash('sha256').update(code).digest('hex');
+const createLoginCode = () => crypto.randomInt(100000, 1000000).toString();
+const loginChallengeExpiry = () => new Date(Date.now() + 5 * 60 * 1000);
+const LOGIN_OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+
+const maskEmail = (email) => {
+  const [local, domain] = String(email).split('@');
+  if (!domain) return '';
+  return `${local.charAt(0)}***@${domain}`;
+};
+
+const customerLoginResponse = (user, rememberMe) => {
+  const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, {
+    expiresIn: rememberMe === true ? '30d' : '1d'
+  });
+  return {
+    message: 'Login successful',
+    token,
+    user: {
+      id: user._id,
+      email: user.email,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+      twoFactorEnabled: user.twoFactorEnabled === true
+    }
+  };
+};
+
 // Step 1: Register Request - Send OTP to email
 const registerRequest = async (req, res) => {
   try {
@@ -395,26 +449,12 @@ const resendOtp = async (req, res) => {
   }
 };
 
-// Login (unchanged - only for verified users)
+// Login (only for verified users)
 const login = async (req, res) => {
   try {
     const { password, rememberMe } = req.body;
     const identifier = req.body.identifier ?? req.body.email;
-    const normalizedIdentifier = typeof identifier === 'string' ? identifier.trim() : '';
-    const isEmailIdentifier = normalizedIdentifier.includes('@');
-
-    let user = null;
-    if (normalizedIdentifier && isEmailIdentifier) {
-      const normalizedEmail = normalizedIdentifier.toLowerCase();
-      user = await User.findOne({ email: normalizedEmail }).select('+password');
-      if (!user) {
-        user = await User.findOne({ email: normalizedEmail })
-          .collation({ locale: 'en', strength: 2 })
-          .select('+password');
-      }
-    } else if (normalizedIdentifier) {
-      user = await User.findOne({ usernameLower: normalizedIdentifier.toLowerCase() }).select('+password');
-    }
+    const user = await resolveUserByIdentifier(identifier, { includePassword: true });
     if (!user) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -437,27 +477,149 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Generate token
-    const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, {
-      expiresIn: rememberMe === true ? '30d' : '1d'
-    });
-
-    res.status(200).json({
-      message: 'Login successful',
-      token,
-      user: {
-        id: user._id,
-        email: user.email,
-        username: user.username,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        phoneNumber: user.phoneNumber
+    if (user.twoFactorEnabled === true) {
+      const code = createLoginCode();
+      user.loginChallenge = {
+        codeHash: hashLoginCode(code),
+        expiresAt: loginChallengeExpiry(),
+        attempts: 0,
+        lastSentAt: new Date(),
+        rememberMe: rememberMe === true
+      };
+      await user.save();
+      try {
+        await sendLoginOtpEmail(user, code);
+      } catch (error) {
+        user.loginChallenge = undefined;
+        await user.save();
+        throw error;
       }
-    });
+      return res.status(200).json({
+        requiresOtp: true,
+        email: maskEmail(user.email),
+        message: 'A login code was sent to your email.'
+      });
+    }
+
+    return res.status(200).json(customerLoginResponse(user, rememberMe));
   } catch (error) {
     console.error('[login] error', error);
     res.status(500).json({ message: 'Failed to login. Please try again.' });
+  }
+};
+
+const verifyLoginOtp = async (req, res) => {
+  try {
+    const identifier = req.body.identifier ?? req.body.email;
+    const code = req.body.code;
+    if (typeof code !== 'string' || !/^\d{6}$/.test(code)) {
+      return res.status(400).json({ message: 'Enter the 6-digit login code.' });
+    }
+
+    const user = await resolveUserByIdentifier(identifier);
+    if (!user || user.isDeleted || user.isActive === false || !user.twoFactorEnabled || !user.loginChallenge) {
+      return res.status(401).json({ message: 'No active login code was found. Sign in again to request a new code.' });
+    }
+    if (user.loginChallenge.attempts >= 5) {
+      return res.status(429).json({ message: 'Too many incorrect codes. Request a new code to try again.' });
+    }
+    if (user.loginChallenge.expiresAt <= new Date()) {
+      return res.status(401).json({ message: 'This login code has expired. Request a new code.' });
+    }
+
+    const submittedHash = Buffer.from(hashLoginCode(code), 'hex');
+    const storedHash = Buffer.from(user.loginChallenge.codeHash, 'hex');
+    const matches = submittedHash.length === storedHash.length && crypto.timingSafeEqual(submittedHash, storedHash);
+    if (!matches) {
+      user.loginChallenge.attempts += 1;
+      const attemptsExhausted = user.loginChallenge.attempts >= 5;
+      await user.save();
+      return res.status(attemptsExhausted ? 429 : 401).json({
+        message: attemptsExhausted
+          ? 'Too many incorrect codes. Request a new code to try again.'
+          : 'The login code is incorrect.'
+      });
+    }
+
+    const rememberMe = user.loginChallenge.rememberMe === true;
+    user.loginChallenge = undefined;
+    await user.save();
+    return res.status(200).json(customerLoginResponse(user, rememberMe));
+  } catch (error) {
+    console.error('[verifyLoginOtp] error', error);
+    return res.status(500).json({ message: 'Failed to verify login code. Please try again.' });
+  }
+};
+
+const resendLoginOtp = async (req, res) => {
+  try {
+    const identifier = req.body.identifier ?? req.body.email;
+    const user = await resolveUserByIdentifier(identifier);
+    if (!user || user.isDeleted || user.isActive === false || !user.twoFactorEnabled) {
+      return res.status(404).json({ message: 'No two-step sign-in is pending for that account.' });
+    }
+
+    const lastSentAt = user.loginChallenge?.lastSentAt;
+    if (lastSentAt && Date.now() - lastSentAt.getTime() < LOGIN_OTP_RESEND_COOLDOWN_MS) {
+      const secondsRemaining = Math.ceil((LOGIN_OTP_RESEND_COOLDOWN_MS - (Date.now() - lastSentAt.getTime())) / 1000);
+      return res.status(429).json({
+        message: `Please wait ${secondsRemaining} seconds before requesting another login code.`,
+        retryAfterSeconds: secondsRemaining
+      });
+    }
+
+    const code = createLoginCode();
+    const rememberMe = user.loginChallenge?.rememberMe === true;
+    user.loginChallenge = {
+      codeHash: hashLoginCode(code),
+      expiresAt: loginChallengeExpiry(),
+      attempts: 0,
+      lastSentAt: new Date(),
+      rememberMe
+    };
+    await user.save();
+    try {
+      await sendLoginOtpEmail(user, code);
+    } catch (error) {
+      user.loginChallenge = undefined;
+      await user.save();
+      throw error;
+    }
+    return res.status(200).json({
+      message: 'A new login code was sent to your email.',
+      email: maskEmail(user.email),
+      retryAfterSeconds: 60
+    });
+  } catch (error) {
+    console.error('[resendLoginOtp] error', error);
+    return res.status(500).json({ message: 'Failed to resend login code. Please try again.' });
+  }
+};
+
+const setTwoFactorEnabled = (enabled) => async (req, res) => {
+  try {
+    const { currentPassword } = req.body || {};
+    if (typeof currentPassword !== 'string' || !currentPassword) {
+      return res.status(400).json({ message: 'Your current password is required.' });
+    }
+    const user = await User.findById(req.user.userId).select('+password');
+    if (!user || user.isDeleted) {
+      return res.status(404).json({ message: 'Customer account not found.' });
+    }
+    if (!(await bcrypt.compare(currentPassword, user.password))) {
+      return res.status(401).json({ message: 'Current password is incorrect.' });
+    }
+
+    user.twoFactorEnabled = enabled;
+    if (!enabled) user.loginChallenge = undefined;
+    await user.save();
+    return res.status(200).json({
+      message: enabled ? 'Two-step verification enabled.' : 'Two-step verification disabled.',
+      twoFactorEnabled: user.twoFactorEnabled
+    });
+  } catch (error) {
+    console.error('[setTwoFactorEnabled] error', error);
+    return res.status(500).json({ message: 'Two-step verification settings could not be updated.' });
   }
 };
 
@@ -479,6 +641,7 @@ const getProfile = async (req, res) => {
         phoneNumber: user.phoneNumber,
         profileImage: user.profileImage,
         preferences: user.preferences,
+        twoFactorEnabled: user.twoFactorEnabled === true,
         totalPurchases: user.totalPurchases,
         totalSpent: user.totalSpent,
         firstPurchaseDate: user.firstPurchaseDate,
@@ -773,6 +936,10 @@ module.exports = {
   verifyOtp,
   resendOtp,
   login,
+  verifyLoginOtp,
+  resendLoginOtp,
+  enableTwoFactor: setTwoFactorEnabled(true),
+  disableTwoFactor: setTwoFactorEnabled(false),
   getProfile,
   updateProfile,
   updateMyProfile,

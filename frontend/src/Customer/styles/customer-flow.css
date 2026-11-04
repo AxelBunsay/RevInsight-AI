@@ -2688,6 +2688,15 @@
 .customer-account-panel .customer-flow-section-heading { margin: 0 0 16px; }
 .customer-account-subsection { margin-top: 30px; padding-top: 22px; border-top: 1px solid #eee3da; }
 .customer-account-subsection .customer-flow-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.customer-two-factor-setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 0 0 22px; padding: 16px; border: 1px solid #eee3da; border-radius: 10px; background: #fffaf5; }
+.customer-two-factor-setting h3 { margin: 0 0 6px; color: #322a25; font: 700 14px 'Segoe UI', sans-serif; }
+.customer-two-factor-setting p { margin: 0 0 5px; color: #6f5f4e; font: 13px/1.5 'Segoe UI', sans-serif; }
+.customer-two-factor-setting small { color: #76665a; font: 12px 'Segoe UI', sans-serif; }
+.customer-two-factor-setting > button { flex: 0 0 auto; min-width: 90px; min-height: 44px; }
+.customer-two-factor-dialog .customer-modal-body { padding-top: 0; }
+.customer-two-factor-dialog .customer-modal-body > p { margin-top: 0; }
+.customer-two-factor-dialog .customer-modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
+.customer-two-factor-dialog .customer-modal-footer button { min-width: 100px; min-height: 44px; }
 .customer-password-toggle { border: 0; background: transparent; color: #d94d22; font: 700 11px 'Segoe UI', sans-serif; cursor: pointer; }
 .customer-account-delete { margin-top: 30px; padding: 18px; border: 1px solid #b3261e; border-radius: 10px; background: #fffafa; }
 .customer-account-delete h2 { margin: 0 0 8px; color: #322a25; font: 700 15px 'Segoe UI', sans-serif; }

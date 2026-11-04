@@ -247,6 +247,12 @@
 .admin-root .admin-service-revenue-panel {
   margin-top: 14px;
 }
+.admin-root .admin-service-revenue__period {
+  margin: -8px 0 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
 .admin-root .admin-service-revenue__stats {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 17px;
@@ -322,7 +328,12 @@
   font-weight: 700;
 }
 .admin-root .admin-service-revenue-panel .admin-category-row__top > span {
+  min-width: 0;
   white-space: nowrap;
+}
+.admin-root .admin-service-revenue-panel .admin-category-row__top > strong {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .admin-root .admin-category-row__top small {
   margin-left: 5px;

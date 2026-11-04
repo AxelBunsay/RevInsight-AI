@@ -70,6 +70,21 @@ export const api = {
     body: JSON.stringify(credentials),
     tokenKey: null
   }),
+  verifyCustomerLoginOtp: (credentials) => request('/api/users/login/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+    tokenKey: null
+  }),
+  resendCustomerLoginOtp: (identifier) => request('/api/users/login/resend-otp', {
+    method: 'POST',
+    body: JSON.stringify({ identifier }),
+    tokenKey: null
+  }),
+  setCustomerTwoFactor: (enabled, currentPassword) => request(`/api/users/2fa/${enabled ? 'enable' : 'disable'}`, {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword }),
+    tokenKey: 'customerToken'
+  }),
   loginMechanic: (credentials) => request('/api/mechanics/login', {
     method: 'POST',
     body: JSON.stringify(credentials),

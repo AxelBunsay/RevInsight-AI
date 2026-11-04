@@ -4,6 +4,7 @@ import supertest from 'supertest';
 
 const require = createRequire(import.meta.url);
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const userController = require('../../controllers/userControllers/user');
 const {
   app,
@@ -29,6 +30,18 @@ function registrationPayload(overrides = {}) {
     phoneNumber: '09171234567',
     ...overrides
   };
+}
+
+async function prepareCustomerLogin(twoFactorEnabled = true) {
+  await User.updateOne(
+    { _id: fixtures.customer._id },
+    {
+      $set: {
+        password: await bcrypt.hash('CustomerPass1', 10),
+        twoFactorEnabled
+      }
+    }
+  );
 }
 
 describe('customer username authentication', () => {
@@ -132,11 +145,150 @@ describe('customer username authentication', () => {
 
     expect(usernameLogin.status).toBe(200);
     expect(usernameLogin.body.user.username).toBe('casey_rider');
+    expect(usernameLogin.body.user.twoFactorEnabled).toBe(false);
+    expect(usernameLogin.body.requiresOtp).toBeUndefined();
     expect(emailLogin.status).toBe(200);
     expect(wrongPassword.status).toBe(401);
     expect(wrongIdentifier.status).toBe(401);
     expect(wrongPassword.body.message).toBe('Invalid credentials');
     expect(wrongIdentifier.body.message).toBe(wrongPassword.body.message);
+  });
+
+  it('sends a hashed short-lived login code and issues the normal token after a correct code', async () => {
+    const sendMail = vi.spyOn(userController.transporter, 'sendMail').mockResolvedValue({ accepted: [] });
+    await prepareCustomerLogin();
+    try {
+      const login = await api.post('/api/users/login').send({
+        identifier: fixtures.customer.email,
+        password: 'CustomerPass1',
+        rememberMe: true
+      });
+      expect(login.status).toBe(200);
+      expect(login.body).toMatchObject({ requiresOtp: true, email: 'i***@example.com' });
+      expect(login.body.token).toBeUndefined();
+      expect(login.body.user).toBeUndefined();
+      expect(sendMail).toHaveBeenCalledWith(expect.objectContaining({
+        to: fixtures.customer.email,
+        subject: 'Your RevInsight login code'
+      }));
+
+      const user = await User.findById(fixtures.customer._id);
+      const code = sendMail.mock.calls[0][0].text.match(/\b\d{6}\b/)[0];
+      expect(user.loginChallenge.codeHash).not.toBe(code);
+      expect(user.loginChallenge.codeHash).toMatch(/^[a-f\d]{64}$/);
+      expect(user.loginChallenge.attempts).toBe(0);
+
+      const verified = await api.post('/api/users/login/verify-otp').send({
+        identifier: fixtures.customer.email,
+        code
+      });
+      expect(verified.status).toBe(200);
+      expect(verified.body).toMatchObject({
+        message: 'Login successful',
+        user: { email: fixtures.customer.email, twoFactorEnabled: true }
+      });
+      expect(verified.body.token).toBeTruthy();
+      expect(jwt.decode(verified.body.token).exp - jwt.decode(verified.body.token).iat).toBe(30 * 24 * 60 * 60);
+      expect((await User.findById(fixtures.customer._id)).loginChallenge).toBeUndefined();
+    } finally {
+      sendMail.mockRestore();
+    }
+  });
+
+  it('rejects wrong and expired login codes with clear messages', async () => {
+    const sendMail = vi.spyOn(userController.transporter, 'sendMail').mockResolvedValue({ accepted: [] });
+    await prepareCustomerLogin();
+    try {
+      await api.post('/api/users/login').send({ identifier: fixtures.customer.email, password: 'CustomerPass1' });
+      const wrong = await api.post('/api/users/login/verify-otp').send({
+        identifier: fixtures.customer.email,
+        code: '000000'
+      });
+      expect(wrong.status).toBe(401);
+      expect(wrong.body.message).toBe('The login code is incorrect.');
+
+      await User.updateOne(
+        { _id: fixtures.customer._id },
+        { $set: { 'loginChallenge.expiresAt': new Date(Date.now() - 1000) } }
+      );
+      const expired = await api.post('/api/users/login/verify-otp').send({
+        identifier: fixtures.customer.email,
+        code: sendMail.mock.calls[0][0].text.match(/\b\d{6}\b/)[0]
+      });
+      expect(expired.status).toBe(401);
+      expect(expired.body.message).toContain('expired');
+    } finally {
+      sendMail.mockRestore();
+    }
+  });
+
+  it('locks verification after five incorrect codes until another code is requested', async () => {
+    const sendMail = vi.spyOn(userController.transporter, 'sendMail').mockResolvedValue({ accepted: [] });
+    await prepareCustomerLogin();
+    try {
+      await api.post('/api/users/login').send({ identifier: fixtures.customer.email, password: 'CustomerPass1' });
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const response = await api.post('/api/users/login/verify-otp').send({
+          identifier: fixtures.customer.email,
+          code: '000000'
+        });
+        expect(response.status).toBe(attempt === 4 ? 429 : 401);
+      }
+
+      const locked = await api.post('/api/users/login/verify-otp').send({
+        identifier: fixtures.customer.email,
+        code: sendMail.mock.calls[0][0].text.match(/\b\d{6}\b/)[0]
+      });
+      expect(locked.status).toBe(429);
+      expect(locked.body.message).toContain('Request a new code');
+
+      const cooldown = await api.post('/api/users/login/resend-otp')
+        .send({ identifier: fixtures.customer.email });
+      expect(cooldown.status).toBe(429);
+      expect(cooldown.body.retryAfterSeconds).toBeGreaterThan(0);
+
+      await User.updateOne(
+        { _id: fixtures.customer._id },
+        { $set: { 'loginChallenge.lastSentAt': new Date(Date.now() - 61_000) } }
+      );
+      const resent = await api.post('/api/users/login/resend-otp')
+        .send({ identifier: fixtures.customer.email });
+      expect(resent.status).toBe(200);
+      expect((await User.findById(fixtures.customer._id)).loginChallenge.attempts).toBe(0);
+    } finally {
+      sendMail.mockRestore();
+    }
+  });
+
+  it('requires the current password to enable or disable email two-step verification', async () => {
+    await prepareCustomerLogin(false);
+    const token = signCustomer(fixtures.customer);
+    const wrongEnable = await api.post('/api/users/2fa/enable')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'WrongPassword1' });
+    expect(wrongEnable.status).toBe(401);
+    expect((await User.findById(fixtures.customer._id)).twoFactorEnabled).toBe(false);
+
+    const enabled = await api.post('/api/users/2fa/enable')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'CustomerPass1' });
+    expect(enabled.status).toBe(200);
+    expect(enabled.body.twoFactorEnabled).toBe(true);
+
+    const wrongDisable = await api.post('/api/users/2fa/disable')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'WrongPassword1' });
+    expect(wrongDisable.status).toBe(401);
+    expect((await User.findById(fixtures.customer._id)).twoFactorEnabled).toBe(true);
+
+    const disabled = await api.post('/api/users/2fa/disable')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ currentPassword: 'CustomerPass1' });
+    expect(disabled.status).toBe(200);
+    expect(disabled.body.twoFactorEnabled).toBe(false);
+
+    const profile = await api.get('/api/users/profile').set('Authorization', `Bearer ${token}`);
+    expect(profile.body.user.twoFactorEnabled).toBe(false);
   });
 
   it('returns username in the customer profile and does not allow profile updates to change it', async () => {
