@@ -28,6 +28,7 @@ const {
   getManilaDateParts
 } = require('../../utils/revenue');
 const { getAvailableStock, isLowStock } = require('../../utils/inventory');
+const { evaluateLowStockAlert } = require('../../utils/lowStockAlerts');
 
 const loadRevenueEntries = (options = {}) => getRevenueEntries({
   Order,
@@ -715,6 +716,7 @@ const addInventoryItem = async (req, res) => {
       Reservation
     });
     const item = await Product.create(prepared.data);
+    await evaluateLowStockAlert(item._id);
 
     res.status(201).json({
       success: true,
@@ -760,6 +762,7 @@ const updateInventoryItem = async (req, res) => {
       currentItem.set(prepared.data);
       item = await currentItem.save({ session });
     });
+    await evaluateLowStockAlert(item._id);
     for (const publicId of prepared.obsoleteImagePublicIds) {
       await removeProductImageSafely(publicId, 'updateInventoryItem');
     }

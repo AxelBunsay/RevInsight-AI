@@ -127,7 +127,10 @@ function makeDashboardData(stats, orders, inventory) {
 
   const inventoryHealth = inventory.reduce((health, item) => {
     const available = Math.max(0, Number(item.quantity || 0) - Number(item.reservedQty || 0));
-    if (available <= 0) health.out += 1;
+    if (available <= 0) {
+      health.out += 1;
+      health.lowItems.push({ id: item._id, name: item.name, quantity: available });
+    }
     else if (available <= LOW_STOCK_THRESHOLD) {
       health.low += 1;
       health.lowItems.push({ id: item._id, name: item.name, quantity: available });
@@ -163,7 +166,7 @@ function makeDashboardData(stats, orders, inventory) {
     },
     badges: {
       pendingTransactions: orders.filter((order) => String(order.status).toLowerCase() === 'pending').length,
-      lowStock: inventoryHealth.low
+      lowStock: inventoryHealth.low + inventoryHealth.out
     },
     categories: sortedCategories,
     inventoryHealth

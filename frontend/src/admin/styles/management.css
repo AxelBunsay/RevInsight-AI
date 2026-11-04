@@ -747,6 +747,10 @@
   border-color: color-mix(in srgb, var(--bad) 40%, var(--line));
   background: color-mix(in srgb, var(--bad) 5%, var(--surface));
 }
+.admin-root .admin-management-page .inventory-variant-detail.is-out-of-stock {
+  border: 2px solid var(--bad);
+  background: color-mix(in srgb, var(--bad) 10%, var(--surface));
+}
 .admin-root .admin-management-page .inventory-variant-description {
   display: grid;
   min-width: 130px;
@@ -761,6 +765,11 @@
 }
 .admin-root .admin-management-page .stock-text.low {
   color: var(--bad);
+}
+.admin-root .admin-management-page .stock-text.out {
+  color: var(--bad);
+  font-weight: 800;
+  background: color-mix(in srgb, var(--bad) 10%, transparent);
 }
 .admin-root .admin-management-page .service-fee-input,
 .admin-root .admin-management-page .service-labor-fee-control input {

@@ -13,8 +13,11 @@ describe('admin inventory health', () => {
       inStock: 1,
       low: 1,
       out: 1,
-      lowItems: [{ id: 'low', name: 'Low', quantity: 9 }]
+      lowItems: [
+        { id: 'low', name: 'Low', quantity: 9 },
+        { id: 'out', name: 'Out', quantity: 0 }
+      ]
     });
-    expect(result.badges.lowStock).toBe(1);
+    expect(result.badges.lowStock).toBe(2);
   });
 });

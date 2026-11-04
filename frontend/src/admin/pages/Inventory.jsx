@@ -2,7 +2,13 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import ProductImage from "../../Customer/react/ProductImage";
-import { PRODUCT_CATEGORIES } from "../../../../shared/inventory.json";
+import { LOW_STOCK_THRESHOLD, PRODUCT_CATEGORIES } from "../../../../shared/inventory.json";
+
+const stockClass = (available) => available <= 0
+  ? "stock-text out"
+  : available <= LOW_STOCK_THRESHOLD
+    ? "stock-text low"
+    : "stock-text";
 
 const createEmptyVariant = () => ({
   brand: "",
@@ -650,9 +656,9 @@ function Inventory() {
                       </div>
                       <div className="inventory-mobile-card__metrics">
                         <div><span>Price</span><strong>{item.price}</strong></div>
-                        <div><span>Stock</span><strong className={item.stock < 10 ? "stock-text low" : "stock-text"}>{item.stock}</strong></div>
+                        <div><span>Stock</span><strong className={stockClass(item.available)}>{item.stock}</strong></div>
                         <div><span>Reserved</span><strong>{item.reserved}</strong></div>
-                        <div><span>Available</span><strong className={item.available <= 5 ? "stock-text low" : "stock-text"}>{item.available}</strong></div>
+                        <div><span>Available</span><strong className={stockClass(item.available)}>{item.available}</strong></div>
                       </div>
                       {item.variants?.length > 0 && <>
                         <button
@@ -673,7 +679,7 @@ function Inventory() {
                               <ProductImage src={variant.imageUrl} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">V</span>} />
                               <strong>{variant.label || variantLabel(variant)}</strong>
                               <span>{[variant.brand, variant.model, variant.size, variant.color].filter(Boolean).join(" · ") || "Variant"}</span>
-                              <span>{formatPrice(variant.price)} · Stock {variant.stock} · Reserved {variant.reservedQty || 0} · Available {available}</span>
+                              <span>{formatPrice(variant.price)} · Stock {variant.stock} · Reserved {variant.reservedQty || 0} · <strong className={stockClass(available)}>Available {available}</strong></span>
                             </div>;
                           })}
                         </div>}
@@ -707,11 +713,11 @@ function Inventory() {
                           <td><span className="inventory-item-name"><ProductImage src={item.imageUrl || item.image} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">{String(item.category || "?").charAt(0).toUpperCase()}</span>} /><span>{item.name}</span></span></td>
                           <td>{item.category}</td>
                           <td className="price-text">{item.price}</td>
-                          <td className={item.stock < 10 ? "stock-text low" : "stock-text"}>
+                          <td className={stockClass(item.available)}>
                             {item.stock}
                           </td>
                           <td>{item.reserved}</td>
-                          <td className={item.available <= 5 ? "stock-text low" : "stock-text"}>
+                          <td className={stockClass(item.available)}>
                             {item.available}
                           </td>
                           <td>
@@ -760,7 +766,7 @@ function Inventory() {
                                   const available = Math.max(0, Number(variant.stock || 0) - Number(variant.reservedQty || 0));
                                   return (
                                     <div
-                                      className={`inventory-variant-detail${available <= 5 ? " is-low-stock" : ""}`}
+                                      className={`inventory-variant-detail${available <= 0 ? " is-out-of-stock" : available <= LOW_STOCK_THRESHOLD ? " is-low-stock" : ""}`}
                                       key={variant._id}
                                     >
                                       <ProductImage
@@ -780,7 +786,7 @@ function Inventory() {
                                       <span>{formatPrice(variant.price)}</span>
                                       <span>Stock: <strong>{variant.stock}</strong></span>
                                       <span>Reserved: {variant.reservedQty || 0}</span>
-                                      <span className={available <= 5 ? "stock-text low" : "stock-text"}>
+                                      <span className={stockClass(available)}>
                                         Available: {available}
                                       </span>
                                     </div>
