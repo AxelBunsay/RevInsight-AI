@@ -2447,27 +2447,178 @@
 }
 
 .customer-account-identity-copy {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   flex: 1;
 }
 
-.customer-account-identity > span {
+.customer-account-avatar-group {
   display: grid;
-  width: 40px;
-  height: 40px;
+  flex: 0 0 auto;
+  justify-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.customer-account-avatar {
+  position: relative;
+  display: grid;
+  width: 72px;
+  height: 72px;
+  flex: 0 0 72px;
+  overflow: hidden;
   place-items: center;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
   background: #fff0e4;
   color: #e85e15;
-  font-size: 17px;
-  font-weight: 800;
+  font: 800 28px 'Segoe UI', sans-serif;
+  cursor: pointer;
+  isolation: isolate;
+}
+
+.customer-account-avatar:disabled {
+  cursor: wait;
+}
+
+.customer-account-avatar:focus-visible {
+  outline: 3px solid #c2410c;
+  outline-offset: 3px;
+}
+
+.customer-account-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.customer-account-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(35 27 23 / 62%);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.customer-account-avatar:hover .customer-account-avatar-overlay,
+.customer-account-avatar:focus-visible .customer-account-avatar-overlay {
+  opacity: 1;
+}
+
+.customer-account-avatar-overlay svg {
+  width: 27px;
+  height: 27px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.customer-account-avatar-badge {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  z-index: 1;
+  display: grid;
+  width: 23px;
+  height: 23px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #a94310;
+  color: #fff;
+}
+
+.customer-account-avatar-badge svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.customer-account-avatar-spinner {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(35 27 23 / 62%);
+}
+
+.customer-account-avatar-spinner::after {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgb(255 255 255 / 45%);
+  border-top-color: #fff;
+  border-radius: 50%;
+  content: '';
+  animation: customer-avatar-spin 700ms linear infinite;
+}
+
+@keyframes customer-avatar-spin {
+  to { transform: rotate(360deg); }
+}
+
+.customer-account-avatar-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.customer-account-identity .customer-account-photo-remove {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8a3026;
+  font: 600 12px 'Segoe UI', sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.customer-account-identity .customer-account-photo-remove:hover {
+  text-decoration: underline;
+}
+
+.customer-account-identity .customer-account-photo-remove:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid #c2410c;
+  outline-offset: 2px;
+  text-decoration: underline;
+}
+
+.customer-account-identity .customer-account-photo-remove:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.customer-account-photo-error {
+  flex-basis: 100%;
+  min-width: 0;
 }
 
 .customer-account-identity strong,
 .customer-account-identity small { display: block; }
-.customer-account-identity strong { color: #302821; font-size: 11px; }
-.customer-account-identity small { margin-top: 3px; overflow-wrap: anywhere; color: #83766d; font-size: 9px; }
-
+.customer-account-identity-copy strong {
+  color: #302821;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: normal;
+}
 .customer-account-identity-stats {
   display: grid;
   flex: 0 0 100%;
@@ -3553,6 +3704,11 @@
 .customer-page.profile-page .customer-reservation-card-top > div {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.customer-page.profile-page .customer-account-identity-copy,
+.customer-page.profile-page .customer-account-identity-copy strong {
+  overflow-wrap: normal;
 }
 
 .customer-page.profile-page .customer-reservation-card-top,

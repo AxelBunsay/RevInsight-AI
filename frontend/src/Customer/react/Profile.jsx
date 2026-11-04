@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
-import { clearAuthSession } from '../../auth/authSession';
+import { clearAuthSession, storeAuthUser } from '../../auth/authSession';
 import { clearCustomerAuthAction } from './customerAuthAction';
 import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from '../../../../shared/mobileNumber.mjs';
 import CustomerModalPortal from './CustomerModalPortal';
 import PasswordInput from '../../components/PasswordInput';
+import { getCustomerProfileImageValidationError } from './profileImageValidation';
 import useCustomerModalEffects from './useCustomerModalEffects';
 import '../styles/customer-flow.css';
 
@@ -45,6 +46,10 @@ export default function CustomerProfile() {
   const [formError, setFormError] = useState('');
   const [toast, setToast] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
+  const [profileImagePreview, setProfileImagePreview] = useState('');
+  const [profileImageError, setProfileImageError] = useState('');
+  const profileImageInputRef = useRef(null);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -59,6 +64,10 @@ export default function CustomerProfile() {
   const [hasBlockedRecords, setHasBlockedRecords] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const customerName = `${profileForm.firstName} ${profileForm.lastName}`.trim() || profile.name || 'Demo Rider';
+
+  useEffect(() => () => {
+    if (profileImagePreview) URL.revokeObjectURL(profileImagePreview);
+  }, [profileImagePreview]);
 
   useCustomerModalEffects(isDeleteModalOpen, () => {
     if (!isDeletingAccount) setIsDeleteModalOpen(false);
@@ -152,6 +161,54 @@ export default function CustomerProfile() {
       else setFormError(message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const changeProfileImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const validationError = getCustomerProfileImageValidationError(file);
+    setProfileImageError(validationError);
+    setFormError('');
+    setToast('');
+    if (validationError) return;
+
+    setProfileImagePreview(URL.createObjectURL(file));
+    setIsUploadingProfileImage(true);
+    try {
+      const response = await api.uploadCustomerProfileImage(file);
+      const updatedProfile = { ...profile, profileImage: response.profileImage };
+      updateProfile(updatedProfile);
+      storeAuthUser('customer', updatedProfile);
+      localStorage.setItem('customerUser', JSON.stringify(updatedProfile));
+      setProfileImagePreview('');
+      setToast('Profile photo updated successfully.');
+    } catch (error) {
+      setProfileImagePreview('');
+      setProfileImageError(error.message || 'Profile photo could not be uploaded.');
+    } finally {
+      setIsUploadingProfileImage(false);
+    }
+  };
+
+  const removeProfileImage = async () => {
+    setProfileImageError('');
+    setToast('');
+    setIsUploadingProfileImage(true);
+    try {
+      const response = await api.removeCustomerProfileImage();
+      const updatedProfile = { ...profile, profileImage: response.profileImage };
+      updateProfile(updatedProfile);
+      storeAuthUser('customer', updatedProfile);
+      localStorage.setItem('customerUser', JSON.stringify(updatedProfile));
+      setProfileImagePreview('');
+      setToast('Profile photo removed.');
+    } catch (error) {
+      setProfileImageError(error.message || 'Profile photo could not be removed.');
+    } finally {
+      setIsUploadingProfileImage(false);
     }
   };
 
@@ -262,11 +319,53 @@ export default function CustomerProfile() {
       </div>
 
       <aside className="customer-account-identity">
-        <span>{customerName.charAt(0).toUpperCase()}</span>
+        <div className="customer-account-avatar-group">
+          <button
+            type="button"
+            className="customer-account-avatar"
+            aria-label="Change profile photo"
+            onClick={() => profileImageInputRef.current?.click()}
+            disabled={isUploadingProfileImage}
+          >
+            {profileImagePreview || profile.profileImage
+              ? <img src={profileImagePreview || profile.profileImage} alt="" />
+              : <span>{customerName.charAt(0).toUpperCase()}</span>}
+            <span className="customer-account-avatar-overlay" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M8.5 5.5 10 3.75h4l1.5 1.75H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h3.5Z" />
+                <circle cx="12" cy="12.5" r="3.25" />
+              </svg>
+            </span>
+            <span className="customer-account-avatar-badge" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M8.5 5.5 10 3.75h4l1.5 1.75H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h3.5Z" />
+                <circle cx="12" cy="12.5" r="3.25" />
+              </svg>
+            </span>
+            {isUploadingProfileImage && <span className="customer-account-avatar-spinner" role="status" aria-label="Uploading profile photo" />}
+          </button>
+          <input
+            ref={profileImageInputRef}
+            className="customer-account-avatar-input"
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={changeProfileImage}
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          {profile.profileImage && <button
+            type="button"
+            className="customer-account-photo-remove"
+            onClick={removeProfileImage}
+            disabled={isUploadingProfileImage}
+          >
+            Remove photo
+          </button>}
+        </div>
         <div className="customer-account-identity-copy">
           <strong>{customerName}</strong>
-          <small>{profileForm.email || profile.email || 'Local prototype account'}</small>
         </div>
+        {profileImageError && <small className="customer-field-error customer-account-photo-error" role="alert">{profileImageError}</small>}
         <div className="customer-account-identity-stats">
           <Link to="/my-purchases?tab=items">Active reservations: <strong>{activeReservationCount}</strong></Link>
           <Link to="/my-purchases?tab=services">Upcoming bookings: <strong>{upcomingBookingsCount}</strong></Link>
