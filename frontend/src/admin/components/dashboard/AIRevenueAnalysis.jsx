@@ -4,6 +4,7 @@ import MarkdownAnswer from './MarkdownAnswer';
 import { askRevenueQuestion, handleQuestionKeyDown } from './askRevenueQuestion';
 import { AdminModalPortal } from '../../pages/ManagementPageComponents';
 import useAdminModalEffects from '../useAdminModalEffects';
+import RevenueCardInsights from './RevenueCardInsights';
 import riskThresholds from '../../../../../shared/revenueRiskConfig.json';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
@@ -80,6 +81,68 @@ function getOverallRiskWhy(overallRisk, indicators) {
     ? value.toFixed(3)
     : `${sign}${Number.isInteger(value) ? value : Number(value.toFixed(1))}%`;
   return `Driven by: ${detail.label} (${formattedValue})`;
+}
+
+function getLocalCardInsightTemplates({ current, indicators, overallRisk, concentration, serviceItems, estimate }) {
+  const hasNumber = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  const formatPercent = (value) => hasNumber(value) ? `${Number(value).toFixed(1)}%` : null;
+  const briefName = (value) => {
+    const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+    return words.length > 5 ? `${words.slice(0, 5).join(' ')}…` : words.join(' ');
+  };
+  const actionFor = (level) => level === 'High'
+    ? 'Review the main risk driver and adjust purchasing plans before the next quarter.'
+    : level === 'Moderate'
+      ? 'Monitor the main risk driver and review the sales mix before the next quarter.'
+      : level === 'Normal'
+        ? 'Continue tracking these indicators during the next regular business review.'
+        : 'Record more completed sales and review this indicator when data is available.';
+  const forecast = estimate?.targetLabel && hasNumber(estimate.expected)
+    ? `The official projection for ${estimate.targetLabel} is ${peso.format(estimate.expected)}${hasNumber(estimate.low) && hasNumber(estimate.high) ? `, with a likely range of ${peso.format(estimate.low)} to ${peso.format(estimate.high)}` : ''}.`
+    : 'Not enough data yet for an official revenue projection.';
+  const qoq = indicators.qoqChange;
+  const hhi = concentration?.indicators?.hhi;
+  const topShare = indicators.topContributorShare?.value;
+  const topService = serviceItems[0];
+
+  return {
+    trend: {
+      descriptive: qoq && hasNumber(qoq.value)
+        ? `Completed-quarter revenue changed ${formatPercent(qoq.value)}; the risk level is ${qoq.level || 'Not enough data'}.`
+        : `Revenue for ${current ? quarterName(current.year, current.quarter) : 'the selected quarter'} is ${peso.format(current?.revenue || 0)}; quarter-over-quarter change is unavailable.`,
+      predictive: forecast,
+      prescriptive: actionFor(qoq?.level)
+    },
+    risk: {
+      descriptive: overallRisk.reason
+        ? `Overall revenue risk is ${overallRisk.level}, driven by ${overallRisk.reason}.`
+        : `Overall revenue risk is ${overallRisk.level || 'Not enough data'}.`,
+      predictive: forecast,
+      prescriptive: actionFor(overallRisk.level)
+    },
+    concentration: {
+      descriptive: hasNumber(hhi) && hasNumber(topShare)
+        ? `Revenue concentration HHI is ${Number(hhi).toFixed(3)}, and the top contributor share is ${formatPercent(topShare)}.`
+        : 'Not enough data yet to describe revenue concentration.',
+      predictive: forecast,
+      prescriptive: actionFor(indicators.concentrationHhi?.level)
+    },
+    service: {
+      descriptive: topService && formatPercent(topService.share)
+        ? `${briefName(topService.name)} is the leading service contributor at ${formatPercent(topService.share)} of categorized revenue.`
+        : 'No service contributor data is available yet.',
+      predictive: forecast,
+      prescriptive: 'Review service demand alongside parts sales when planning staffing and inventory.'
+    },
+    forecast: {
+      descriptive: indicators.forecastVsFourQuarterAverage?.value !== null
+        && indicators.forecastVsFourQuarterAverage?.value !== undefined
+        ? `The official forecast is ${formatPercent(indicators.forecastVsFourQuarterAverage.value)} versus the four-quarter average (${indicators.forecastVsFourQuarterAverage.level} risk).`
+        : 'Not enough completed-quarter data is available to compare the forecast with its average.',
+      predictive: forecast,
+      prescriptive: actionFor(indicators.forecastVsFourQuarterAverage?.level)
+    }
+  };
 }
 
 function getQuarterRows(rows) {
@@ -365,6 +428,12 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [analysis, setAnalysis] = useState({ quarters: [], risk: null, concentration: null });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [cardInsights, setCardInsights] = useState({});
+  const [cardInsightSource, setCardInsightSource] = useState('template');
+  const [cardInsightGeneratedAt, setCardInsightGeneratedAt] = useState('');
+  const [cardInsightsLoading, setCardInsightsLoading] = useState(true);
+  const [cardInsightsError, setCardInsightsError] = useState('');
+  const [refreshRemainingSeconds, setRefreshRemainingSeconds] = useState(0);
   const [selectedQuarterKey, setSelectedQuarterKey] = useState(null);
   const [modalId, setModalId] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -378,6 +447,14 @@ function AIRevenueAnalysis({ dashboardData }) {
   useAdminModalEffects(settingsOpen, () => setSettingsOpen(false));
   useAdminModalEffects(reportOpen, () => setReportOpen(false));
   useAdminModalEffects(Boolean(modalId), () => setModalId(null));
+
+  useEffect(() => {
+    if (!refreshRemainingSeconds) return undefined;
+    const timer = window.setInterval(() => {
+      setRefreshRemainingSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [refreshRemainingSeconds]);
 
   useEffect(() => {
     let active = true;
@@ -541,6 +618,57 @@ function AIRevenueAnalysis({ dashboardData }) {
       description: `${serviceItems[0].share.toFixed(1)}% from ${serviceItems[0].name}`
     }] : [])
   ];
+  const localCardInsightTemplates = getLocalCardInsightTemplates({
+    current,
+    indicators,
+    overallRisk,
+    concentration: analysis.concentration,
+    serviceItems,
+    estimate
+  });
+
+  useEffect(() => {
+    if (isLoading || loadError) return undefined;
+    let active = true;
+    adminApi.getRevenueCardInsights()
+      .then((result) => {
+        if (!active) return;
+        setCardInsights(result.insights || {});
+        setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
+        setCardInsightGeneratedAt(result.generatedAt || '');
+      })
+      .catch((error) => {
+        if (!active) return;
+        setCardInsights({});
+        setCardInsightSource('template');
+        setCardInsightGeneratedAt('');
+        setCardInsightsError(error.message || 'AI insights are unavailable.');
+      })
+      .finally(() => {
+        if (active) setCardInsightsLoading(false);
+      });
+    return () => { active = false; };
+  }, [analysis, isLoading, loadError, selectedQuarterKey]);
+
+  const refreshCardInsights = async () => {
+    setCardInsightsLoading(true);
+    setCardInsightsError('');
+    try {
+      const result = await adminApi.getRevenueCardInsights(true);
+      setCardInsights(result.insights || {});
+      setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
+      setCardInsightGeneratedAt(result.generatedAt || '');
+      setRefreshRemainingSeconds(30);
+    } catch (error) {
+      setCardInsights({});
+      setCardInsightSource('template');
+      setCardInsightGeneratedAt('');
+      setCardInsightsError(error.message || 'AI insights are unavailable.');
+      setRefreshRemainingSeconds(Number(error.details?.retryAfterSeconds || 0));
+    } finally {
+      setCardInsightsLoading(false);
+    }
+  };
 
   return <>
   <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
@@ -575,7 +703,11 @@ function AIRevenueAnalysis({ dashboardData }) {
             <div className="ai-revenue-tabs" role="tablist" aria-label="Revenue analysis quarter">
               {quarters.map((row, index) => {
                 const key = `${row.year}-Q${row.quarter}`;
-                return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => setSelectedQuarterKey(key)}>{quarterLabel(row.year, row.quarter)}</button>;
+                return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => {
+                  setCardInsightsLoading(true);
+                  setCardInsightsError('');
+                  setSelectedQuarterKey(key);
+                }}>{quarterLabel(row.year, row.quarter)}</button>;
               })}
             </div>
             <div className="ai-revenue-completeness-banner">
@@ -607,12 +739,23 @@ function AIRevenueAnalysis({ dashboardData }) {
               <div><span>Outstanding</span><strong>{peso.format(outstandingAmount)}</strong></div>
               <div><span>Collection</span><strong>{collectedAmount + outstandingAmount ? Math.round(collectedAmount / (collectedAmount + outstandingAmount) * 100) : 0}%</strong></div>
             </div>
+            <div className="ai-revenue-insights-toolbar">
+              <span role="status">
+                {cardInsightSource === 'ai' ? 'AI-generated from your data' : 'Auto-generated summary'}
+                {cardInsightsError ? ' · AI unavailable; showing data-based summaries.' : ''}
+                {cardInsightGeneratedAt && ` · Updated ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(cardInsightGeneratedAt))}`}
+              </span>
+              <button type="button" className="ai-revenue-toolbar__action" onClick={refreshCardInsights} disabled={cardInsightsLoading || refreshRemainingSeconds > 0}>
+                {refreshRemainingSeconds > 0 ? `Refresh insights (${refreshRemainingSeconds}s)` : 'Refresh insights'}
+              </button>
+            </div>
             <div className="ai-revenue-cards">
               <button type="button" className="ai-revenue-card" onClick={() => setModalId('trend')}>
                 <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">↗</span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
                 <strong>Revenue trend &amp; growth</strong><b>{peso.format(current.revenue)}</b>
                 <small>Why: QoQ risk uses completed-quarter revenue, not the in-progress quarter.</small>
                 <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
+                <RevenueCardInsights insights={cardInsights.trend} fallbackInsights={localCardInsightTemplates.trend} isLoading={cardInsightsLoading} error={cardInsightsError} />
               </button>
               {cardDetails.map((card) => {
                 return <button type="button" className="ai-revenue-card" key={card.id} onClick={() => setModalId(card.id)}>
@@ -620,6 +763,7 @@ function AIRevenueAnalysis({ dashboardData }) {
                   <strong>{card.title}</strong>
                   <b>{card.items.length ? `${card.items[0].share.toFixed(1)}% from ${card.items[0].name}` : 'No data'}</b>
                   <small>{card.description}</small>
+                  <RevenueCardInsights insights={cardInsights[card.id]} fallbackInsights={localCardInsightTemplates[card.id]} isLoading={cardInsightsLoading} error={cardInsightsError} />
                 </button>;
               })}
               <button type="button" className="ai-revenue-card" onClick={() => setModalId('estimate')}>
@@ -628,6 +772,7 @@ function AIRevenueAnalysis({ dashboardData }) {
                 <small>Why: forecast compared with the average of the last four completed quarters.</small>
                 {estimate?.quarterToDate && <small>So far: {peso.format(estimate.quarterToDate.revenue)} ({estimate.quarterToDate.percentElapsed}% of the quarter elapsed)</small>}
                 <small>{estimate ? `Likely range ${peso.format(estimate.low)} to ${peso.format(estimate.high)}` : `At least ${riskThresholds.minimumCompletedQuarters} completed quarters are required.`}</small>
+                <RevenueCardInsights insights={cardInsights.forecast} fallbackInsights={localCardInsightTemplates.forecast} isLoading={cardInsightsLoading} error={cardInsightsError} />
               </button>
             </div>
             <p className="ai-revenue-uncategorized">Uncategorized (historical): {uncatShare.toFixed(1)}% of revenue</p>

@@ -12,6 +12,7 @@ import useCustomerModalEffects from './useCustomerModalEffects';
 import '../styles/customer-flow.css';
 
 const activeReservationStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved'];
+const incorrectPasswordMessage = 'Current password is incorrect.';
 
 function dateKeyInManila(value) {
   if (!value) return '';
@@ -178,7 +179,12 @@ export default function CustomerProfile() {
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setToast(response.message || 'Password changed successfully.');
     } catch (error) {
-      setPasswordError(error.message || 'Password could not be changed.');
+      const message = error.message || 'Password could not be changed.';
+      setPasswordError(message);
+      if (message === incorrectPasswordMessage) {
+        setPasswordForm((current) => ({ ...current, currentPassword: '' }));
+        window.requestAnimationFrame(() => document.getElementById('change-password-current')?.focus());
+      }
     } finally {
       setIsChangingPassword(false);
     }
@@ -197,7 +203,12 @@ export default function CustomerProfile() {
       setIsTwoFactorModalOpen(false);
       setToast(response.message || 'Two-step verification settings updated.');
     } catch (error) {
-      setTwoFactorError(error.message || 'Two-step verification settings could not be updated.');
+      const message = error.message || 'Two-step verification settings could not be updated.';
+      setTwoFactorError(message);
+      if (message === incorrectPasswordMessage) {
+        setTwoFactorPassword('');
+        window.requestAnimationFrame(() => document.getElementById('two-factor-current-password')?.focus());
+      }
     } finally {
       setIsUpdatingTwoFactor(false);
     }
@@ -221,7 +232,12 @@ export default function CustomerProfile() {
         state: { message: response.message || 'Your account was deleted.' }
       });
     } catch (error) {
-      setDeleteError(error.message || 'Your account could not be deleted.');
+      const message = error.message || 'Your account could not be deleted.';
+      setDeleteError(message);
+      if (message === incorrectPasswordMessage) {
+        setDeletePassword('');
+        window.requestAnimationFrame(() => document.getElementById('delete-account-password')?.focus());
+      }
       setHasBlockedRecords(error.status === 409 && Boolean(error.details?.records));
     } finally {
       setIsDeletingAccount(false);
@@ -289,11 +305,11 @@ export default function CustomerProfile() {
             }}>{profile.twoFactorEnabled ? 'Turn off' : 'Turn on'}</button>
           </div>
           <form className="customer-account-form" onSubmit={changePassword} noValidate>
-            <label>Current password<PasswordInput autoComplete="current-password" value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} /></label>
+            <label>Current password<PasswordInput id="change-password-current" autoComplete="current-password" aria-invalid={passwordError === incorrectPasswordMessage} value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} />{passwordError === incorrectPasswordMessage && <small className="customer-field-error" role="alert">{passwordError}</small>}</label>
             <label>New password<PasswordInput autoComplete="new-password" value={passwordForm.newPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, newPassword: event.target.value }); setPasswordError(''); }} /><small className="customer-field-hint">At least 8 characters, including a letter and a number.</small></label>
             <label>Confirm new password<PasswordInput autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, confirmPassword: event.target.value }); setPasswordError(''); }} /></label>
             <button type="submit" className="customer-primary-button" disabled={isChangingPassword}>{isChangingPassword ? 'Updating...' : 'Change password'}</button>
-            {passwordError && <small className="customer-field-error customer-form-error" role="alert">{passwordError}</small>}
+            {passwordError && passwordError !== incorrectPasswordMessage && <small className="customer-field-error customer-form-error" role="alert">{passwordError}</small>}
           </form>
         </section>
 
@@ -322,9 +338,9 @@ export default function CustomerProfile() {
           <div className="customer-modal-body">
             <p>This action cannot be undone. Enter your password and type DELETE to confirm.</p>
             <form id="delete-account-form" onSubmit={deleteAccount}>
-              <label className="customer-delete-field">Password<PasswordInput autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} /></label>
+              <label className="customer-delete-field">Password<PasswordInput id="delete-account-password" autoComplete="current-password" aria-invalid={deleteError === incorrectPasswordMessage} value={deletePassword} onChange={(event) => { setDeletePassword(event.target.value); setDeleteError(''); }} />{deleteError === incorrectPasswordMessage && <small className="customer-field-error" role="alert">{deleteError}</small>}</label>
               <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
-              {deleteError && <p className="customer-field-error" role="alert">{deleteError}</p>}
+              {deleteError && deleteError !== incorrectPasswordMessage && <p className="customer-field-error" role="alert">{deleteError}</p>}
               {hasBlockedRecords && <div className="customer-delete-record-links">
                 <Link to="/my-purchases?tab=items">View reservations</Link>
                 <Link to="/my-purchases?tab=services">View bookings</Link>
@@ -343,8 +359,7 @@ export default function CustomerProfile() {
           <div className="customer-modal-body">
             <p>Enter your current password to confirm this change.</p>
             <form id="two-factor-form" onSubmit={updateTwoFactor}>
-              <label className="customer-delete-field">Current password<PasswordInput required autoComplete="current-password" value={twoFactorPassword} onChange={(event) => { setTwoFactorPassword(event.target.value); setTwoFactorError(''); }} /></label>
-              {twoFactorError && <p className="customer-field-error" role="alert">{twoFactorError}</p>}
+              <label className="customer-delete-field">Current password<PasswordInput id="two-factor-current-password" required autoComplete="current-password" aria-invalid={twoFactorError === incorrectPasswordMessage} value={twoFactorPassword} onChange={(event) => { setTwoFactorPassword(event.target.value); setTwoFactorError(''); }} />{twoFactorError && <small className="customer-field-error" role="alert">{twoFactorError}</small>}</label>
             </form>
           </div>
           <footer className="customer-modal-footer">

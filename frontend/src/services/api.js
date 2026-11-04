@@ -37,8 +37,10 @@ export async function request(path, options = {}) {
   if (!response.ok) {
     const isAuthException = /\/(?:users|mechanics)\/login(?:[/?]|$)/.test(path)
       || /\/customers\/me\/password(?:[/?]|$)/.test(path)
+      || /\/users\/2fa\/(?:enable|disable)(?:[/?]|$)/.test(path)
       || (path === '/api/customers/me' && requestOptions.method === 'DELETE');
-    if (response.status === 401 && token && tokenKey && !isAuthException) {
+    const invalidToken = response.status === 401 && body?.message === 'Invalid token';
+    if (invalidToken && token && tokenKey && !isAuthException) {
       if (tokenKey === 'customerToken' || tokenKey === 'mechanicToken') {
         clearAuthSession(tokenKey === 'customerToken' ? 'customer' : 'mechanic');
       } else {

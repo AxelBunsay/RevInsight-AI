@@ -266,7 +266,8 @@ describe('customer username authentication', () => {
     const wrongEnable = await api.post('/api/users/2fa/enable')
       .set('Authorization', `Bearer ${token}`)
       .send({ currentPassword: 'WrongPassword1' });
-    expect(wrongEnable.status).toBe(401);
+    expect(wrongEnable.status).toBe(400);
+    expect(wrongEnable.body).toEqual({ message: 'Current password is incorrect.' });
     expect((await User.findById(fixtures.customer._id)).twoFactorEnabled).toBe(false);
 
     const enabled = await api.post('/api/users/2fa/enable')
@@ -278,7 +279,8 @@ describe('customer username authentication', () => {
     const wrongDisable = await api.post('/api/users/2fa/disable')
       .set('Authorization', `Bearer ${token}`)
       .send({ currentPassword: 'WrongPassword1' });
-    expect(wrongDisable.status).toBe(401);
+    expect(wrongDisable.status).toBe(400);
+    expect(wrongDisable.body).toEqual({ message: 'Current password is incorrect.' });
     expect((await User.findById(fixtures.customer._id)).twoFactorEnabled).toBe(true);
 
     const disabled = await api.post('/api/users/2fa/disable')
@@ -289,6 +291,23 @@ describe('customer username authentication', () => {
 
     const profile = await api.get('/api/users/profile').set('Authorization', `Bearer ${token}`);
     expect(profile.body.user.twoFactorEnabled).toBe(false);
+
+    const wrongChangePassword = await api.post('/api/customers/me/password')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        currentPassword: 'WrongPassword1',
+        newPassword: 'NewPassword1',
+        confirmPassword: 'NewPassword1'
+      });
+    expect(wrongChangePassword.status).toBe(400);
+    expect(wrongChangePassword.body).toEqual({ message: 'Current password is incorrect.' });
+
+    const wrongDeletePassword = await api.delete('/api/customers/me')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ password: 'WrongPassword1', confirmation: 'DELETE' });
+    expect(wrongDeletePassword.status).toBe(400);
+    expect(wrongDeletePassword.body).toEqual({ message: 'Current password is incorrect.' });
+    expect(Boolean(await User.exists({ _id: fixtures.customer._id, isDeleted: { $ne: true } }))).toBe(true);
   });
 
   it('returns username in the customer profile and does not allow profile updates to change it', async () => {

@@ -208,6 +208,10 @@ export const adminApi = {
     method: 'POST',
     body: JSON.stringify({ question })
   }),
+  getRevenueCardInsights: (refresh = false) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  }),
   getRevenueAnalysisData: async () => {
     const [quarterly, risk, concentration] = await Promise.all([
       adminApi.getQuarterlySales(),

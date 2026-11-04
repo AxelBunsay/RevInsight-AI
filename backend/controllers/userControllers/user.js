@@ -607,7 +607,7 @@ const setTwoFactorEnabled = (enabled) => async (req, res) => {
       return res.status(404).json({ message: 'Customer account not found.' });
     }
     if (!(await bcrypt.compare(currentPassword, user.password))) {
-      return res.status(401).json({ message: 'Current password is incorrect.' });
+      return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
     user.twoFactorEnabled = enabled;
@@ -750,7 +750,7 @@ const changePassword = async (req, res) => {
       return res.status(404).json({ message: 'Customer account not found.' });
     }
     if (!(await bcrypt.compare(currentPassword, user.password))) {
-      return res.status(401).json({ message: 'Current password is incorrect.' });
+      return res.status(400).json({ message: 'Current password is incorrect.' });
     }
     if (await bcrypt.compare(newPassword, user.password)) {
       return res.status(400).json({ message: 'New password must be different from your current password.' });
@@ -780,7 +780,7 @@ const deleteAccount = async (req, res) => {
       return res.status(404).json({ message: 'Customer account not found.' });
     }
     if (!(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: 'Password is incorrect.' });
+      return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
     const [activeReservation, activeBooking] = await Promise.all([
