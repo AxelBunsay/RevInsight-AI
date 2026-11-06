@@ -468,22 +468,20 @@
   overflow-wrap: anywhere;
 }
 .admin-root .admin-management-page .inventory-table-scroll {
-  max-height: min(52vh, 430px);
-  overflow: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 .admin-root .admin-management-page .inventory-table-scroll .inventory-table {
   margin-top: 0;
 }
 .admin-root .admin-management-page .inventory-table-scroll th {
-  position: sticky;
-  z-index: 1;
-  top: 0;
+  position: static;
   background: var(--surface);
 }
 .admin-root .admin-management-page .inventory-container {
-  overflow-x: auto;
+  overflow: visible;
 }
 .admin-root .admin-management-page .transactions-container {
   overflow-x: visible;

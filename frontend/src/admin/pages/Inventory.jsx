@@ -237,7 +237,7 @@ function Inventory() {
     const loadInventory = () => {
       setIsLoading(true);
       api
-        .getInventory(page, 15)
+        .getInventory(page, 12)
         .then((response) => {
           if (isMounted) {
             const data = response.data || [];
@@ -861,7 +861,8 @@ function Inventory() {
                     </article>
                   )) : <p className="inventory-card-state">No services match this search.</p>}
               </div>
-              <table className="inventory-table inventory-service-table">
+              <div className="inventory-table-scroll">
+                <table className="inventory-table inventory-service-table">
                   <thead>
                     <tr>
                       <th>SERVICE</th>
@@ -913,7 +914,8 @@ function Inventory() {
                       </tr>
                     ))}
                   </tbody>
-              </table>
+                </table>
+              </div>
               <div className="pagination-container" aria-label="Services pagination">
                 <button
                   className={`pagination-button${page === 1 ? " disabled" : ""}`}

@@ -694,7 +694,8 @@ const serializeInventoryVariants = (variants = []) => variants.map((variant) => 
 
 const getAllInventory = async (req, res) => {
   try {
-    const { page = 1, limit = 15 } = req.query;
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 12));
 
     const inventory = await Product.find({ isActive: { $ne: false } })
       .limit(limit * 1)
