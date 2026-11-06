@@ -1,17 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
-import { clearAuthSession } from '../../auth/authSession';
+import { clearAuthSession, storeAuthUser } from '../../auth/authSession';
 import { clearCustomerAuthAction } from './customerAuthAction';
 import { cleanAndValidateMobileNumber, MOBILE_NUMBER_ERROR } from '../../../../shared/mobileNumber.mjs';
 import CustomerModalPortal from './CustomerModalPortal';
 import PasswordInput from '../../components/PasswordInput';
+import { getCustomerProfileImageValidationError } from './profileImageValidation';
 import useCustomerModalEffects from './useCustomerModalEffects';
 import '../styles/customer-flow.css';
 
 const activeReservationStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved'];
+const incorrectPasswordMessage = 'Current password is incorrect.';
 
 function dateKeyInManila(value) {
   if (!value) return '';
@@ -44,20 +46,69 @@ export default function CustomerProfile() {
   const [formError, setFormError] = useState('');
   const [toast, setToast] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
+  const [profileImagePreview, setProfileImagePreview] = useState('');
+  const [profileImageError, setProfileImageError] = useState('');
+  const profileImageInputRef = useRef(null);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isTwoFactorModalOpen, setIsTwoFactorModalOpen] = useState(false);
+  const [twoFactorPassword, setTwoFactorPassword] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState('');
+  const [isUpdatingTwoFactor, setIsUpdatingTwoFactor] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [hasBlockedRecords, setHasBlockedRecords] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const deleteDialogRef = useRef(null);
   const customerName = `${profileForm.firstName} ${profileForm.lastName}`.trim() || profile.name || 'Demo Rider';
+
+  useEffect(() => () => {
+    if (profileImagePreview) URL.revokeObjectURL(profileImagePreview);
+  }, [profileImagePreview]);
 
   useCustomerModalEffects(isDeleteModalOpen, () => {
     if (!isDeletingAccount) setIsDeleteModalOpen(false);
   });
+  useCustomerModalEffects(isTwoFactorModalOpen, () => {
+    if (!isUpdatingTwoFactor) setIsTwoFactorModalOpen(false);
+  });
+
+  useEffect(() => {
+    if (!isDeleteModalOpen) return undefined;
+    const dialog = deleteDialogRef.current;
+    dialog?.focus();
+
+    const keepFocusInDialog = (event) => {
+      if (event.key !== 'Tab' || !dialog) return;
+      const focusable = [...dialog.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === dialog) {
+        event.preventDefault();
+        last.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', keepFocusInDialog);
+    return () => document.removeEventListener('keydown', keepFocusInDialog);
+  }, [isDeleteModalOpen]);
 
   useEffect(() => {
     let isMounted = true;
@@ -147,6 +198,54 @@ export default function CustomerProfile() {
     }
   };
 
+  const changeProfileImage = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    const validationError = getCustomerProfileImageValidationError(file);
+    setProfileImageError(validationError);
+    setFormError('');
+    setToast('');
+    if (validationError) return;
+
+    setProfileImagePreview(URL.createObjectURL(file));
+    setIsUploadingProfileImage(true);
+    try {
+      const response = await api.uploadCustomerProfileImage(file);
+      const updatedProfile = { ...profile, profileImage: response.profileImage };
+      updateProfile(updatedProfile);
+      storeAuthUser('customer', updatedProfile);
+      localStorage.setItem('customerUser', JSON.stringify(updatedProfile));
+      setProfileImagePreview('');
+      setToast('Profile photo updated successfully.');
+    } catch (error) {
+      setProfileImagePreview('');
+      setProfileImageError(error.message || 'Profile photo could not be uploaded.');
+    } finally {
+      setIsUploadingProfileImage(false);
+    }
+  };
+
+  const removeProfileImage = async () => {
+    setProfileImageError('');
+    setToast('');
+    setIsUploadingProfileImage(true);
+    try {
+      const response = await api.removeCustomerProfileImage();
+      const updatedProfile = { ...profile, profileImage: response.profileImage };
+      updateProfile(updatedProfile);
+      storeAuthUser('customer', updatedProfile);
+      localStorage.setItem('customerUser', JSON.stringify(updatedProfile));
+      setProfileImagePreview('');
+      setToast('Profile photo removed.');
+    } catch (error) {
+      setProfileImageError(error.message || 'Profile photo could not be removed.');
+    } finally {
+      setIsUploadingProfileImage(false);
+    }
+  };
+
   const changePassword = async (event) => {
     event.preventDefault();
     setPasswordError('');
@@ -171,22 +270,47 @@ export default function CustomerProfile() {
       setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setToast(response.message || 'Password changed successfully.');
     } catch (error) {
-      setPasswordError(error.message || 'Password could not be changed.');
+      const message = error.message || 'Password could not be changed.';
+      setPasswordError(message);
+      if (message === incorrectPasswordMessage) {
+        setPasswordForm((current) => ({ ...current, currentPassword: '' }));
+        window.requestAnimationFrame(() => document.getElementById('change-password-current')?.focus());
+      }
     } finally {
       setIsChangingPassword(false);
     }
   };
 
-  const deleteAccount = async (event) => {
+  const updateTwoFactor = async (event) => {
     event.preventDefault();
+    setTwoFactorError('');
+    setIsUpdatingTwoFactor(true);
+    try {
+      const response = await api.setCustomerTwoFactor(!profile.twoFactorEnabled, twoFactorPassword);
+      const updatedProfile = { ...profile, twoFactorEnabled: response.twoFactorEnabled };
+      updateProfile(updatedProfile);
+      localStorage.setItem('customerUser', JSON.stringify(updatedProfile));
+      setTwoFactorPassword('');
+      setIsTwoFactorModalOpen(false);
+      setToast(response.message || 'Two-step verification settings updated.');
+    } catch (error) {
+      const message = error.message || 'Two-step verification settings could not be updated.';
+      setTwoFactorError(message);
+      if (message === incorrectPasswordMessage) {
+        setTwoFactorPassword('');
+        window.requestAnimationFrame(() => document.getElementById('two-factor-current-password')?.focus());
+      }
+    } finally {
+      setIsUpdatingTwoFactor(false);
+    }
+  };
+
+  const deleteAccount = async () => {
     setDeleteError('');
     setHasBlockedRecords(false);
     setIsDeletingAccount(true);
     try {
-      const response = await api.deleteCustomerAccount({
-        password: deletePassword,
-        confirmation: deleteConfirmation
-      });
+      const response = await api.deleteCustomerAccount();
       clearAuthSession('customer');
       clearCustomerAuthAction();
       clearCustomerData();
@@ -195,7 +319,8 @@ export default function CustomerProfile() {
         state: { message: response.message || 'Your account was deleted.' }
       });
     } catch (error) {
-      setDeleteError(error.message || 'Your account could not be deleted.');
+      const message = error.message || 'Your account could not be deleted.';
+      setDeleteError(message);
       setHasBlockedRecords(error.status === 409 && Boolean(error.details?.records));
     } finally {
       setIsDeletingAccount(false);
@@ -220,11 +345,53 @@ export default function CustomerProfile() {
       </div>
 
       <aside className="customer-account-identity">
-        <span>{customerName.charAt(0).toUpperCase()}</span>
+        <div className="customer-account-avatar-group">
+          <button
+            type="button"
+            className="customer-account-avatar"
+            aria-label="Change profile photo"
+            onClick={() => profileImageInputRef.current?.click()}
+            disabled={isUploadingProfileImage}
+          >
+            {profileImagePreview || profile.profileImage
+              ? <img src={profileImagePreview || profile.profileImage} alt="" />
+              : <span>{customerName.charAt(0).toUpperCase()}</span>}
+            <span className="customer-account-avatar-overlay" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M8.5 5.5 10 3.75h4l1.5 1.75H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h3.5Z" />
+                <circle cx="12" cy="12.5" r="3.25" />
+              </svg>
+            </span>
+            <span className="customer-account-avatar-badge" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M8.5 5.5 10 3.75h4l1.5 1.75H19a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2h3.5Z" />
+                <circle cx="12" cy="12.5" r="3.25" />
+              </svg>
+            </span>
+            {isUploadingProfileImage && <span className="customer-account-avatar-spinner" role="status" aria-label="Uploading profile photo" />}
+          </button>
+          <input
+            ref={profileImageInputRef}
+            className="customer-account-avatar-input"
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={changeProfileImage}
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          {profile.profileImage && <button
+            type="button"
+            className="customer-account-photo-remove"
+            onClick={removeProfileImage}
+            disabled={isUploadingProfileImage}
+          >
+            Remove photo
+          </button>}
+        </div>
         <div className="customer-account-identity-copy">
           <strong>{customerName}</strong>
-          <small>{profileForm.email || profile.email || 'Local prototype account'}</small>
         </div>
+        {profileImageError && <small className="customer-field-error customer-account-photo-error" role="alert">{profileImageError}</small>}
         <div className="customer-account-identity-stats">
           <Link to="/my-purchases?tab=items">Active reservations: <strong>{activeReservationCount}</strong></Link>
           <Link to="/my-purchases?tab=services">Upcoming bookings: <strong>{upcomingBookingsCount}</strong></Link>
@@ -250,19 +417,31 @@ export default function CustomerProfile() {
           <div className="customer-flow-section-heading">
             <div><p className="customer-eyebrow">ACCOUNT ACCESS</p><h2>Security</h2></div>
           </div>
+          <div className="customer-two-factor-setting">
+            <div>
+              <h3>Two-step verification (email code)</h3>
+              <p>When on, we email you a 6-digit code each time you sign in.</p>
+              <small role="status">{profile.twoFactorEnabled ? 'Currently on' : 'Currently off'}</small>
+            </div>
+            <button type="button" className={profile.twoFactorEnabled ? 'customer-secondary-button' : 'customer-primary-button'} onClick={() => {
+              setTwoFactorPassword('');
+              setTwoFactorError('');
+              setIsTwoFactorModalOpen(true);
+            }}>{profile.twoFactorEnabled ? 'Turn off' : 'Turn on'}</button>
+          </div>
           <form className="customer-account-form" onSubmit={changePassword} noValidate>
-            <label>Current password<PasswordInput autoComplete="current-password" value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} /></label>
+            <label>Current password<PasswordInput id="change-password-current" autoComplete="current-password" aria-invalid={passwordError === incorrectPasswordMessage} value={passwordForm.currentPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, currentPassword: event.target.value }); setPasswordError(''); }} />{passwordError === incorrectPasswordMessage && <small className="customer-field-error" role="alert">{passwordError}</small>}</label>
             <label>New password<PasswordInput autoComplete="new-password" value={passwordForm.newPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, newPassword: event.target.value }); setPasswordError(''); }} /><small className="customer-field-hint">At least 8 characters, including a letter and a number.</small></label>
             <label>Confirm new password<PasswordInput autoComplete="new-password" value={passwordForm.confirmPassword} onChange={(event) => { setPasswordForm({ ...passwordForm, confirmPassword: event.target.value }); setPasswordError(''); }} /></label>
             <button type="submit" className="customer-primary-button" disabled={isChangingPassword}>{isChangingPassword ? 'Updating...' : 'Change password'}</button>
-            {passwordError && <small className="customer-field-error customer-form-error" role="alert">{passwordError}</small>}
+            {passwordError && passwordError !== incorrectPasswordMessage && <small className="customer-field-error customer-form-error" role="alert">{passwordError}</small>}
           </form>
         </section>
 
         <section className="customer-account-delete">
           <h2>Delete account</h2>
           <p>Deleting your account removes your personal information. Your past purchase and booking records are kept without your name for the shop&apos;s sales records.</p>
-          <button type="button" className="customer-danger-button" onClick={() => { setDeletePassword(''); setDeleteConfirmation(''); setDeleteError(''); setHasBlockedRecords(false); setIsDeleteModalOpen(true); }}>Delete my account</button>
+          <button type="button" className="customer-danger-button" onClick={() => { setDeleteError(''); setHasBlockedRecords(false); setIsDeleteModalOpen(true); }}>Delete my account</button>
         </section>
       </section>}
 
@@ -278,24 +457,43 @@ export default function CustomerProfile() {
         </form>
       </section>}
 
-      {isDeleteModalOpen && <CustomerModalPortal><div className="customer-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingAccount) setIsDeleteModalOpen(false); }}>
-        <section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
-          <header className="customer-modal-header"><h2 id="delete-account-title">Delete your account?</h2><button type="button" className="customer-modal-close" aria-label="Close delete account dialog" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>×</button></header>
+      {isDeleteModalOpen && <CustomerModalPortal><div className="customer-confirmation-backdrop customer-delete-account-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingAccount) setIsDeleteModalOpen(false); }}>
+        <section ref={deleteDialogRef} className="customer-confirmation-dialog customer-delete-account-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title" tabIndex="-1">
+          <header className="customer-modal-header customer-delete-header">
+            <div className="customer-delete-heading">
+              <span className="customer-delete-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3.25 1.8 20.75h20.4L12 3.25Z" fill="currentColor" /><path d="M12 9v5" stroke="#fff" strokeWidth="2" strokeLinecap="round" /><circle cx="12" cy="17" r="1.15" fill="#fff" /></svg></span>
+              <h2 id="delete-account-title">Delete your account?</h2>
+            </div>
+            <button type="button" className="customer-modal-close" aria-label="Close" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+          </header>
           <div className="customer-modal-body">
-            <p>This action cannot be undone. Enter your password and type DELETE to confirm.</p>
-            <form id="delete-account-form" onSubmit={deleteAccount}>
-              <label className="customer-delete-field">Password<PasswordInput autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} /></label>
-              <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
-              {deleteError && <p className="customer-field-error" role="alert">{deleteError}</p>}
+            <p>This action cannot be undone. Your profile, saved details and access to your account will be removed. Your past orders and bookings are kept for the shop&apos;s records without your personal details.</p>
+            {deleteError && <div className="customer-delete-notice" role="alert">
+              <p>{deleteError}</p>
               {hasBlockedRecords && <div className="customer-delete-record-links">
                 <Link to="/my-purchases?tab=items">View reservations</Link>
                 <Link to="/my-purchases?tab=services">View bookings</Link>
               </div>}
+            </div>}
+          </div>
+          <footer className="customer-modal-footer">
+            <button type="button" className="customer-delete-cancel-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
+            <button type="button" className="customer-delete-submit-button" onClick={deleteAccount} disabled={isDeletingAccount}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
+          </footer>
+        </section>
+      </div></CustomerModalPortal>}
+      {isTwoFactorModalOpen && <CustomerModalPortal><div className="customer-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isUpdatingTwoFactor) setIsTwoFactorModalOpen(false); }}>
+        <section className="customer-confirmation-dialog customer-two-factor-dialog" role="dialog" aria-modal="true" aria-labelledby="two-factor-title">
+          <header className="customer-modal-header"><h2 id="two-factor-title">{profile.twoFactorEnabled ? 'Turn off two-step verification?' : 'Turn on two-step verification?'}</h2><button type="button" className="customer-modal-close" aria-label="Close two-step verification dialog" onClick={() => setIsTwoFactorModalOpen(false)} disabled={isUpdatingTwoFactor}>×</button></header>
+          <div className="customer-modal-body">
+            <p>Enter your current password to confirm this change.</p>
+            <form id="two-factor-form" onSubmit={updateTwoFactor}>
+              <label className="customer-delete-field">Current password<PasswordInput id="two-factor-current-password" required autoComplete="current-password" aria-invalid={twoFactorError === incorrectPasswordMessage} value={twoFactorPassword} onChange={(event) => { setTwoFactorPassword(event.target.value); setTwoFactorError(''); }} />{twoFactorError && <small className="customer-field-error" role="alert">{twoFactorError}</small>}</label>
             </form>
           </div>
           <footer className="customer-modal-footer">
-            <button type="button" className="customer-primary-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
-            <button type="submit" form="delete-account-form" className="customer-danger-button" disabled={isDeletingAccount || !deletePassword || deleteConfirmation !== 'DELETE'}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
+            <button type="button" className="customer-secondary-button" onClick={() => setIsTwoFactorModalOpen(false)} disabled={isUpdatingTwoFactor}>Cancel</button>
+            <button type="submit" form="two-factor-form" className="customer-primary-button" disabled={isUpdatingTwoFactor || !twoFactorPassword}>{isUpdatingTwoFactor ? 'Saving...' : profile.twoFactorEnabled ? 'Turn off' : 'Turn on'}</button>
           </footer>
         </section>
       </div></CustomerModalPortal>}

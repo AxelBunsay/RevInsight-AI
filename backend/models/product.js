@@ -87,6 +87,11 @@ const productSchema = new mongoose.Schema({
       message: 'Reserved stock must be a whole number'
     }
   },
+  lowStockAlertState: {
+    type: String,
+    enum: ['ok', 'low', 'out'],
+    default: 'ok'
+  },
 
   variants: {
     type: [productVariantSchema],

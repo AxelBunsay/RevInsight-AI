@@ -2,7 +2,14 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import ProductImage from "../../Customer/react/ProductImage";
-import { PRODUCT_CATEGORIES } from "../../../../shared/inventory.json";
+import { LOW_STOCK_THRESHOLD, PRODUCT_CATEGORIES } from "../../../../shared/inventory.json";
+import SERVICE_CATEGORIES from "../../../../shared/serviceCategories.json";
+
+const stockClass = (available) => available <= 0
+  ? "stock-text out"
+  : available <= LOW_STOCK_THRESHOLD
+    ? "stock-text low"
+    : "stock-text";
 
 const createEmptyVariant = () => ({
   brand: "",
@@ -79,7 +86,7 @@ const validateServiceForm = (form) => {
   const maxUnits = Number(form.maxUnits);
 
   if (name.length < 2 || name.length > 80) errors.name = "Name must be 2 to 80 characters.";
-  if (category.length < 1 || category.length > 80) errors.category = "Category must be 1 to 80 characters.";
+  if (!SERVICE_CATEGORIES.includes(category)) errors.category = "Choose a valid service category.";
   if (form.description.length > 300) errors.description = "Description must be 300 characters or fewer.";
   if (form.price === "" || !Number.isFinite(price) || price < 0.01 || price > 999999.99) {
     errors.price = "Price must be from 0.01 to 999,999.99.";
@@ -412,7 +419,7 @@ function Inventory() {
           laborPriceMin: service.laborPriceMin == null ? "" : String(service.laborPriceMin),
           laborPriceMax: service.laborPriceMax == null ? "" : String(service.laborPriceMax),
           mechanicFee: String(service.mechanicFee ?? 0),
-          category: service.category || "General",
+          category: SERVICE_CATEGORIES.includes(service.category) ? service.category : "General",
           durationMinutes: String(service.durationMinutes || 60),
           pricePerUnit: service.pricePerUnit === true,
           unitLabel: service.unitLabel || "",
@@ -511,17 +518,10 @@ function Inventory() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-
     setImageError("");
     setImageFileName(file.name);
-    const extension = file.name.split(".").pop()?.toLowerCase();
-    const acceptedTypes = new Map([
-      ["image/png", "png"],
-      ["image/jpeg", "jpg"],
-      ["image/webp", "webp"]
-    ]);
-    const expectedExtension = acceptedTypes.get(file.type);
-    if (!expectedExtension || (extension !== expectedExtension && !(expectedExtension === "jpg" && extension === "jpeg"))) {
+    const acceptedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+    if (!acceptedTypes.has(file.type)) {
       if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
       setImageFile(null);
       setImagePreview(removeImage ? "" : editingItem?.imageUrl || editingItem?.image || "");
@@ -650,9 +650,9 @@ function Inventory() {
                       </div>
                       <div className="inventory-mobile-card__metrics">
                         <div><span>Price</span><strong>{item.price}</strong></div>
-                        <div><span>Stock</span><strong className={item.stock < 10 ? "stock-text low" : "stock-text"}>{item.stock}</strong></div>
+                        <div><span>Stock</span><strong className={stockClass(item.available)}>{item.stock}</strong></div>
                         <div><span>Reserved</span><strong>{item.reserved}</strong></div>
-                        <div><span>Available</span><strong className={item.available <= 5 ? "stock-text low" : "stock-text"}>{item.available}</strong></div>
+                        <div><span>Available</span><strong className={stockClass(item.available)}>{item.available}</strong></div>
                       </div>
                       {item.variants?.length > 0 && <>
                         <button
@@ -673,7 +673,7 @@ function Inventory() {
                               <ProductImage src={variant.imageUrl} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">V</span>} />
                               <strong>{variant.label || variantLabel(variant)}</strong>
                               <span>{[variant.brand, variant.model, variant.size, variant.color].filter(Boolean).join(" · ") || "Variant"}</span>
-                              <span>{formatPrice(variant.price)} · Stock {variant.stock} · Reserved {variant.reservedQty || 0} · Available {available}</span>
+                              <span>{formatPrice(variant.price)} · Stock {variant.stock} · Reserved {variant.reservedQty || 0} · <strong className={stockClass(available)}>Available {available}</strong></span>
                             </div>;
                           })}
                         </div>}
@@ -707,11 +707,11 @@ function Inventory() {
                           <td><span className="inventory-item-name"><ProductImage src={item.imageUrl || item.image} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">{String(item.category || "?").charAt(0).toUpperCase()}</span>} /><span>{item.name}</span></span></td>
                           <td>{item.category}</td>
                           <td className="price-text">{item.price}</td>
-                          <td className={item.stock < 10 ? "stock-text low" : "stock-text"}>
+                          <td className={stockClass(item.available)}>
                             {item.stock}
                           </td>
                           <td>{item.reserved}</td>
-                          <td className={item.available <= 5 ? "stock-text low" : "stock-text"}>
+                          <td className={stockClass(item.available)}>
                             {item.available}
                           </td>
                           <td>
@@ -760,7 +760,7 @@ function Inventory() {
                                   const available = Math.max(0, Number(variant.stock || 0) - Number(variant.reservedQty || 0));
                                   return (
                                     <div
-                                      className={`inventory-variant-detail${available <= 5 ? " is-low-stock" : ""}`}
+                                      className={`inventory-variant-detail${available <= 0 ? " is-out-of-stock" : available <= LOW_STOCK_THRESHOLD ? " is-low-stock" : ""}`}
                                       key={variant._id}
                                     >
                                       <ProductImage
@@ -780,7 +780,7 @@ function Inventory() {
                                       <span>{formatPrice(variant.price)}</span>
                                       <span>Stock: <strong>{variant.stock}</strong></span>
                                       <span>Reserved: {variant.reservedQty || 0}</span>
-                                      <span className={available <= 5 ? "stock-text low" : "stock-text"}>
+                                      <span className={stockClass(available)}>
                                         Available: {available}
                                       </span>
                                     </div>
@@ -1122,7 +1122,7 @@ function Inventory() {
                       {variant.imagePreview && !variant.removeImage && (
                         <button className="btn-small btn-delete" type="button" onClick={() => removeVariantImage(index)}>Remove photo</button>
                       )}
-                      <small>PNG, JPG, or WEBP · up to 2 MB</small>
+                      {!variant.imageError && <small>PNG, JPG, or WEBP · up to 2 MB</small>}
                       {variant.imageError && <small className="inventory-field-error" role="alert">{variant.imageError}</small>}
                     </div>
                     <button className="btn-small btn-delete" type="button" onClick={() => removeVariantRow(index)}>
@@ -1146,7 +1146,7 @@ function Inventory() {
                 </div>
               </div>
               {imageError && <small className="inventory-field-error" role="alert">{imageError}</small>}
-              <small>PNG, JPG, or WEBP · up to 2 MB</small>
+              {!imageError && <small>PNG, JPG, or WEBP · up to 2 MB</small>}
             </div>
           </form>
         </AdminDialog>
@@ -1192,15 +1192,16 @@ function Inventory() {
             </label>
             <label>
               Category
-              <input
-                maxLength="80"
+              <select
                 aria-invalid={Boolean(serviceFormErrors.category)}
                 value={serviceForm.category}
                 onChange={(event) => {
                   setServiceForm({ ...serviceForm, category: event.target.value });
                   setServiceFormErrors((errors) => ({ ...errors, category: "" }));
                 }}
-              />
+              >
+                {SERVICE_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
               {serviceFormErrors.category && <small className="inventory-field-error">{serviceFormErrors.category}</small>}
             </label>
             <label>

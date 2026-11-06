@@ -11,6 +11,7 @@ const {
   uploadProductMutationImages,
   serializePublicVariants
 } = require('../../utils/productVariants');
+const { evaluateLowStockAlert } = require('../../utils/lowStockAlerts');
 
 const serializeProduct = (product) => ({
   ...product.toObject(),
@@ -46,6 +47,7 @@ const createProduct = async (req, res) => {
       Reservation
     });
     const product = await Product.create(prepared.data);
+    await evaluateLowStockAlert(product._id);
     res.status(201).json({
       success: true,
       message: 'Product created successfully',
@@ -151,6 +153,7 @@ const updateProduct = async (req, res) => {
       currentProduct.set(prepared.data);
       product = await currentProduct.save({ session });
     });
+    await evaluateLowStockAlert(product._id);
     for (const publicId of prepared.obsoleteImagePublicIds) {
       await removeProductImageSafely(publicId, 'updateProduct');
     }

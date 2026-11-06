@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { SERVICE_CATEGORIES } = require('../utils/serviceCategories');
 
 const serviceSchema = new mongoose.Schema({
   name: {
@@ -48,6 +49,7 @@ const serviceSchema = new mongoose.Schema({
   category: {
     type: String,
     default: 'General',
+    enum: SERVICE_CATEGORIES,
     trim: true
   },
   durationMinutes: {

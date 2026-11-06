@@ -48,6 +48,10 @@ function AdminNotifications() {
       setNotifications((current) => current.map((item) => item._id === notification._id ? { ...item, read: true } : item));
       setUnreadCount((count) => notification.read ? count : Math.max(0, count - 1));
       setIsOpen(false);
+      if (notification.type === 'low_stock' || notification.type === 'out_of_stock') {
+        navigate('/admin/inventory');
+        return;
+      }
       const tab = notification.recordType === 'service' ? 'services' : 'items';
       navigate(`/admin/transactions?type=${tab}&review=${notification.recordId}`);
     } catch (markError) {
@@ -94,7 +98,14 @@ function AdminNotifications() {
       onMarkAllRead={markAllRead}
       isMarkingAllRead={isMarkingAllRead}
       renderNotification={(notification) => <li key={notification._id} className={notification.read ? '' : 'is-unread'}>
-          <button type="button" onClick={() => openNotification(notification)}><NotificationContent message={notification.message} timestamp={notification.createdAt} /></button>
+          <button type="button" onClick={() => openNotification(notification)}>
+            {['low_stock', 'out_of_stock'].includes(notification.type) && (
+              <span className="admin-notification-type">
+                {notification.type === 'out_of_stock' ? 'Out of stock' : 'Low stock'}
+              </span>
+            )}
+            <NotificationContent message={notification.message} timestamp={notification.createdAt} />
+          </button>
         </li>}
     />}
   </div>;

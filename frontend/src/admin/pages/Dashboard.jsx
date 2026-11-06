@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import CategoryRevenue from '../components/dashboard/CategoryRevenue';
+import ServiceRevenue from '../components/dashboard/ServiceRevenue';
 import AIRevenueAnalysis from '../components/dashboard/AIRevenueAnalysis';
 import InventoryHealth from '../components/dashboard/InventoryHealth';
 import PeriodToggle from '../components/dashboard/PeriodToggle';
@@ -12,11 +13,13 @@ import Panel from '../components/common/Panel';
 import Skeleton from '../components/common/Skeleton';
 import useMediaQuery from '../hooks/useMediaQuery';
 import useSalesSeries from '../hooks/useSalesSeries';
+import useServiceRevenue from '../hooks/useServiceRevenue';
 
 function Dashboard() {
   const dashboard = useOutletContext();
   const [period, setPeriod] = useState('daily');
   const seriesState = useSalesSeries(period);
+  const serviceRevenueState = useServiceRevenue(period);
   const compactChart = useMediaQuery('(max-width: 540px)');
 
   if (!dashboard.data && dashboard.error) {
@@ -44,6 +47,8 @@ function Dashboard() {
         {seriesState.error && <div className="admin-inline-error" role="alert"><span>{seriesState.error}</span><button type="button" onClick={seriesState.retry}>Retry</button></div>}
         <SalesChart series={seriesState.series} loading={seriesState.loading} period={period} compact={compactChart} />
       </Panel>
+
+      <ServiceRevenue period={period} state={serviceRevenueState} />
 
       {dashboard.data ? (
         <>

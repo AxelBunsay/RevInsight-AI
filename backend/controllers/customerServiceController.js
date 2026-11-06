@@ -4,6 +4,7 @@ const Mechanic = require('../models/mechanic');
 const ReservationSettings = require('../models/reservationSettings');
 const mongoose = require('mongoose');
 const { calculateServicePayment } = require('../utils/servicePayment');
+const { normalizeServiceCategory } = require('../utils/serviceCategories');
 const {
   countActiveBookings,
   readSlotCount,
@@ -330,6 +331,7 @@ const createServiceBookings = async (req, res) => {
               user: req.user.userId,
               customerId: req.user.userId,
               serviceId: booking.serviceId,
+              serviceCategory: normalizeServiceCategory(configuredService.category),
               partsSource,
               quoteStatus: quoteRequired ? 'quote_requested' : '',
               customerPartsNote: quoteRequired ? customerPartsNote : '',

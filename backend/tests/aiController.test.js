@@ -1,17 +1,27 @@
 import { createRequire } from 'node:module';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 const require = createRequire(import.meta.url);
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const supertest = require('supertest');
 const {
   getControllerResult,
   getRecentMonthlyRevenue,
   askRevenueAI,
-  formatRevenueAnswer
+  clearRevenueCardInsightCache,
+  formatRevenueAnswer,
+  getRevenueCardInsights
 } = require('../controllers/adminControllers/aiController');
+const aiRoutes = require('../routes/adminRoutes/ai');
 const {
   REVENUE_RISK_THRESHOLDS,
   calculateDashboardForecast
 } = require('../utils/revenue');
+
+afterEach(() => {
+  clearRevenueCardInsightCache();
+});
 
 describe('revenue AI controller helpers', () => {
   it('rejects failed dashboard controller responses', async () => {
@@ -160,5 +170,87 @@ describe('revenue AI controller helpers', () => {
     expect(aiPayload.thresholds).toEqual(REVENUE_RISK_THRESHOLDS);
     expect(aiPayload.uncategorizedShare).toEqual({ revenue: 60, share: 10 });
     expect(responseBody.success).toBe(true);
+  });
+
+  it('caches card insights by server-computed analysis data', async () => {
+    let generationCount = 0;
+    const successController = async (_req, res) => res.json({ success: true, data: {} });
+    const dashboardController = {
+      getDashboardStats: successController,
+      getQuarterlyData: async (_req, res) => res.json({ success: true, data: [] }),
+      getRevenueRisk: successController,
+      getRevenueConcentration: successController,
+      getRevenueData: async (_req, res) => res.json({ success: true, data: [] })
+    };
+    const dependencies = {
+      dashboardController,
+      generateCardInsights: async () => {
+        generationCount += 1;
+        const card = {
+          summary: 'Revenue is stable.',
+          recommendation: 'Review the next quarterly sales plan.',
+          ifFollowed: 'Reviewing the plan may preserve stability.',
+          ifIgnored: 'Ignoring it could leave emerging changes unaddressed.'
+        };
+        return {
+          insights: Object.fromEntries(['trend', 'risk', 'concentration', 'service', 'forecast'].map((key) => [key, card])),
+          source: 'ai'
+        };
+      },
+      now: new Date('2026-11-04T00:00:00.000Z'),
+      cache: new Map(),
+      refreshes: new Map(),
+      requests: new Map()
+    };
+    const call = async (query = {}) => {
+      let result;
+      const res = {
+        json(body) {
+          result = body;
+          return body;
+        },
+        status(code) {
+          this.statusCode = code;
+          return this;
+        }
+      };
+      await getRevenueCardInsights({ query, admin: { id: 'admin-1' } }, res, dependencies);
+      return { result, statusCode: res.statusCode || 200 };
+    };
+
+    const first = await call();
+    const second = await call();
+    expect(first.result).toEqual(second.result);
+    expect(first.result).toMatchObject({ source: 'ai', generatedAt: '2026-11-04T00:00:00.000Z' });
+    expect(first.result.insights.trend).toEqual({
+      summary: 'Revenue is stable.',
+      recommendation: 'Review the next quarterly sales plan.',
+      ifFollowed: 'Reviewing the plan may preserve stability.',
+      ifIgnored: 'Ignoring it could leave emerging changes unaddressed.'
+    });
+    expect(generationCount).toBe(1);
+
+    dependencies.now = new Date('2026-11-04T00:00:31.000Z');
+    const refreshed = await call({ refresh: 'true' });
+    const throttled = await call({ refresh: 'true' });
+    expect(refreshed.statusCode).toBe(200);
+    expect(throttled.statusCode).toBe(429);
+    expect(generationCount).toBe(2);
+  });
+
+  it('protects the card-insights endpoint with admin authentication', async () => {
+    const previousSecret = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = 'test-secret-for-admin-card-insights';
+    const app = express();
+    app.use('/api/admin', aiRoutes);
+    try {
+      const client = supertest(app);
+      expect((await client.post('/api/admin/ai/card-insights')).status).toBe(401);
+      const customerToken = jwt.sign({ role: 'customer', id: 'customer-1' }, process.env.JWT_SECRET);
+      expect((await client.post('/api/admin/ai/card-insights').set('Authorization', `Bearer ${customerToken}`)).status).toBe(403);
+    } finally {
+      if (previousSecret === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = previousSecret;
+    }
   });
 });

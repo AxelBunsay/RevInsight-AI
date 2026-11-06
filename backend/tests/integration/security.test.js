@@ -107,7 +107,7 @@ describe('security integration', () => {
 
     const response = await api.delete('/api/customers/me')
       .set('Authorization', `Bearer ${customerToken}`)
-      .send({ password, confirmation: 'DELETE' });
+      .send({});
 
     expect(response.status).toBe(409);
     expect(response.body.message).toBe('Finish or cancel your active reservations and bookings first.');
@@ -132,7 +132,7 @@ describe('security integration', () => {
 
     const response = await api.delete('/api/customers/me')
       .set('Authorization', `Bearer ${customerToken}`)
-      .send({ password, confirmation: 'DELETE' });
+      .send({});
 
     expect(response.status).toBe(409);
     expect(response.body.message).toBe('Finish or cancel your active reservations and bookings first.');
@@ -212,7 +212,7 @@ describe('security integration', () => {
 
     const response = await api.delete('/api/customers/me')
       .set('Authorization', `Bearer ${customerToken}`)
-      .send({ password, confirmation: 'DELETE' });
+      .send({});
 
     expect(response.status).toBe(200);
     expect(response.body.message).toBe('Your account was deleted.');

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { SERVICE_CATEGORIES } = require('../utils/serviceCategories');
 
 const paymentSubmissionSchema = new mongoose.Schema({
   reference: { type: String, required: true },
@@ -27,6 +28,11 @@ const serviceRequestSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Service',
     default: null
+  },
+  serviceCategory: {
+    type: String,
+    enum: SERVICE_CATEGORIES,
+    trim: true
   },
   partsSource: {
     type: String,

@@ -1,8 +1,11 @@
 import dashboardMock from '../data/dashboardMock.json';
 import { request as apiRequest } from '../../services/api';
 import inventoryConfig from '../../../../shared/inventory.json';
+import serviceCategories from '../../../../shared/serviceCategories.json';
 
 const confirmedStatuses = new Set(['completed', 'paid']);
+const revenueCardKeys = ['trend', 'risk', 'concentration', 'service', 'forecast'];
+const revenueCardInsightFields = ['summary', 'recommendation', 'ifFollowed', 'ifIgnored'];
 const { LOW_STOCK_THRESHOLD } = inventoryConfig;
 // Set VITE_ADMIN_USE_MOCKS=true to use demo data in development.
 const useDemoData = import.meta.env.DEV && import.meta.env.VITE_ADMIN_USE_MOCKS === 'true';
@@ -16,6 +19,17 @@ function request(path, options = {}) {
 
 function unwrapRows(response) {
   return Array.isArray(response?.data) ? response.data : [];
+}
+
+export function mapRevenueCardInsights(response) {
+  const insights = Object.fromEntries(revenueCardKeys.map((key) => {
+    const card = response?.insights?.[key];
+    return [key, Object.fromEntries(revenueCardInsightFields.map((field) => [
+      field,
+      typeof card?.[field] === 'string' ? card[field] : undefined
+    ]))];
+  }));
+  return { ...response, insights };
 }
 
 async function getAllPages(fetchPage) {
@@ -127,7 +141,10 @@ function makeDashboardData(stats, orders, inventory) {
 
   const inventoryHealth = inventory.reduce((health, item) => {
     const available = Math.max(0, Number(item.quantity || 0) - Number(item.reservedQty || 0));
-    if (available <= 0) health.out += 1;
+    if (available <= 0) {
+      health.out += 1;
+      health.lowItems.push({ id: item._id, name: item.name, quantity: available });
+    }
     else if (available <= LOW_STOCK_THRESHOLD) {
       health.low += 1;
       health.lowItems.push({ id: item._id, name: item.name, quantity: available });
@@ -163,7 +180,7 @@ function makeDashboardData(stats, orders, inventory) {
     },
     badges: {
       pendingTransactions: orders.filter((order) => String(order.status).toLowerCase() === 'pending').length,
-      lowStock: inventoryHealth.low
+      lowStock: inventoryHealth.low + inventoryHealth.out
     },
     categories: sortedCategories,
     inventoryHealth
@@ -173,6 +190,21 @@ function makeDashboardData(stats, orders, inventory) {
 export const adminApi = {
   loginAdmin: (credentials) => request('/api/admin/login', { method: 'POST', body: JSON.stringify(credentials), tokenKey: null }),
   getDashboardStats: () => request('/api/dashboard/dashboard'),
+  getServiceRevenue: async (period) => {
+    if (useDemoData) {
+      return {
+        period,
+        totalServiceRevenue: 0,
+        completedJobs: 0,
+        averagePerJob: 0,
+        percentOfTotalRevenue: 0,
+        categories: serviceCategories.map((name) => ({ name, revenue: 0, jobs: 0, percent: 0 })),
+        topServices: []
+      };
+    }
+    const response = await request(`/api/admin/dashboard/service-revenue?period=${encodeURIComponent(period)}`);
+    return response.data;
+  },
   getSalesReport: (query = {}) => {
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => {
@@ -189,6 +221,10 @@ export const adminApi = {
     method: 'POST',
     body: JSON.stringify({ question })
   }),
+  getRevenueCardInsights: (refresh = false) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
+    method: 'POST',
+    body: JSON.stringify({})
+  }).then(mapRevenueCardInsights),
   getRevenueAnalysisData: async () => {
     const [quarterly, risk, concentration] = await Promise.all([
       adminApi.getQuarterlySales(),

@@ -108,7 +108,9 @@ export default function ReservationPaymentForm({ reservation, amount, settings, 
       <form className="customer-confirmation-dialog gcash-payment-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="gcash-payment-title" onMouseDown={(event) => event.stopPropagation()}>
         <header className="gcash-payment-header">
           <h2 id="gcash-payment-title">Pay with GCash</h2>
-          <button type="button" className="gcash-payment-close" aria-label="Close payment dialog" onClick={onClose} disabled={isSaving}>×</button>
+          <button type="button" className="gcash-payment-close" aria-label="Close" onClick={onClose} disabled={isSaving}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
         </header>
         <div ref={bodyRef} className="gcash-payment-body" onFocusCapture={(event) => {
           const target = event.target;
@@ -142,9 +144,9 @@ export default function ReservationPaymentForm({ reservation, amount, settings, 
           {proof && <div className="gcash-payment-preview"><img src={previewUrl} alt="Receipt preview" /><span>{proof.name}</span><button type="button" onClick={() => { setProof(null); setPreviewUrl(''); }}>Remove</button></div>}
           {fileError && <p className="customer-error" role="alert">{fileError}</p>}
         </div>
-        <div className="gcash-payment-submit-row">
-          <button className="customer-primary-button" type="submit" disabled={!canSubmit || isSaving}>{isSaving ? 'Submitting...' : 'Submit payment'}</button>
-        </div>
+        <footer className="gcash-payment-submit-row gcash-payment-footer">
+          <button className="customer-primary-button gcash-payment-submit" type="submit" disabled={!canSubmit || isSaving}>{isSaving ? 'Submitting...' : 'Submit payment'}</button>
+        </footer>
       </form>
     </div>
   </CustomerModalPortal>;

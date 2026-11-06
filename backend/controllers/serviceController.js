@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Service = require('../models/service');
 const { validateServiceInput } = require('../utils/inventoryValidation');
 const { archiveOrDeleteService } = require('../utils/safeDeleteInventoryRecord');
+const { normalizeServiceCategory } = require('../utils/serviceCategories');
 
 const validateServiceId = (id, res) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -38,7 +39,7 @@ const publicServicePayload = (service) => {
     laborPriceMin: value.laborPriceMin ?? null,
     laborPriceMax: value.laborPriceMax ?? null,
     mechanicFee: value.mechanicFee ?? 0,
-    category: value.category || 'General',
+    category: normalizeServiceCategory(value.category),
     durationMinutes: Number(value.durationMinutes) || 60,
     pricePerUnit: value.pricePerUnit === true,
     unitLabel: value.unitLabel || '',
@@ -78,7 +79,12 @@ const getPublicService = async (req, res) => {
 const getServices = async (req, res) => {
   try {
     const services = await Service.find({ isActive: { $ne: false } }).sort({ name: 1 });
-    res.status(200).json({ services });
+    res.status(200).json({
+      services: services.map((service) => ({
+        ...service.toObject(),
+        category: normalizeServiceCategory(service.category)
+      }))
+    });
   } catch (error) {
     handleServiceError(res, error);
   }
@@ -93,7 +99,12 @@ const getService = async (req, res) => {
       return res.status(404).json({ message: 'Service not found' });
     }
 
-    res.status(200).json({ service });
+    res.status(200).json({
+      service: {
+        ...service.toObject(),
+        category: normalizeServiceCategory(service.category)
+      }
+    });
   } catch (error) {
     handleServiceError(res, error);
   }
@@ -122,7 +133,7 @@ const createService = async (req, res) => {
         ? null
         : Number(req.body.laborPriceMax),
       mechanicFee: Number(req.body.mechanicFee),
-      category: (req.body.category || 'General').trim(),
+      category: normalizeServiceCategory(req.body.category || 'General'),
       durationMinutes: Number(req.body.durationMinutes ?? 60),
       pricePerUnit: req.body.pricePerUnit ?? false,
       unitLabel: (req.body.unitLabel || '').trim(),
@@ -170,7 +181,7 @@ const updateService = async (req, res) => {
         : Number(req.body.laborPriceMax);
     }
     service.mechanicFee = Number(req.body.mechanicFee ?? service.mechanicFee);
-    service.category = (req.body.category ?? service.category ?? 'General').trim();
+    service.category = normalizeServiceCategory(req.body.category ?? service.category ?? 'General');
     service.durationMinutes = Number(req.body.durationMinutes ?? service.durationMinutes ?? 60);
     service.pricePerUnit = req.body.pricePerUnit ?? service.pricePerUnit ?? false;
     service.unitLabel = (req.body.unitLabel ?? service.unitLabel ?? '').trim();

@@ -4,6 +4,7 @@ const Product = require('../../models/product');
 const User = require('../../models/user');
 const Mechanic = require('../../models/mechanic');
 const ServiceRequest = require('../../models/serviceRequest');
+const Service = require('../../models/service');
 const BusinessRecord = require('../../models/businessRecord');
 const Reservation = require('../../models/orderingModels/reservation');
 const { archiveOrDeleteProduct, hasActiveProductReservation } = require('../../utils/safeDeleteInventoryRecord');
@@ -27,7 +28,10 @@ const {
   parseManilaDateBound,
   getManilaDateParts
 } = require('../../utils/revenue');
+const { buildServiceRevenueReport } = require('../../utils/serviceRevenue');
+const { normalizeServiceCategory } = require('../../utils/serviceCategories');
 const { getAvailableStock, isLowStock } = require('../../utils/inventory');
+const { evaluateLowStockAlert } = require('../../utils/lowStockAlerts');
 
 const loadRevenueEntries = (options = {}) => getRevenueEntries({
   Order,
@@ -141,6 +145,52 @@ const getRevenueData = async (req, res) => {
   } catch (error) {
     console.error('[getRevenueData] error', error);
     res.status(500).json({ success: false, message: 'Failed to load revenue data. Please try again.' });
+  }
+};
+
+const getServiceRevenueRange = (period, now = new Date()) => {
+  const parts = getManilaDateParts(now);
+  const start = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+
+  if (period === 'daily') {
+    start.setUTCDate(start.getUTCDate() - 6);
+  } else if (period === 'weekly') {
+    const daysSinceMonday = (start.getUTCDay() + 6) % 7;
+    start.setUTCDate(start.getUTCDate() - daysSinceMonday - (7 * 7));
+  } else {
+    start.setUTCDate(1);
+    start.setUTCMonth(start.getUTCMonth() - 11);
+  }
+
+  const startDate = `${start.getUTCFullYear()}-${String(start.getUTCMonth() + 1).padStart(2, '0')}-${String(start.getUTCDate()).padStart(2, '0')}`;
+  return { startDate, endDate: now };
+};
+
+const getServiceRevenue = async (req, res) => {
+  try {
+    const period = req.query.period || 'daily';
+    if (!['daily', 'weekly', 'monthly'].includes(period)) {
+      return res.status(400).json({ success: false, message: 'Period must be daily, weekly, or monthly.' });
+    }
+
+    const [entries, services] = await Promise.all([
+      loadRevenueEntries(getServiceRevenueRange(period)),
+      Service.find({}, { name: 1, category: 1 }).lean()
+    ]);
+    const serviceCategoryByName = new Map(services.map((service) => [
+      service.name.trim().toLocaleLowerCase('en'),
+      normalizeServiceCategory(service.category)
+    ]));
+    const data = buildServiceRevenueReport({
+      entries,
+      nonServiceRevenue: summarizeRevenue(entries.filter((entry) => entry.source !== 'service')).totalSales,
+      serviceCategoryByName
+    });
+
+    res.json({ success: true, data: { period, ...data } });
+  } catch (error) {
+    console.error('[getServiceRevenue] error', error);
+    res.status(500).json({ success: false, message: 'Failed to load service revenue.' });
   }
 };
 
@@ -715,6 +765,7 @@ const addInventoryItem = async (req, res) => {
       Reservation
     });
     const item = await Product.create(prepared.data);
+    await evaluateLowStockAlert(item._id);
 
     res.status(201).json({
       success: true,
@@ -760,6 +811,7 @@ const updateInventoryItem = async (req, res) => {
       currentItem.set(prepared.data);
       item = await currentItem.save({ session });
     });
+    await evaluateLowStockAlert(item._id);
     for (const publicId of prepared.obsoleteImagePublicIds) {
       await removeProductImageSafely(publicId, 'updateInventoryItem');
     }
@@ -971,6 +1023,7 @@ const getMechanicsReport = async (req, res) => {
 module.exports = {
   getDashboardStats,
   getRevenueData,
+  getServiceRevenue,
   getQuarterlyData,
   getDailyData,
   getRevenueRisk,

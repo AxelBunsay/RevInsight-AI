@@ -1,10 +1,23 @@
-const { generateRevenueInsights } = require('../../services/aiService');
+const { createHash } = require('crypto');
+const {
+  CARD_INSIGHT_FIELDS,
+  CARD_INSIGHT_KEYS,
+  generateCardInsights,
+  generateRevenueInsights,
+  isValidCardInsights
+} = require('../../services/aiService');
 const dashboardController = require('./dashboardController');
 const {
   REVENUE_TIMEZONE,
   REVENUE_RISK_THRESHOLDS,
   calculateDashboardForecast
 } = require('../../utils/revenue');
+
+const CARD_INSIGHT_CACHE_TTL_MS = 15 * 60 * 1000;
+const CARD_INSIGHT_REFRESH_COOLDOWN_MS = 30 * 1000;
+const cardInsightCache = new Map();
+const cardInsightRefreshes = new Map();
+const cardInsightRequests = new Map();
 
 function formatRevenueAnswer(answer) {
   return String(answer).replace(/\$(?=\d)/g, '₱');
@@ -70,6 +83,34 @@ async function getControllerResult(controller, req) {
   return result;
 }
 
+async function gatherRevenueAnalysisData(req, dashboard, now) {
+  const mockReq = { ...req, query: {} };
+  const [statsRes, quarterlyRes, riskRes, concentrationRes, monthlyRes] = await Promise.all([
+    getControllerResult(dashboard.getDashboardStats, mockReq),
+    getControllerResult(dashboard.getQuarterlyData, mockReq),
+    getControllerResult(dashboard.getRevenueRisk, mockReq),
+    getControllerResult(dashboard.getRevenueConcentration, mockReq),
+    getControllerResult(dashboard.getRevenueData, mockReq)
+  ]);
+
+  return {
+    stats: statsRes.data,
+    quarterly: quarterlyRes.data,
+    revenueRisk: riskRes.data,
+    revenueConcentration: concentrationRes.data,
+    monthly: getRecentMonthlyRevenue(monthlyRes.data, now),
+    officialForecast: riskRes.data.officialForecast || calculateDashboardForecast(quarterlyRes.data, now),
+    riskLevels: riskRes.data.indicators || {},
+    overallRisk: riskRes.data.overallRisk || { level: 'Not enough data', reason: 'risk data is unavailable' },
+    thresholds: REVENUE_RISK_THRESHOLDS,
+    uncategorizedShare: riskRes.data.uncategorized || concentrationRes.data.uncategorized || { revenue: 0, share: 0 }
+  };
+}
+
+function hashAnalysisData(analysisData) {
+  return createHash('sha256').update(JSON.stringify(analysisData)).digest('hex');
+}
+
 async function askRevenueAI(req, res, dependencies = {}) {
   const revenueInsights = dependencies.generateRevenueInsights || generateRevenueInsights;
   const dashboard = dependencies.dashboardController || dashboardController;
@@ -83,27 +124,7 @@ async function askRevenueAI(req, res, dependencies = {}) {
   }
 
   try {
-    const mockReq = { ...req, query: {} };
-    const [statsRes, quarterlyRes, riskRes, concentrationRes, monthlyRes] = await Promise.all([
-      getControllerResult(dashboard.getDashboardStats, mockReq),
-      getControllerResult(dashboard.getQuarterlyData, mockReq),
-      getControllerResult(dashboard.getRevenueRisk, mockReq),
-      getControllerResult(dashboard.getRevenueConcentration, mockReq),
-      getControllerResult(dashboard.getRevenueData, mockReq)
-    ]);
-
-    const revenueData = {
-      stats: statsRes.data,
-      quarterly: quarterlyRes.data,
-      revenueRisk: riskRes.data,
-      revenueConcentration: concentrationRes.data,
-      monthly: getRecentMonthlyRevenue(monthlyRes.data, now),
-      officialForecast: riskRes.data.officialForecast || calculateDashboardForecast(quarterlyRes.data, now),
-      riskLevels: riskRes.data.indicators || {},
-      overallRisk: riskRes.data.overallRisk || { level: 'Not enough data', reason: 'risk data is unavailable' },
-      thresholds: REVENUE_RISK_THRESHOLDS,
-      uncategorizedShare: riskRes.data.uncategorized || concentrationRes.data.uncategorized || { revenue: 0, share: 0 }
-    };
+    const revenueData = await gatherRevenueAnalysisData(req, dashboard, now);
 
     const answer = formatRevenueAnswer(await revenueInsights(question, revenueData));
 
@@ -119,4 +140,85 @@ async function askRevenueAI(req, res, dependencies = {}) {
   }
 }
 
-module.exports = { askRevenueAI, formatRevenueAnswer, getControllerResult, getRecentMonthlyRevenue };
+async function getRevenueCardInsights(req, res, dependencies = {}) {
+  const dashboard = dependencies.dashboardController || dashboardController;
+  const insightGenerator = dependencies.generateCardInsights || generateCardInsights;
+  const now = dependencies.now || new Date();
+  const cache = dependencies.cache || cardInsightCache;
+  const refreshes = dependencies.refreshes || cardInsightRefreshes;
+  const requests = dependencies.requests || cardInsightRequests;
+  const refresh = req.query?.refresh === 'true' || req.query?.refresh === '1';
+  const adminId = String(req.admin?.id || req.ip || 'admin');
+
+  if (refresh) {
+    const lastRefreshAt = refreshes.get(adminId) || 0;
+    const elapsed = now.getTime() - lastRefreshAt;
+    if (elapsed < CARD_INSIGHT_REFRESH_COOLDOWN_MS) {
+      const retryAfterSeconds = Math.ceil((CARD_INSIGHT_REFRESH_COOLDOWN_MS - elapsed) / 1000);
+      return res.status(429).json({
+        message: 'Please wait before refreshing revenue insights again.',
+        retryAfterSeconds
+      });
+    }
+    refreshes.set(adminId, now.getTime());
+  }
+
+  try {
+    const analysisData = await gatherRevenueAnalysisData(req, dashboard, now);
+    const cacheKey = hashAnalysisData(analysisData);
+    for (const [key, entry] of cache) {
+      if (entry.expiresAt <= now.getTime()) cache.delete(key);
+    }
+    const cached = cache.get(cacheKey);
+    if (!refresh && cached && cached.expiresAt > now.getTime()) {
+      return res.json(cached.result);
+    }
+
+    let generation = !refresh ? requests.get(cacheKey) : null;
+    if (!generation) {
+      generation = Promise.resolve(insightGenerator(analysisData)).then((generated) => {
+        if (!isValidCardInsights(generated?.insights)) {
+          throw new Error('Card insight generator returned an invalid response schema.');
+        }
+        const insights = Object.fromEntries(CARD_INSIGHT_KEYS.map((key) => [
+          key,
+          Object.fromEntries(CARD_INSIGHT_FIELDS.map((field) => [field, generated.insights[key][field]]))
+        ]));
+        return {
+          insights,
+          source: generated.source === 'ai' ? 'ai' : 'template',
+          generatedAt: now.toISOString()
+        };
+      });
+      requests.set(cacheKey, generation);
+    }
+
+    try {
+      const result = await generation;
+      cache.set(cacheKey, { result, expiresAt: now.getTime() + CARD_INSIGHT_CACHE_TTL_MS });
+      return res.json(result);
+    } finally {
+      if (requests.get(cacheKey) === generation) requests.delete(cacheKey);
+    }
+  } catch (error) {
+    console.error('[getRevenueCardInsights] error', error);
+    return res.status(500).json({ message: 'Failed to generate revenue card insights.' });
+  }
+}
+
+function clearRevenueCardInsightCache() {
+  cardInsightCache.clear();
+  cardInsightRefreshes.clear();
+  cardInsightRequests.clear();
+}
+
+module.exports = {
+  askRevenueAI,
+  clearRevenueCardInsightCache,
+  formatRevenueAnswer,
+  getControllerResult,
+  getRecentMonthlyRevenue,
+  getRevenueCardInsights,
+  gatherRevenueAnalysisData,
+  hashAnalysisData
+};

@@ -19,6 +19,7 @@ const {
 } = require('../utils/paymentReceipt');
 const { createPaymentDecisionNotification } = require('../utils/paymentNotifications');
 const { canTransitionReservationStatus } = require('../utils/reservationStatus');
+const { evaluateLowStockAlert } = require('../utils/lowStockAlerts');
 const { expireServiceBookings } = require('./serviceRequestController');
 
 const validStatuses = ['Pending Down Payment', 'Payment Submitted', 'Reserved', 'Completed', 'Cancelled', 'Expired'];
@@ -45,7 +46,7 @@ const customerReservationPayload = (reservation) => {
   return payload;
 };
 
-async function releaseReservedStock(reservation, session) {
+async function releaseReservedStock(reservation, session, changedProductIds = new Set()) {
   for (const item of reservation.items) {
     const product = await Product.findById(item.productId).session(session);
     if (!product) {
@@ -64,6 +65,7 @@ async function releaseReservedStock(reservation, session) {
       product.reservedQty = Number(product.reservedQty || 0) - item.qty;
     }
     await product.save({ session });
+    changedProductIds.add(product._id.toString());
   }
 }
 
@@ -105,6 +107,7 @@ async function expireReservations() {
     if (!expiredCandidates.length) return;
     for (const candidate of expiredCandidates) {
       let session;
+      const changedProductIds = new Set();
       try {
         session = await mongoose.startSession();
         await session.withTransaction(async () => {
@@ -118,13 +121,14 @@ async function expireReservations() {
             await reservation.save({ session });
           } else if (reservation.status === 'Reserved' && reservation.reservedUntil <= now
             && canTransitionReservationStatus(reservation.status, 'Expired')) {
-            await releaseReservedStock(reservation, session);
+            await releaseReservedStock(reservation, session, changedProductIds);
             reservation.status = 'Expired';
             reservation.expiredAt = now;
             reservation.cancelReason = 'The pickup hold period ended.';
             await reservation.save({ session });
           }
         });
+        for (const productId of changedProductIds) await evaluateLowStockAlert(productId);
       } catch (error) {
         console.error(`[expireReservations] failed to expire reservation ${candidate._id}; continuing`, error);
       } finally {
@@ -242,6 +246,7 @@ const createReservation = async (req, res) => {
     } finally {
       await session.endSession();
     }
+    for (const item of reservation.items) await evaluateLowStockAlert(item.productId);
     res.status(201).json({ success: true, reservation });
   } catch (error) {
     sendError(res, error);
@@ -518,6 +523,7 @@ const confirmReservation = async (req, res) => {
   try {
     await expireReservations();
     let result;
+    const changedProductIds = new Set();
     await session.withTransaction(async () => {
       const reservation = await Reservation.findOne({ _id: req.params.id, code: { $exists: true } }).session(session);
       if (!reservation) throw Object.assign(new Error('Reservation not found.'), { status: 404 });
@@ -542,6 +548,7 @@ const confirmReservation = async (req, res) => {
           product.reservedQty = Number(product.reservedQty || 0) + item.qty;
         }
         await product.save({ session });
+        changedProductIds.add(product._id.toString());
       }
       const settings = await getSettings();
       reservation.status = 'Reserved';
@@ -566,6 +573,7 @@ const confirmReservation = async (req, res) => {
         session
       });
     });
+    for (const productId of changedProductIds) await evaluateLowStockAlert(productId);
     res.json({ success: true, reservation: result });
   } catch (error) {
     sendError(res, error);
@@ -628,6 +636,7 @@ const completeReservation = async (req, res) => {
   try {
     await expireReservations();
     let result;
+    const changedProductIds = new Set();
     await session.withTransaction(async () => {
       const reservation = await Reservation.findOne({ _id: req.params.id, code: { $exists: true } }).session(session);
       if (!reservation) throw Object.assign(new Error('Reservation not found.'), { status: 404 });
@@ -652,6 +661,7 @@ const completeReservation = async (req, res) => {
           product.reservedQty = Number(product.reservedQty || 0) - item.qty;
         }
         await product.save({ session });
+        changedProductIds.add(product._id.toString());
       }
       reservation.status = 'Completed';
       reservation.amountPaid = reservation.total;
@@ -686,6 +696,7 @@ const completeReservation = async (req, res) => {
         );
       }
     });
+    for (const productId of changedProductIds) await evaluateLowStockAlert(productId);
     res.json({ success: true, reservation: result });
   } catch (error) {
     sendError(res, error);
@@ -699,6 +710,7 @@ async function cancelReservation(req, res, isRefundDecisionOnly = false) {
   let session;
   try {
     let result;
+    const changedProductIds = new Set();
     const { refundDecision, reason } = req.body || {};
     if (refundDecision !== undefined && !['refunded', 'forfeited'].includes(refundDecision)) {
       return res.status(400).json({ success: false, message: 'Refund decision must be refunded or forfeited.' });
@@ -729,7 +741,7 @@ async function cancelReservation(req, res, isRefundDecisionOnly = false) {
           throw Object.assign(new Error('Refund decisions only apply after a down payment has been confirmed.'), { status: 400 });
         }
       }
-      if (reservation.status === 'Reserved') await releaseReservedStock(reservation, session);
+      if (reservation.status === 'Reserved') await releaseReservedStock(reservation, session, changedProductIds);
       if (!isRefundDecisionOnly) {
         reservation.status = 'Cancelled';
         reservation.cancelledAt = new Date();
@@ -742,6 +754,7 @@ async function cancelReservation(req, res, isRefundDecisionOnly = false) {
       }
       result = await reservation.save({ session });
     });
+    for (const productId of changedProductIds) await evaluateLowStockAlert(productId);
     res.json({ success: true, reservation: result });
   } catch (error) {
     sendError(res, error);

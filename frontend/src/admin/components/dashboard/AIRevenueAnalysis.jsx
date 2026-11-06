@@ -4,6 +4,7 @@ import MarkdownAnswer from './MarkdownAnswer';
 import { askRevenueQuestion, handleQuestionKeyDown } from './askRevenueQuestion';
 import { AdminModalPortal } from '../../pages/ManagementPageComponents';
 import useAdminModalEffects from '../useAdminModalEffects';
+import RevenueCardInsights from './RevenueCardInsights';
 import riskThresholds from '../../../../../shared/revenueRiskConfig.json';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
@@ -22,8 +23,7 @@ function RiskChip({ level, why }) {
   const tone = ['Normal', 'Moderate', 'High'].includes(level) ? level.toLowerCase() : 'unknown';
   return <span className="ai-revenue-risk">
     <span className={`ai-revenue-risk__chip is-${tone}`}>{level || 'Not enough data'}</span>
-    <span className="ai-revenue-risk__why">Why: {why || 'Risk indicators are not available.'}</span>
-    <span className="ai-revenue-risk__info" tabIndex={0} title={riskThresholdTooltip} aria-label={`Risk thresholds. ${riskThresholdTooltip.replaceAll('\n', ' ')}`}>i</span>
+    <span className="ai-revenue-risk__info" tabIndex={0} title={why ? `${why}\n${riskThresholdTooltip}` : riskThresholdTooltip} aria-label={`Risk thresholds. ${riskThresholdTooltip.replaceAll('\n', ' ')}`}>i</span>
   </span>;
 }
 
@@ -80,6 +80,122 @@ function getOverallRiskWhy(overallRisk, indicators) {
     ? value.toFixed(3)
     : `${sign}${Number.isInteger(value) ? value : Number(value.toFixed(1))}%`;
   return `Driven by: ${detail.label} (${formattedValue})`;
+}
+
+function getLocalCardInsightTemplates({ current, indicators, overallRisk, concentration, serviceItems, estimate }) {
+  const hasNumber = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+  const formatPercent = (value) => hasNumber(value) ? `${Number(value).toFixed(1)}%` : null;
+  const briefName = (value) => {
+    const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+    return words.length > 5 ? `${words.slice(0, 5).join(' ')}…` : words.join(' ');
+  };
+  const qoq = indicators.qoqChange;
+  const hhi = concentration?.indicators?.hhi;
+  const topShare = indicators.topContributorShare?.value;
+  const topService = serviceItems[0];
+  const forecastChange = indicators.forecastVsFourQuarterAverage?.value;
+  const forecastLevel = indicators.forecastVsFourQuarterAverage?.level || 'Not enough data';
+  const serviceName = briefName(topService?.name);
+  const levelByCard = {
+    trend: qoq?.level || 'Not enough data',
+    risk: overallRisk.level || 'Not enough data',
+    concentration: indicators.concentrationHhi?.level || 'Not enough data',
+    service: indicators.topContributorShare?.level || 'Not enough data',
+    forecast: forecastLevel
+  };
+  const summaryByCard = {
+    trend: qoq && hasNumber(qoq.value)
+      ? `Completed-quarter revenue changed ${formatPercent(qoq.value)}; the risk level is ${levelByCard.trend}.`
+      : `Revenue for ${current ? quarterName(current.year, current.quarter) : 'the selected quarter'} is ${peso.format(current?.revenue || 0)}; quarter-over-quarter change is unavailable.`,
+    risk: overallRisk.reason
+      ? `Overall revenue risk is ${overallRisk.level}, driven by ${briefName(overallRisk.reason)}.`
+      : `Overall revenue risk is ${overallRisk.level || 'Not enough data'}.`,
+    concentration: hasNumber(hhi) && hasNumber(topShare)
+      ? `Revenue concentration HHI is ${Number(hhi).toFixed(3)}, and the top contributor share is ${formatPercent(topShare)}.`
+      : 'Not enough data yet to describe revenue concentration.',
+    service: topService && formatPercent(topService.share)
+      ? `${serviceName} is the leading service contributor at ${formatPercent(topService.share)} of categorized revenue.`
+      : 'Not enough data yet to describe service revenue contribution.',
+    forecast: hasNumber(forecastChange) && estimate?.targetLabel && hasNumber(estimate.expected)
+      ? `The official forecast for ${briefName(estimate.targetLabel)} is ${peso.format(estimate.expected)}, ${formatPercent(forecastChange)} versus the four-quarter average (${forecastLevel} risk).`
+      : 'Not enough data yet to compare the official forecast with the four-quarter average.'
+  };
+  const recommendations = {
+    trend: {
+      High: 'Compare the last two completed-quarter totals and revise promotions after the revenue decline.',
+      Moderate: 'Review completed-quarter revenue monthly and adjust promotions if the change persists.',
+      Normal: 'Keep effective promotions in place and verify revenue at the next quarter close.',
+      default: 'Record more completed-quarter sales before changing the promotion plan.'
+    },
+    risk: {
+      High: `Review ${briefName(overallRisk.reason || 'the leading risk driver')} and set a corrective pricing or promotion action.`,
+      Moderate: `Check ${briefName(overallRisk.reason || 'the leading risk driver')} and choose one targeted sales-mix adjustment.`,
+      Normal: 'Review pricing and promotion results before setting the next quarterly sales plan.',
+      default: 'Complete revenue risk records before choosing a corrective shop action.'
+    },
+    concentration: {
+      High: 'Promote a secondary revenue category and review the leading contributor’s sales mix.',
+      Moderate: 'Run a focused promotion for a smaller category and compare its revenue share.',
+      Normal: 'Review category performance and retain the offers supporting a balanced revenue mix.',
+      default: 'Complete category revenue records before planning a sales-mix promotion.'
+    },
+    service: {
+      High: serviceName ? `Review staffing and pricing for ${serviceName} before taking additional service bookings.` : 'Compare completed service jobs with shop capacity before adjusting staffing.',
+      Moderate: serviceName ? `Check booking capacity for ${serviceName} and test a focused service promotion.` : 'Compare completed service jobs with available capacity before promoting services.',
+      Normal: serviceName ? `Keep ${serviceName} visible in the booking menu and review its completed jobs.` : 'Review completed service jobs before changing the service booking menu.',
+      default: 'Record completed service jobs before changing staffing or service promotions.'
+    },
+    forecast: {
+      High: 'Review the next-quarter promotion and purchasing plan against the official forecast comparison.',
+      Moderate: 'Use the official forecast comparison to revise the next-quarter sales plan.',
+      Normal: 'Align the next-quarter staffing plan with the official forecast comparison.',
+      default: 'Record more completed quarters before revising the next-quarter shop plan.'
+    }
+  };
+  const outcomes = {
+    trend: {
+      High: ['Responding to the decline may stabilize quarter-over-quarter revenue momentum.', 'Ignoring the decline could prolong weaker completed-quarter sales.'],
+      Moderate: ['Adjusting promotions may support revenue recovery if the change continues.', 'Overlooking the change could delay a response to shifting sales.'],
+      Normal: ['Maintaining effective promotions may preserve the current revenue trend.', 'Unnecessary promotion changes could disrupt a stable sales pattern.']
+    },
+    risk: {
+      High: ['Addressing the leading driver may reduce pressure on overall revenue stability.', 'Ignoring the leading driver could leave the current risk unresolved.'],
+      Moderate: ['A targeted response may keep the overall risk from increasing.', 'Delaying a response could allow the identified risk to grow.'],
+      Normal: ['Reviewing shop pricing and promotions may help preserve stable revenue.', 'Skipping the review could leave new risk signals unnoticed.']
+    },
+    concentration: {
+      High: ['Promoting another category may reduce dependence on the leading contributor.', 'Ignoring the imbalance could keep revenue concentrated in one contributor.'],
+      Moderate: ['A secondary-category promotion may gradually broaden the revenue mix.', 'Ignoring the mix could preserve the current contributor imbalance.'],
+      Normal: ['Maintaining balanced category offers may support revenue diversity.', 'Changing balanced offers without evidence could weaken the current mix.']
+    },
+    service: {
+      High: ['Adjusting service capacity may improve availability for customer bookings.', 'Ignoring capacity pressure could limit service availability.'],
+      Moderate: ['A focused service promotion may help align bookings with shop capacity.', 'Leaving service demand unchecked could create scheduling mismatches.'],
+      Normal: ['Keeping the leading service available may sustain its contribution.', 'Removing attention from it could reduce booking visibility.']
+    },
+    forecast: {
+      High: ['Revising the shop plan may better prepare for the projected revenue gap.', 'Ignoring the comparison could leave the next-quarter plan misaligned.'],
+      Moderate: ['Using the forecast comparison may improve next-quarter planning.', 'Ignoring the comparison could weaken planning readiness.'],
+      Normal: ['Aligning staffing with the projection may support steady operations.', 'Ignoring the projection could leave staffing plans less prepared.']
+    }
+  };
+  const hasData = {
+    trend: Boolean(qoq && hasNumber(qoq.value)),
+    risk: Boolean(overallRisk.level && overallRisk.level !== 'Not enough data'),
+    concentration: Boolean(hasNumber(hhi) && hasNumber(topShare)),
+    service: Boolean(topService && hasNumber(topService.share)),
+    forecast: Boolean(hasNumber(forecastChange) && estimate?.targetLabel && hasNumber(estimate.expected))
+  };
+
+  return Object.fromEntries(Object.keys(summaryByCard).map((cardKey) => {
+    const levelTemplates = outcomes[cardKey][levelByCard[cardKey]] || outcomes[cardKey].Normal;
+    return [cardKey, {
+      summary: summaryByCard[cardKey],
+      recommendation: recommendations[cardKey][levelByCard[cardKey]] || recommendations[cardKey].default,
+      ifFollowed: hasData[cardKey] ? levelTemplates[0] : `Not enough data yet to estimate how this choice could affect ${cardKey} revenue.`,
+      ifIgnored: hasData[cardKey] ? levelTemplates[1] : `Not enough data yet to estimate how ignoring this signal could affect ${cardKey} revenue.`
+    }];
+  }));
 }
 
 function getQuarterRows(rows) {
@@ -365,6 +481,12 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [analysis, setAnalysis] = useState({ quarters: [], risk: null, concentration: null });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [cardInsights, setCardInsights] = useState({});
+  const [cardInsightSource, setCardInsightSource] = useState('template');
+  const [cardInsightGeneratedAt, setCardInsightGeneratedAt] = useState('');
+  const [cardInsightsLoading, setCardInsightsLoading] = useState(true);
+  const [cardInsightsError, setCardInsightsError] = useState('');
+  const [refreshRemainingSeconds, setRefreshRemainingSeconds] = useState(0);
   const [selectedQuarterKey, setSelectedQuarterKey] = useState(null);
   const [modalId, setModalId] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -374,10 +496,26 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [reportError, setReportError] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportCardPage, setReportCardPage] = useState(1);
+  const openAnalysis = (cardId) => setModalId(cardId);
+  const handleCardKeyDown = (event, cardId) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openAnalysis(cardId);
+    }
+  };
 
   useAdminModalEffects(settingsOpen, () => setSettingsOpen(false));
   useAdminModalEffects(reportOpen, () => setReportOpen(false));
   useAdminModalEffects(Boolean(modalId), () => setModalId(null));
+
+  useEffect(() => {
+    if (!refreshRemainingSeconds) return undefined;
+    const timer = window.setInterval(() => {
+      setRefreshRemainingSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [refreshRemainingSeconds]);
 
   useEffect(() => {
     let active = true;
@@ -541,6 +679,75 @@ function AIRevenueAnalysis({ dashboardData }) {
       description: `${serviceItems[0].share.toFixed(1)}% from ${serviceItems[0].name}`
     }] : [])
   ];
+  const localCardInsightTemplates = getLocalCardInsightTemplates({
+    current,
+    indicators,
+    overallRisk,
+    concentration: analysis.concentration,
+    serviceItems,
+    estimate
+  });
+
+  useEffect(() => {
+    if (isLoading || loadError) return undefined;
+    let active = true;
+    adminApi.getRevenueCardInsights()
+      .then((result) => {
+        if (!active) return;
+        setCardInsights(result.insights || {});
+        setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
+        setCardInsightGeneratedAt(result.generatedAt || '');
+      })
+      .catch((error) => {
+        if (!active) return;
+        setCardInsights({});
+        setCardInsightSource('template');
+        setCardInsightGeneratedAt('');
+        setCardInsightsError(error.message || 'AI insights are unavailable.');
+      })
+      .finally(() => {
+        if (active) setCardInsightsLoading(false);
+      });
+    return () => { active = false; };
+  }, [analysis, isLoading, loadError, selectedQuarterKey]);
+
+  const refreshCardInsights = async () => {
+    setCardInsightsLoading(true);
+    setCardInsightsError('');
+    try {
+      const result = await adminApi.getRevenueCardInsights(true);
+      setCardInsights(result.insights || {});
+      setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
+      setCardInsightGeneratedAt(result.generatedAt || '');
+      setRefreshRemainingSeconds(30);
+    } catch (error) {
+      setCardInsights({});
+      setCardInsightSource('template');
+      setCardInsightGeneratedAt('');
+      setCardInsightsError(error.message || 'AI insights are unavailable.');
+      setRefreshRemainingSeconds(Number(error.details?.retryAfterSeconds || 0));
+    } finally {
+      setCardInsightsLoading(false);
+    }
+  };
+
+  const renderCardInsight = (cardKey) => {
+    const updatedAt = cardInsightGeneratedAt
+      ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(cardInsightGeneratedAt))
+      : '';
+    return <section className="ai-revenue-modal-insight" aria-label="AI insight">
+      <div className="ai-revenue-modal-insight__header">
+        <h3>AI insight</h3>
+        <span>{cardInsightSource === 'ai' ? 'AI-generated from your data' : 'Auto-generated summary'}{updatedAt && ` · Updated ${updatedAt}`}</span>
+      </div>
+      <RevenueCardInsights
+        insights={cardInsights[cardKey]}
+        fallbackInsights={localCardInsightTemplates[cardKey]}
+        isLoading={cardInsightsLoading}
+        error={cardInsightsError}
+      />
+    </section>;
+  };
 
   return <>
   <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
@@ -575,7 +782,11 @@ function AIRevenueAnalysis({ dashboardData }) {
             <div className="ai-revenue-tabs" role="tablist" aria-label="Revenue analysis quarter">
               {quarters.map((row, index) => {
                 const key = `${row.year}-Q${row.quarter}`;
-                return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => setSelectedQuarterKey(key)}>{quarterLabel(row.year, row.quarter)}</button>;
+                return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => {
+                  setCardInsightsLoading(true);
+                  setCardInsightsError('');
+                  setSelectedQuarterKey(key);
+                }}>{quarterLabel(row.year, row.quarter)}</button>;
               })}
             </div>
             <div className="ai-revenue-completeness-banner">
@@ -607,28 +818,37 @@ function AIRevenueAnalysis({ dashboardData }) {
               <div><span>Outstanding</span><strong>{peso.format(outstandingAmount)}</strong></div>
               <div><span>Collection</span><strong>{collectedAmount + outstandingAmount ? Math.round(collectedAmount / (collectedAmount + outstandingAmount) * 100) : 0}%</strong></div>
             </div>
-            <div className="ai-revenue-cards">
-              <button type="button" className="ai-revenue-card" onClick={() => setModalId('trend')}>
-                <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">↗</span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
-                <strong>Revenue trend &amp; growth</strong><b>{peso.format(current.revenue)}</b>
-                <small>Why: QoQ risk uses completed-quarter revenue, not the in-progress quarter.</small>
-                <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
+            <div className="ai-revenue-insights-toolbar">
+              <span role="status">
+                {cardInsightSource === 'ai' ? 'AI-generated from your data' : 'Auto-generated summary'}
+                {cardInsightsError ? ' · AI unavailable; showing data-based summaries.' : ''}
+                {cardInsightGeneratedAt && ` · Updated ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(cardInsightGeneratedAt))}`}
+              </span>
+              <button type="button" className="ai-revenue-toolbar__action" onClick={refreshCardInsights} disabled={cardInsightsLoading || refreshRemainingSeconds > 0}>
+                {refreshRemainingSeconds > 0 ? `Refresh insights (${refreshRemainingSeconds}s)` : 'Refresh insights'}
               </button>
+            </div>
+            <div className="ai-revenue-cards">
+              <div className="ai-revenue-card" role="button" tabIndex={0} onClick={() => openAnalysis('trend')} onKeyDown={(event) => handleCardKeyDown(event, 'trend')}>
+                <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">↗</span><strong className="ai-revenue-card__title">Revenue trend &amp; growth</strong></span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
+                <b>{peso.format(current.revenue)}</b>
+                <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
+                <a className="ai-revenue-card__view" href="#trend-analysis" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAnalysis('trend'); }}>View analysis <span aria-hidden="true">›</span></a>
+              </div>
               {cardDetails.map((card) => {
-                return <button type="button" className="ai-revenue-card" key={card.id} onClick={() => setModalId(card.id)}>
-                  <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">{card.icon}</span><RiskChip level={card.riskLevel} why={card.why} /></div>
-                  <strong>{card.title}</strong>
+                return <div className="ai-revenue-card" role="button" tabIndex={0} key={card.id} onClick={() => openAnalysis(card.id)} onKeyDown={(event) => handleCardKeyDown(event, card.id)}>
+                  <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">{card.icon}</span><strong className="ai-revenue-card__title">{card.title}</strong></span><RiskChip level={card.riskLevel} why={card.why} /></div>
                   <b>{card.items.length ? `${card.items[0].share.toFixed(1)}% from ${card.items[0].name}` : 'No data'}</b>
                   <small>{card.description}</small>
-                </button>;
+                  <a className="ai-revenue-card__view" href={`#${card.id}-analysis`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAnalysis(card.id); }}>View analysis <span aria-hidden="true">›</span></a>
+                </div>;
               })}
-              <button type="button" className="ai-revenue-card" onClick={() => setModalId('estimate')}>
-                <div className="ai-revenue-card__top"><span className="ai-revenue-card__icon">◌</span><RiskChip level={indicators.forecastVsFourQuarterAverage?.level || 'Not enough data'} why={getRiskWhy('forecastVsFourQuarterAverage')} /></div>
-                <strong>{estimate?.targetLabel || 'Quarterly forecast'}</strong><b>{estimate ? `${peso.format(estimate.expected)} expected` : 'Limited history'}</b>
-                <small>Why: forecast compared with the average of the last four completed quarters.</small>
-                {estimate?.quarterToDate && <small>So far: {peso.format(estimate.quarterToDate.revenue)} ({estimate.quarterToDate.percentElapsed}% of the quarter elapsed)</small>}
+              <div className="ai-revenue-card" role="button" tabIndex={0} onClick={() => openAnalysis('estimate')} onKeyDown={(event) => handleCardKeyDown(event, 'estimate')}>
+                <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">◌</span><strong className="ai-revenue-card__title">{estimate?.targetLabel || 'Quarterly forecast'}</strong></span><RiskChip level={indicators.forecastVsFourQuarterAverage?.level || 'Not enough data'} why={getRiskWhy('forecastVsFourQuarterAverage')} /></div>
+                <b>{estimate ? `${peso.format(estimate.expected)} expected` : 'Limited history'}</b>
                 <small>{estimate ? `Likely range ${peso.format(estimate.low)} to ${peso.format(estimate.high)}` : `At least ${riskThresholds.minimumCompletedQuarters} completed quarters are required.`}</small>
-              </button>
+                <a className="ai-revenue-card__view" href="#estimate-analysis" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAnalysis('estimate'); }}>View analysis <span aria-hidden="true">›</span></a>
+              </div>
             </div>
             <p className="ai-revenue-uncategorized">Uncategorized (historical): {uncatShare.toFixed(1)}% of revenue</p>
             {(analysis.risk?.completedQuarterCount || 0) < riskThresholds.minimumCompletedQuarters && <p className="ai-revenue-empty" role="status">Fewer than {riskThresholds.minimumCompletedQuarters} completed quarters are available. The quarterly trend is shown; the forecast will appear after more data is recorded.</p>}
@@ -719,6 +939,7 @@ function AIRevenueAnalysis({ dashboardData }) {
           <p className="ai-revenue-modal__detail">{modalId === 'estimate' ? estimate ? `Likely range: ${peso.format(estimate.low)} to ${peso.format(estimate.high)}.` : `At least ${riskThresholds.minimumCompletedQuarters} quarters are needed for an estimate.` : `QoQ change: ${signedPercent(qoq)} · YoY change: ${signedPercent(yoy)}`}</p>
           <QuarterlyBarChart quarters={quarters.slice(0, selectedIndex + 1)} estimate={estimate} selectedKey={`${current.year}-Q${current.quarter}`} currentKey={currentQuarterKey} />
           <div className="ai-revenue-callout is-normal">Estimate is a simple planning aid based on average observed quarter-over-quarter growth, not a target.</div>
+          {renderCardInsight(modalId === 'estimate' ? 'forecast' : 'trend')}
         </div>
       </section>
     </div></AdminModalPortal>}
@@ -736,6 +957,7 @@ function AIRevenueAnalysis({ dashboardData }) {
             <HorizontalBars items={selectedAnalysis.items} />
             <div className="ai-revenue-thresholds__note">Threshold reference: Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate through {riskThresholds.topContributorShare.moderateMaxInclusive}%; High above {riskThresholds.topContributorShare.moderateMaxInclusive}%.</div>
           </> : <p className="ai-revenue-empty">There is no backend data for this concentration view.</p>}
+          {renderCardInsight(modalId)}
         </div>
       </section>
     </div></AdminModalPortal>}

@@ -37,8 +37,10 @@ export async function request(path, options = {}) {
   if (!response.ok) {
     const isAuthException = /\/(?:users|mechanics)\/login(?:[/?]|$)/.test(path)
       || /\/customers\/me\/password(?:[/?]|$)/.test(path)
+      || /\/users\/2fa\/(?:enable|disable)(?:[/?]|$)/.test(path)
       || (path === '/api/customers/me' && requestOptions.method === 'DELETE');
-    if (response.status === 401 && token && tokenKey && !isAuthException) {
+    const invalidToken = response.status === 401 && body?.message === 'Invalid token';
+    if (invalidToken && token && tokenKey && !isAuthException) {
       if (tokenKey === 'customerToken' || tokenKey === 'mechanicToken') {
         clearAuthSession(tokenKey === 'customerToken' ? 'customer' : 'mechanic');
       } else {
@@ -70,6 +72,21 @@ export const api = {
     body: JSON.stringify(credentials),
     tokenKey: null
   }),
+  verifyCustomerLoginOtp: (credentials) => request('/api/users/login/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify(credentials),
+    tokenKey: null
+  }),
+  resendCustomerLoginOtp: (identifier) => request('/api/users/login/resend-otp', {
+    method: 'POST',
+    body: JSON.stringify({ identifier }),
+    tokenKey: null
+  }),
+  setCustomerTwoFactor: (enabled, currentPassword) => request(`/api/users/2fa/${enabled ? 'enable' : 'disable'}`, {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword }),
+    tokenKey: 'customerToken'
+  }),
   loginMechanic: (credentials) => request('/api/mechanics/login', {
     method: 'POST',
     body: JSON.stringify(credentials),
@@ -90,14 +107,26 @@ export const api = {
     body: JSON.stringify(profile),
     tokenKey: 'customerToken'
   }),
+  uploadCustomerProfileImage: (file) => {
+    const body = new FormData();
+    body.append('image', file);
+    return request('/api/customers/me/profile-image', {
+      method: 'POST',
+      body,
+      tokenKey: 'customerToken'
+    });
+  },
+  removeCustomerProfileImage: () => request('/api/customers/me/profile-image', {
+    method: 'DELETE',
+    tokenKey: 'customerToken'
+  }),
   changeCustomerPassword: (passwords) => request('/api/customers/me/password', {
     method: 'POST',
     body: JSON.stringify(passwords),
     tokenKey: 'customerToken'
   }),
-  deleteCustomerAccount: (confirmation) => request('/api/customers/me', {
+  deleteCustomerAccount: () => request('/api/customers/me', {
     method: 'DELETE',
-    body: JSON.stringify(confirmation),
     tokenKey: 'customerToken'
   }),
   registerCustomer: (userData) => request('/api/users/register-request', {

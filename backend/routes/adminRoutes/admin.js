@@ -6,6 +6,7 @@ const { protect } = require('../../middleware/adminAuth');
 const reservations = require('../../controllers/reservationController');
 const notifications = require('../../controllers/notificationController');
 const serviceRequests = require('../../controllers/serviceRequestController');
+const dashboardController = require('../../controllers/adminControllers/dashboardController');
 const paymentUpload = require('../../middleware/paymentUpload');
 const paymentSettings = require('../../controllers/paymentSettingsController');
 const paymentSettingsUpload = require('../../middleware/paymentSettingsUpload');
@@ -17,6 +18,7 @@ router.post('/login', createLoginRateLimit(), login);
 
 // Protected routes
 router.get('/admin', protect, getAdmin);
+router.get('/dashboard/service-revenue', protect, dashboardController.getServiceRevenue);
 router.get('/notifications', protect, notifications.getAdminNotifications);
 router.delete('/notifications', protect, notifications.clearAdminNotifications);
 router.post('/notifications/read-all', protect, notifications.markAllAdminNotificationsRead);
