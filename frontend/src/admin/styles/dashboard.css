@@ -4,6 +4,9 @@
 .admin-root .admin-page-heading.admin-topbar-heading {
   margin-bottom: 0;
 }
+.admin-root .admin-page-heading.admin-mobile-page-heading {
+  margin: 16px 0;
+}
 .admin-root .admin-page-heading h1 {
   margin: 0;
   color: var(--ink);
@@ -15,6 +18,16 @@
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 13px;
+}
+.admin-root .admin-dashboard {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+.admin-root .admin-dashboard > .admin-stat-strip,
+.admin-root .admin-dashboard > .admin-sales-hero,
+.admin-root .admin-dashboard > .admin-service-revenue-panel {
+  margin-bottom: 0;
 }
 .admin-root .admin-inline-error,
 .admin-root .admin-error {
@@ -118,7 +131,6 @@
 .admin-root .admin-sales-hero {
   position: relative;
   overflow: hidden;
-  margin-bottom: 14px;
   padding: 22px 24px 18px;
   border: 1px solid #f6d3b0;
   border-radius: 16px;
@@ -245,7 +257,7 @@
   padding: 18px 20px;
 }
 .admin-root .admin-service-revenue-panel {
-  margin-top: 14px;
+  margin-top: 0;
 }
 .admin-root .admin-service-revenue__period {
   margin: -8px 0 12px;

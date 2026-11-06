@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import useDashboardData from '../hooks/useDashboardData';
 import AdminSidebar from '../components/layout/AdminSidebar';
 import AdminNotifications from '../components/layout/AdminNotifications';
+import AdminPageHeader from '../components/layout/AdminPageHeader';
 import RouteContentTransition from '../../components/RouteContentTransition';
 import {
   ADMIN_DRAWER_MEDIA_QUERY,
@@ -17,17 +18,20 @@ import '../styles/management.css';
 function AdminLayout() {
   const { pathname } = useLocation();
   const isDashboardRoute = pathname === '/admin' || pathname === '/admin/dashboard';
+  const pageTitle = isDashboardRoute
+    ? 'Dashboard'
+    : pathname.startsWith('/admin/transactions') || pathname.startsWith('/admin/reservations')
+      ? 'Transactions'
+      : pathname.startsWith('/admin/inventory')
+        ? 'Inventory'
+        : pathname.startsWith('/admin/mechanics')
+          ? 'Mechanics'
+          : null;
   const [isDrawerLayout, setIsDrawerLayout] = useState(() => window.matchMedia(ADMIN_DRAWER_MEDIA_QUERY).matches);
   const [drawerState, dispatchDrawer] = useReducer(adminDrawerReducer, { open: false, pathname: null });
   const drawerOpen = drawerState.open && drawerState.pathname === pathname;
   const hamburgerRef = useRef(null);
   const drawerRef = useRef(null);
-  const dashboardDate = new Intl.DateTimeFormat('en-PH', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  }).format(new Date());
   const dashboard = useDashboardData();
 
   useEffect(() => {
@@ -76,7 +80,7 @@ function AdminLayout() {
           onClose={closeDrawer}
         />
         <main className="admin-main" id="admin-main">
-          <header className={`admin-topbar${isDashboardRoute && !isDrawerLayout ? ' admin-topbar--dashboard' : ''}${isDrawerLayout ? ' admin-topbar--drawer-layout' : ''}`}>
+          <header className={`admin-topbar${pageTitle && !isDrawerLayout ? ' admin-topbar--page-heading' : ''}${isDashboardRoute && !isDrawerLayout ? ' admin-topbar--dashboard' : ''}${isDrawerLayout ? ' admin-topbar--drawer-layout' : ''}`}>
             {isDrawerLayout ? (
               <>
                 <div className="admin-mobile-topbar-leading">
@@ -98,11 +102,8 @@ function AdminLayout() {
                 </div>
                 <AdminNotifications />
               </>
-            ) : isDashboardRoute ? (
-              <div className="admin-page-heading admin-topbar-heading">
-                <h1>Dashboard</h1>
-                <p>{dashboardDate}</p>
-              </div>
+            ) : pageTitle ? (
+              <AdminPageHeader title={pageTitle} className="admin-topbar-heading" />
             ) : null}
             {!isDrawerLayout && <div className="admin-topbar-actions">
               <span className="admin-topbar-label">Administration</span>
@@ -110,11 +111,8 @@ function AdminLayout() {
             </div>}
           </header>
           <RouteContentTransition>
-            {isDrawerLayout && isDashboardRoute && (
-              <header className="admin-page-heading admin-mobile-page-heading">
-                <h1>Dashboard</h1>
-                <p>{dashboardDate}</p>
-              </header>
+            {isDrawerLayout && pageTitle && (
+              <AdminPageHeader title={pageTitle} className="admin-mobile-page-heading" />
             )}
             <Outlet context={dashboard} />
           </RouteContentTransition>

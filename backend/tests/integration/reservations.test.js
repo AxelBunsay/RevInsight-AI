@@ -18,6 +18,7 @@ const {
   signCustomer,
   signAdmin
 } = require('./helpers');
+const Cart = require('../../models/orderingModels/cart');
 const { getRevenueEntries } = require('../../utils/revenue');
 
 const png = Buffer.from(
@@ -103,6 +104,7 @@ describe('reservation business flow integration', () => {
 
   beforeEach(async () => {
     await clearCollections();
+    await Cart.deleteMany({});
     mockCloudinary();
     fixtures = await createFixtures();
     customerToken = signCustomer(fixtures.customer);
@@ -125,9 +127,59 @@ describe('reservation business flow integration', () => {
       balanceDue: 2000,
       status: 'Pending Down Payment'
     });
+
     const saved = await Reservation.findById(response.body.reservation._id).lean();
     expect(saved.total).toBe(2000);
     expect(saved.downPaymentAmount).toBe(600);
+  });
+
+  it('reserves only selected saved-cart quantities and keeps the remaining cart items', async () => {
+    const otherProduct = await Product.create({
+      name: 'Other Saved Cart Part',
+      price: 75,
+      quantity: 5,
+      category: 'Electrical'
+    });
+    const cart = await Cart.create({
+      customerName: 'Casey Customer',
+      customerPhone: fixtures.customer.phoneNumber,
+      items: [
+        { productId: fixtures.product._id, productName: fixtures.product.name, price: fixtures.product.price, quantity: 3 },
+        { productId: otherProduct._id, productName: otherProduct.name, price: otherProduct.price, quantity: 2 }
+      ],
+      totalPrice: fixtures.product.price * 3 + otherProduct.price * 2
+    });
+
+    const response = await api.post('/api/orders/checkout')
+      .set('Authorization', 'Bearer ' + customerToken)
+      .send({ items: [{ productId: String(fixtures.product._id), qty: 1 }] });
+
+    expect(response.status).toBe(201);
+    expect(response.body.reservation.items).toHaveLength(1);
+    expect(String(response.body.reservation.items[0].productId)).toBe(String(fixtures.product._id));
+    const savedCart = await Cart.findById(cart._id);
+    expect(savedCart.items.map((item) => [String(item.productId), item.quantity])).toEqual([
+      [String(fixtures.product._id), 2],
+      [String(otherProduct._id), 2]
+    ]);
+  });
+
+  it('rejects selected saved-cart quantities greater than the stored quantity', async () => {
+    const cart = await Cart.create({
+      customerName: 'Casey Customer',
+      customerPhone: fixtures.customer.phoneNumber,
+      items: [{ productId: fixtures.product._id, productName: fixtures.product.name, price: fixtures.product.price, quantity: 1 }],
+      totalPrice: fixtures.product.price
+    });
+
+    const response = await api.post('/api/orders/checkout')
+      .set('Authorization', 'Bearer ' + customerToken)
+      .send({ items: [{ productId: String(fixtures.product._id), qty: 2 }] });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/not available in your saved cart/i);
+    expect(await Reservation.countDocuments()).toBe(0);
+    expect((await Cart.findById(cart._id)).items[0].quantity).toBe(1);
   });
 
   it('reserves only the selected variant and uses its server price', async () => {

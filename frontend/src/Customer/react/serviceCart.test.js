@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCartSummary, getServiceCartPaymentSummary, replaceServiceCartItem } from './serviceCart';
+import { getCartSummary, getServiceCartPaymentSummary, isCartItemSelected, replaceServiceCartItem } from './serviceCart';
 
 describe('service cart helpers', () => {
   const booking = {
@@ -11,6 +11,12 @@ describe('service cart helpers', () => {
     units: 2,
     estimatedPrice: 400
   };
+
+  it('treats new and legacy cart rows as selected unless explicitly unchecked', () => {
+    expect(isCartItemSelected({})).toBe(true);
+    expect(isCartItemSelected({ selected: true })).toBe(true);
+    expect(isCartItemSelected({ selected: false })).toBe(false);
+  });
 
   it('updates a booking in place without changing its cart identity or count', () => {
     const cart = [booking, { kind: 'product', key: 'oil', price: 250, quantity: 1 }];
@@ -25,8 +31,18 @@ describe('service cart helpers', () => {
     expect(result.cart[0]).toMatchObject({
       key: 'bearing-booking',
       bookingDate: '2026-11-03',
-      estimatedPrice: 500
+      estimatedPrice: 500,
+      selected: true
     });
+  });
+
+  it('keeps deselection when replacing an existing service booking', () => {
+    const result = replaceServiceCartItem([{ ...booking, selected: false }], booking.key, {
+      ...booking,
+      bookingDate: '2026-11-03'
+    });
+
+    expect(result.cart[0].selected).toBe(false);
   });
 
   it('leaves the old booking unchanged when the selected slot is unavailable', () => {
@@ -67,6 +83,23 @@ describe('service cart helpers', () => {
       downPaymentAmount: 0.04,
       balanceDue: 0.06,
       downPaymentPercent: 30
+    });
+  });
+
+  it('summarizes only selected cart rows while treating legacy rows as selected', () => {
+    expect(getCartSummary([
+      { kind: 'product', price: 250, quantity: 2, selected: true },
+      { kind: 'product', price: 500, quantity: 1, selected: false },
+      { kind: 'service', estimatedPrice: 400, selected: false },
+      { kind: 'service', estimatedPrice: 200 }
+    ], 30)).toMatchObject({
+      hasProducts: true,
+      hasServices: true,
+      productSubtotal: 500,
+      serviceSubtotal: 200,
+      downPayment: 150,
+      balanceDueAtPickup: 350,
+      cartTotal: 700
     });
   });
 });

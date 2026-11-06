@@ -221,6 +221,9 @@
 .admin-root .admin-topbar--dashboard {
   justify-content: space-between;
 }
+.admin-root .admin-topbar--page-heading {
+  justify-content: space-between;
+}
 
 .admin-root .admin-topbar-heading {
   flex: 1 1 auto;
@@ -247,6 +250,14 @@
 
   .admin-root .admin-topbar--dashboard .admin-topbar-label {
     display: none;
+  }
+
+  .admin-root .admin-topbar-heading {
+    align-self: flex-start;
+  }
+
+  .admin-root .admin-topbar-heading p {
+    white-space: normal;
   }
 }
 
@@ -583,7 +594,6 @@
 
 .admin-root.admin-root--drawer-layout .admin-mobile-page-heading {
   display: block;
-  margin: 16px 0;
 }
 
 .admin-root.admin-root--drawer-layout .admin-topbar-heading,

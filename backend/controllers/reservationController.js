@@ -260,6 +260,31 @@ const createReservationFromCart = async (req, res) => {
     const cart = await Cart.findOne({ customerPhone: user.phoneNumber });
     if (!cart || !cart.items.length) return res.status(400).json({ success: false, message: 'Cart is empty.' });
 
+    const selectedItems = req.body?.items;
+    if (!Array.isArray(selectedItems) || selectedItems.length < 1 || selectedItems.length > 50) {
+      return res.status(400).json({ success: false, message: 'Select between 1 and 50 cart items to reserve.' });
+    }
+    const selectedIds = new Set();
+    const requestedItems = [];
+    for (const selected of selectedItems) {
+      if (!selected || !mongoose.Types.ObjectId.isValid(selected.productId)) {
+        return res.status(400).json({ success: false, message: 'Each selected cart item must have a valid product ID.' });
+      }
+      const productId = String(selected.productId);
+      if (selectedIds.has(productId)) {
+        return res.status(400).json({ success: false, message: 'Each cart product can only be selected once.' });
+      }
+      selectedIds.add(productId);
+      if (!Number.isInteger(selected.qty) || selected.qty < 1 || selected.qty > 99999) {
+        return res.status(400).json({ success: false, message: 'Selected quantities must be whole numbers from 1 to 99,999.' });
+      }
+      const savedItem = cart.items.find((item) => String(item.productId) === productId);
+      if (!savedItem || selected.qty > savedItem.quantity) {
+        return res.status(400).json({ success: false, message: 'A selected product or quantity is not available in your saved cart.' });
+      }
+      requestedItems.push({ productId, qty: selected.qty });
+    }
+
     const captured = {
       statusCode: 200,
       payload: null,
@@ -274,11 +299,18 @@ const createReservationFromCart = async (req, res) => {
     };
     await createReservation({
       user: req.user,
-      body: { items: cart.items.map((item) => ({ productId: item.productId, qty: item.quantity })) }
+      body: { items: requestedItems }
     }, captured);
     if (captured.statusCode >= 400) return res.status(captured.statusCode).json(captured.payload);
     try {
-      await Cart.deleteOne({ _id: cart._id });
+      for (const selected of requestedItems) {
+        const savedItem = cart.items.find((item) => String(item.productId) === selected.productId);
+        savedItem.quantity -= selected.qty;
+      }
+      cart.items = cart.items.filter((item) => item.quantity > 0);
+      cart.totalPrice = cart.items.reduce((total, item) => total + Number(item.price || 0) * item.quantity, 0);
+      if (cart.items.length) await cart.save();
+      else await Cart.deleteOne({ _id: cart._id });
     } catch (error) {
       console.error('[createReservationFromCart] cart cleanup failed', error);
       return res.status(201).json({
