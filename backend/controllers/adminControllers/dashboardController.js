@@ -51,6 +51,16 @@ const getRevenueByPeriod = async (unit, fromDate) => {
   return groupRevenueByPeriod(entries, unit);
 };
 
+const getRevenueChartEntries = async (_req, res) => {
+  try {
+    const entries = await loadRevenueEntries();
+    return res.json({ success: true, data: entries });
+  } catch (error) {
+    console.error('[getRevenueChartEntries] error', error);
+    return res.status(500).json({ success: false, message: 'Failed to load revenue chart data.' });
+  }
+};
+
 const getRevenueConcentration = async (req, res) => {
   try {
     const entries = await loadRevenueEntries();
@@ -1024,6 +1034,7 @@ const getMechanicsReport = async (req, res) => {
 module.exports = {
   getDashboardStats,
   getRevenueData,
+  getRevenueChartEntries,
   getServiceRevenue,
   getQuarterlyData,
   getDailyData,

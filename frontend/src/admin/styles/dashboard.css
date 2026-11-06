@@ -1450,6 +1450,21 @@
 .admin-root .ai-revenue-ai-answer-footer > small {
   flex-basis: 100%;
 }
+.admin-root .ai-revenue-answer-chart {
+  min-width: 0;
+  margin: 20px 0 0;
+}
+.admin-root .ai-revenue-answer-chart__canvas {
+  position: relative;
+  width: 100%;
+  height: 240px;
+}
+.admin-root .ai-revenue-answer-chart figcaption {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
 .admin-root .ai-revenue-thresholds__note {
   margin-top: 12px;
   border-radius: 10px;
@@ -1912,6 +1927,9 @@
   }
   .admin-root .ai-revenue-ai-answer-wrap {
     padding: 18px 14px;
+  }
+  .admin-root .ai-revenue-answer-chart__canvas {
+    height: 210px;
   }
   .admin-root .ai-revenue-ai-error {
     align-items: flex-start;

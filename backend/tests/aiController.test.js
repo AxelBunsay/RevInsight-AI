@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const require = createRequire(import.meta.url);
 const express = require('express');
@@ -101,7 +101,119 @@ describe('revenue AI controller helpers', () => {
       generateRevenueInsights: async () => 'Revenue reached $1,234.'
     });
 
-    expect(responseBody).toMatchObject({ success: true, answer: 'Revenue reached ₱1,234.' });
+    expect(responseBody).toMatchObject({ success: true, answer: 'Revenue reached ₱1,234.', chart: null });
+  });
+
+  it('builds selected chart labels and values from recorded revenue, not model data', async () => {
+    let responseBody;
+    const quarterly = [
+      { _id: { year: 2025, quarter: 1 }, revenue: 50 },
+      { _id: { year: 2025, quarter: 2 }, revenue: 60 },
+      { _id: { year: 2025, quarter: 3 }, revenue: 70 },
+      { _id: { year: 2025, quarter: 4 }, revenue: 80 },
+      { _id: { year: 2026, quarter: 1 }, revenue: 100 },
+      { _id: { year: 2026, quarter: 2 }, revenue: 9999 }
+    ];
+    const successController = async (_req, res) => res.json({ success: true, data: {} });
+    const dashboardController = {
+      getDashboardStats: successController,
+      getQuarterlyData: async (_req, res) => res.json({ success: true, data: quarterly }),
+      getRevenueRisk: successController,
+      getRevenueConcentration: successController,
+      getRevenueData: async (_req, res) => res.json({ success: true, data: [] }),
+      getRevenueChartEntries: async (_req, res) => res.json({
+        success: true,
+        data: [
+          { year: 2026, quarter: 1, source: 'order', category: 'Parts', contributorType: 'Parts', name: 'Brake pads', revenue: 75 },
+          { year: 2026, quarter: 1, source: 'order', category: 'Gear', contributorType: 'Gear', name: 'Helmet', revenue: 25 },
+          { year: 2026, quarter: 2, source: 'order', category: 'Future', contributorType: 'Future', name: 'Not completed', revenue: 9999 }
+        ]
+      })
+    };
+    const res = {
+      json(body) {
+        responseBody = body;
+        return body;
+      },
+      status(code) {
+        throw new Error(`Unexpected status ${code}`);
+      }
+    };
+
+    await askRevenueAI({ body: { question: 'Show category share.' } }, res, {
+      dashboardController,
+      now: new Date('2026-04-15T00:00:00+08:00'),
+      generateRevenueInsights: async () => 'Parts lead the completed-quarter mix.',
+      generateRevenueChartType: async () => 'category_share'
+    });
+
+    expect(responseBody.chart).toEqual({
+      type: 'category_share',
+      title: 'Revenue share by category · 2026 Q1',
+      labels: ['Parts', 'Gear'],
+      datasets: [{ label: 'Revenue share', data: [75, 25] }]
+    });
+    expect(responseBody.answer).toBe('Parts lead the completed-quarter mix.');
+  });
+
+  it('returns no chart for an invalid or none chart selection', async () => {
+    const successController = async (_req, res) => res.json({ success: true, data: [] });
+    const dashboardController = {
+      getDashboardStats: successController,
+      getQuarterlyData: successController,
+      getRevenueRisk: successController,
+      getRevenueConcentration: successController,
+      getRevenueData: successController,
+      getRevenueChartEntries: successController
+    };
+    const callWithChartType = async (chartType) => {
+      let responseBody;
+      const res = {
+        json(body) { responseBody = body; return body; },
+        status(code) { throw new Error(`Unexpected status ${code}`); }
+      };
+      await askRevenueAI({ body: { question: 'What is the revenue outlook?' } }, res, {
+        dashboardController,
+        generateRevenueInsights: async () => 'Revenue answer.',
+        generateRevenueChartType: async () => chartType
+      });
+      return responseBody;
+    };
+
+    await expect(callWithChartType('made_up')).resolves.toMatchObject({ answer: 'Revenue answer.', chart: null });
+    await expect(callWithChartType(null)).resolves.toMatchObject({ answer: 'Revenue answer.', chart: null });
+  });
+
+  it('keeps the text answer when chart selection fails', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const successController = async (_req, res) => res.json({ success: true, data: [] });
+    const dashboardController = {
+      getDashboardStats: successController,
+      getQuarterlyData: successController,
+      getRevenueRisk: successController,
+      getRevenueConcentration: successController,
+      getRevenueData: successController,
+      getRevenueChartEntries: successController
+    };
+    let responseBody;
+    const res = {
+      json(body) { responseBody = body; return body; },
+      status(code) { throw new Error(`Unexpected status ${code}`); }
+    };
+
+    await askRevenueAI({ body: { question: 'Compare revenue.' } }, res, {
+      dashboardController,
+      generateRevenueInsights: async () => 'The text answer remains available.',
+      generateRevenueChartType: async () => { throw new Error('Chart selection unavailable.'); }
+    });
+
+    expect(responseBody).toMatchObject({
+      success: true,
+      answer: 'The text answer remains available.',
+      chart: null
+    });
+    expect(warning).toHaveBeenCalledOnce();
+    warning.mockRestore();
   });
 
   it('includes the dashboard forecast, official risk levels, shared thresholds, and uncategorized share in the AI payload', async () => {

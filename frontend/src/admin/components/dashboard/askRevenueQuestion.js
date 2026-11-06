@@ -11,6 +11,7 @@ export async function askRevenueQuestion({
   request,
   setIsLoading,
   setAnswer,
+  setChart,
   setTimestamp,
   setError
 }) {
@@ -21,6 +22,7 @@ export async function askRevenueQuestion({
   setIsLoading(true);
   setError('');
   setAnswer('');
+  setChart?.(null);
   setTimestamp('');
   try {
     const response = await request(trimmedQuestion);
@@ -28,6 +30,7 @@ export async function askRevenueQuestion({
       throw new Error('The AI returned an empty answer. Please try again.');
     }
     setAnswer(response.answer);
+    setChart?.(response.chart || null);
     setTimestamp(response.timestamp || new Date().toISOString());
     return true;
   } catch (requestError) {

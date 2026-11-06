@@ -3,6 +3,7 @@ const {
   CARD_INSIGHT_FIELDS,
   CARD_INSIGHT_KEYS,
   generateCardInsights,
+  generateRevenueChartType,
   generateRevenueInsights,
   isValidCardInsights
 } = require('../../services/aiService');
@@ -10,7 +11,8 @@ const dashboardController = require('./dashboardController');
 const {
   REVENUE_TIMEZONE,
   REVENUE_RISK_THRESHOLDS,
-  calculateDashboardForecast
+  calculateDashboardForecast,
+  buildRevenueChartData
 } = require('../../utils/revenue');
 
 const CARD_INSIGHT_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -83,19 +85,23 @@ async function getControllerResult(controller, req) {
   return result;
 }
 
-async function gatherRevenueAnalysisData(req, dashboard, now) {
+async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntries = false } = {}) {
   const mockReq = { ...req, query: {} };
-  const [statsRes, quarterlyRes, riskRes, concentrationRes, monthlyRes] = await Promise.all([
+  const [statsRes, quarterlyRes, riskRes, concentrationRes, monthlyRes, chartEntriesRes] = await Promise.all([
     getControllerResult(dashboard.getDashboardStats, mockReq),
     getControllerResult(dashboard.getQuarterlyData, mockReq),
     getControllerResult(dashboard.getRevenueRisk, mockReq),
     getControllerResult(dashboard.getRevenueConcentration, mockReq),
-    getControllerResult(dashboard.getRevenueData, mockReq)
+    getControllerResult(dashboard.getRevenueData, mockReq),
+    includeChartEntries && dashboard.getRevenueChartEntries
+      ? getControllerResult(dashboard.getRevenueChartEntries, mockReq)
+      : Promise.resolve({ data: [] })
   ]);
 
   return {
     stats: statsRes.data,
     quarterly: quarterlyRes.data,
+    ...(includeChartEntries ? { chartEntries: chartEntriesRes.data } : {}),
     revenueRisk: riskRes.data,
     revenueConcentration: concentrationRes.data,
     monthly: getRecentMonthlyRevenue(monthlyRes.data, now),
@@ -124,14 +130,36 @@ async function askRevenueAI(req, res, dependencies = {}) {
   }
 
   try {
-    const revenueData = await gatherRevenueAnalysisData(req, dashboard, now);
-
-    const answer = formatRevenueAnswer(await revenueInsights(question, revenueData));
+    const revenueData = await gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntries: true });
+    const { chartEntries, ...aiRevenueData } = revenueData;
+    const generated = await revenueInsights(question, aiRevenueData);
+    const answer = formatRevenueAnswer(generated);
+    if (!answer.trim()) throw new Error('Revenue AI returned an empty answer.');
+    let chart = null;
+    let chartType = null;
+    try {
+      const selectChartType = dependencies.generateRevenueChartType || generateRevenueChartType;
+      chartType = await selectChartType(question);
+    } catch (selectionError) {
+      let detail = String(selectionError?.message || selectionError);
+      if (process.env.GEMINI_API_KEY) {
+        detail = detail.split(process.env.GEMINI_API_KEY).join('[redacted]');
+      }
+      console.warn(`[askRevenueAI] Chart selection failed; returning the text answer without a chart: ${detail}`);
+    }
+    if (chartType) {
+      try {
+        chart = buildRevenueChartData(chartType, chartEntries, revenueData.quarterly, now);
+      } catch (chartError) {
+        console.error('[askRevenueAI] chart data error', chartError);
+      }
+    }
 
     res.json({
       success: true,
       question,
       answer,
+      chart,
       timestamp: now.toISOString()
     });
   } catch (error) {
