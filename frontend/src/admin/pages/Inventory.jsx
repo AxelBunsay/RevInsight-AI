@@ -518,17 +518,10 @@ function Inventory() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-
     setImageError("");
     setImageFileName(file.name);
-    const extension = file.name.split(".").pop()?.toLowerCase();
-    const acceptedTypes = new Map([
-      ["image/png", "png"],
-      ["image/jpeg", "jpg"],
-      ["image/webp", "webp"]
-    ]);
-    const expectedExtension = acceptedTypes.get(file.type);
-    if (!expectedExtension || (extension !== expectedExtension && !(expectedExtension === "jpg" && extension === "jpeg"))) {
+    const acceptedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
+    if (!acceptedTypes.has(file.type)) {
       if (imagePreview.startsWith("blob:")) URL.revokeObjectURL(imagePreview);
       setImageFile(null);
       setImagePreview(removeImage ? "" : editingItem?.imageUrl || editingItem?.image || "");
@@ -1129,7 +1122,7 @@ function Inventory() {
                       {variant.imagePreview && !variant.removeImage && (
                         <button className="btn-small btn-delete" type="button" onClick={() => removeVariantImage(index)}>Remove photo</button>
                       )}
-                      <small>PNG, JPG, or WEBP · up to 2 MB</small>
+                      {!variant.imageError && <small>PNG, JPG, or WEBP · up to 2 MB</small>}
                       {variant.imageError && <small className="inventory-field-error" role="alert">{variant.imageError}</small>}
                     </div>
                     <button className="btn-small btn-delete" type="button" onClick={() => removeVariantRow(index)}>
@@ -1153,7 +1146,7 @@ function Inventory() {
                 </div>
               </div>
               {imageError && <small className="inventory-field-error" role="alert">{imageError}</small>}
-              <small>PNG, JPG, or WEBP · up to 2 MB</small>
+              {!imageError && <small>PNG, JPG, or WEBP · up to 2 MB</small>}
             </div>
           </form>
         </AdminDialog>
