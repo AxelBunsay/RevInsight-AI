@@ -771,20 +771,9 @@ const changePassword = async (req, res) => {
 
 const deleteAccount = async (req, res) => {
   try {
-    const { password, confirmation } = req.body || {};
-    if (typeof password !== 'string' || !password) {
-      return res.status(400).json({ message: 'Your password is required to delete your account.' });
-    }
-    if (typeof confirmation !== 'string' || confirmation !== 'DELETE') {
-      return res.status(400).json({ message: 'Type DELETE to confirm account deletion.' });
-    }
-
-    const user = await User.findById(req.user.userId).select('+password');
+    const user = await User.findById(req.user.userId);
     if (!user || user.isDeleted) {
       return res.status(404).json({ message: 'Customer account not found.' });
-    }
-    if (!(await bcrypt.compare(password, user.password))) {
-      return res.status(400).json({ message: 'Current password is incorrect.' });
     }
 
     const [activeReservation, activeBooking] = await Promise.all([

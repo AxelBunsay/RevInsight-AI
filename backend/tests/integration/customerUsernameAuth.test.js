@@ -302,12 +302,12 @@ describe('customer username authentication', () => {
     expect(wrongChangePassword.status).toBe(400);
     expect(wrongChangePassword.body).toEqual({ message: 'Current password is incorrect.' });
 
-    const wrongDeletePassword = await api.delete('/api/customers/me')
+    const deleteWithoutCredentials = await api.delete('/api/customers/me')
       .set('Authorization', `Bearer ${token}`)
-      .send({ password: 'WrongPassword1', confirmation: 'DELETE' });
-    expect(wrongDeletePassword.status).toBe(400);
-    expect(wrongDeletePassword.body).toEqual({ message: 'Current password is incorrect.' });
-    expect(Boolean(await User.exists({ _id: fixtures.customer._id, isDeleted: { $ne: true } }))).toBe(true);
+      .send({});
+    expect(deleteWithoutCredentials.status).toBe(200);
+    expect(deleteWithoutCredentials.body).toEqual({ message: 'Your account was deleted.' });
+    expect(Boolean(await User.exists({ _id: fixtures.customer._id, isDeleted: { $ne: true } }))).toBe(false);
   });
 
   it('returns username in the customer profile and does not allow profile updates to change it', async () => {

@@ -1,6 +1,6 @@
 // Runtime validation coverage for multipart payment submission behavior.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { api, request } from './api';
+import { api } from './api';
 import { adminApi } from '../admin/services/adminApi';
 
 afterEach(() => {
@@ -135,12 +135,9 @@ describe('request authentication expiry handling', () => {
   it('does not clear a token for the delete-account endpoint', async () => {
     const { removeItem, assign } = mockUnauthorized({ customerToken: 'customer-token' });
 
-    await expect(request('/api/customers/me', {
-      method: 'DELETE',
-      body: JSON.stringify({ password: 'wrong', confirmation: 'DELETE' }),
-      tokenKey: 'customerToken'
-    })).rejects.toMatchObject({ status: 401 });
+    await expect(api.deleteCustomerAccount()).rejects.toMatchObject({ status: 401 });
 
+    expect(fetch.mock.calls[0][1].body).toBeUndefined();
     expect(removeItem).not.toHaveBeenCalled();
     expect(assign).not.toHaveBeenCalled();
   });

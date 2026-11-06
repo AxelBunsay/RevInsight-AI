@@ -125,9 +125,8 @@ export const api = {
     body: JSON.stringify(passwords),
     tokenKey: 'customerToken'
   }),
-  deleteCustomerAccount: (confirmation) => request('/api/customers/me', {
+  deleteCustomerAccount: () => request('/api/customers/me', {
     method: 'DELETE',
-    body: JSON.stringify(confirmation),
     tokenKey: 'customerToken'
   }),
   registerCustomer: (userData) => request('/api/users/register-request', {

@@ -58,11 +58,10 @@ export default function CustomerProfile() {
   const [twoFactorError, setTwoFactorError] = useState('');
   const [isUpdatingTwoFactor, setIsUpdatingTwoFactor] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [deletePassword, setDeletePassword] = useState('');
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [hasBlockedRecords, setHasBlockedRecords] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const deleteDialogRef = useRef(null);
   const customerName = `${profileForm.firstName} ${profileForm.lastName}`.trim() || profile.name || 'Demo Rider';
 
   useEffect(() => () => {
@@ -75,6 +74,41 @@ export default function CustomerProfile() {
   useCustomerModalEffects(isTwoFactorModalOpen, () => {
     if (!isUpdatingTwoFactor) setIsTwoFactorModalOpen(false);
   });
+
+  useEffect(() => {
+    if (!isDeleteModalOpen) return undefined;
+    const dialog = deleteDialogRef.current;
+    dialog?.focus();
+
+    const keepFocusInDialog = (event) => {
+      if (event.key !== 'Tab' || !dialog) return;
+      const focusable = [...dialog.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!dialog.contains(document.activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (event.shiftKey && document.activeElement === dialog) {
+        event.preventDefault();
+        last.focus();
+      } else if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', keepFocusInDialog);
+    return () => document.removeEventListener('keydown', keepFocusInDialog);
+  }, [isDeleteModalOpen]);
 
   useEffect(() => {
     let isMounted = true;
@@ -271,16 +305,12 @@ export default function CustomerProfile() {
     }
   };
 
-  const deleteAccount = async (event) => {
-    event.preventDefault();
+  const deleteAccount = async () => {
     setDeleteError('');
     setHasBlockedRecords(false);
     setIsDeletingAccount(true);
     try {
-      const response = await api.deleteCustomerAccount({
-        password: deletePassword,
-        confirmation: deleteConfirmation
-      });
+      const response = await api.deleteCustomerAccount();
       clearAuthSession('customer');
       clearCustomerAuthAction();
       clearCustomerData();
@@ -291,10 +321,6 @@ export default function CustomerProfile() {
     } catch (error) {
       const message = error.message || 'Your account could not be deleted.';
       setDeleteError(message);
-      if (message === incorrectPasswordMessage) {
-        setDeletePassword('');
-        window.requestAnimationFrame(() => document.getElementById('delete-account-password')?.focus());
-      }
       setHasBlockedRecords(error.status === 409 && Boolean(error.details?.records));
     } finally {
       setIsDeletingAccount(false);
@@ -415,7 +441,7 @@ export default function CustomerProfile() {
         <section className="customer-account-delete">
           <h2>Delete account</h2>
           <p>Deleting your account removes your personal information. Your past purchase and booking records are kept without your name for the shop&apos;s sales records.</p>
-          <button type="button" className="customer-danger-button" onClick={() => { setDeletePassword(''); setDeleteConfirmation(''); setDeleteError(''); setHasBlockedRecords(false); setIsDeleteModalOpen(true); }}>Delete my account</button>
+          <button type="button" className="customer-danger-button" onClick={() => { setDeleteError(''); setHasBlockedRecords(false); setIsDeleteModalOpen(true); }}>Delete my account</button>
         </section>
       </section>}
 
@@ -431,24 +457,28 @@ export default function CustomerProfile() {
         </form>
       </section>}
 
-      {isDeleteModalOpen && <CustomerModalPortal><div className="customer-confirmation-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingAccount) setIsDeleteModalOpen(false); }}>
-        <section className="customer-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title">
-          <header className="customer-modal-header"><h2 id="delete-account-title">Delete your account?</h2><button type="button" className="customer-modal-close" aria-label="Close delete account dialog" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>×</button></header>
+      {isDeleteModalOpen && <CustomerModalPortal><div className="customer-confirmation-backdrop customer-delete-account-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !isDeletingAccount) setIsDeleteModalOpen(false); }}>
+        <section ref={deleteDialogRef} className="customer-confirmation-dialog customer-delete-account-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title" tabIndex="-1">
+          <header className="customer-modal-header customer-delete-header">
+            <div className="customer-delete-heading">
+              <span className="customer-delete-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M12 3.25 1.8 20.75h20.4L12 3.25Z" fill="currentColor" /><path d="M12 9v5" stroke="#fff" strokeWidth="2" strokeLinecap="round" /><circle cx="12" cy="17" r="1.15" fill="#fff" /></svg></span>
+              <h2 id="delete-account-title">Delete your account?</h2>
+            </div>
+            <button type="button" className="customer-modal-close" aria-label="Close" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+          </header>
           <div className="customer-modal-body">
-            <p>This action cannot be undone. Enter your password and type DELETE to confirm.</p>
-            <form id="delete-account-form" onSubmit={deleteAccount}>
-              <label className="customer-delete-field">Password<PasswordInput id="delete-account-password" autoComplete="current-password" aria-invalid={deleteError === incorrectPasswordMessage} value={deletePassword} onChange={(event) => { setDeletePassword(event.target.value); setDeleteError(''); }} />{deleteError === incorrectPasswordMessage && <small className="customer-field-error" role="alert">{deleteError}</small>}</label>
-              <label className="customer-delete-field">Type DELETE to confirm<input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label>
-              {deleteError && deleteError !== incorrectPasswordMessage && <p className="customer-field-error" role="alert">{deleteError}</p>}
+            <p>This action cannot be undone. Your profile, saved details and access to your account will be removed. Your past orders and bookings are kept for the shop&apos;s records without your personal details.</p>
+            {deleteError && <div className="customer-delete-notice" role="alert">
+              <p>{deleteError}</p>
               {hasBlockedRecords && <div className="customer-delete-record-links">
                 <Link to="/my-purchases?tab=items">View reservations</Link>
                 <Link to="/my-purchases?tab=services">View bookings</Link>
               </div>}
-            </form>
+            </div>}
           </div>
           <footer className="customer-modal-footer">
-            <button type="button" className="customer-primary-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
-            <button type="submit" form="delete-account-form" className="customer-danger-button" disabled={isDeletingAccount || !deletePassword || deleteConfirmation !== 'DELETE'}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
+            <button type="button" className="customer-delete-cancel-button" onClick={() => setIsDeleteModalOpen(false)} disabled={isDeletingAccount}>Cancel</button>
+            <button type="button" className="customer-delete-submit-button" onClick={deleteAccount} disabled={isDeletingAccount}>{isDeletingAccount ? 'Deleting...' : 'Delete my account'}</button>
           </footer>
         </section>
       </div></CustomerModalPortal>}
