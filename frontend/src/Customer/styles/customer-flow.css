@@ -29,6 +29,14 @@
   margin: 0 0 20px;
 }
 
+.customer-page:is(.shop-page, .services-page) .customer-product-categories {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .customer-product-categories button {
   display: inline-flex;
   align-items: center;

@@ -9,5 +9,15 @@
     "Oil & Fluids",
     "Seat Works",
     "Tires & Wheels"
-  ]
+  ],
+  "VARIANT_CATEGORY_FIELDS": {
+    "Accessory": "accessory",
+    "Brakes": "fitment",
+    "Cables": "fitment",
+    "Electrical": "fitment",
+    "Engine Parts": "fitment",
+    "Oil & Fluids": "fitment",
+    "Seat Works": "accessory",
+    "Tires & Wheels": "fitment"
+  }
 }
