@@ -53,6 +53,24 @@ describe('customer payment submission', () => {
   });
 });
 
+describe('saved cart reservation checkout', () => {
+  it('sends only the selected product IDs and quantities to checkout', async () => {
+    vi.stubGlobal('localStorage', { getItem: () => 'customer-token', removeItem: vi.fn() });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ success: true })
+    }));
+    const items = [{ productId: 'selected-product', qty: 2 }];
+
+    await api.checkout(items);
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toContain('/api/orders/checkout');
+    expect(JSON.parse(options.body)).toEqual({ items });
+  });
+});
+
 describe('request authentication expiry handling', () => {
   const mockUnauthorized = (tokens = {}) => {
     const removeItem = vi.fn();

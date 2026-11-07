@@ -1,5 +1,11 @@
 const REVENUE_TIMEZONE = 'Asia/Manila';
 const ORDER_STATUSES = ['completed', 'Paid'];
+const REVENUE_AI_CHART_TYPES = [
+  'quarter_comparison',
+  'quarterly_trend',
+  'category_share',
+  'top_contributors'
+];
 const REVENUE_RISK_THRESHOLDS = require('../../shared/revenueRiskConfig.json');
 
 const dateExpression = (field) => ({ $toDate: `$${field}` });
@@ -378,6 +384,83 @@ function getCompletedQuarterRows(quarterlyRows, now = new Date()) {
       || Number(left._id.quarter) - Number(right._id.quarter));
 }
 
+function buildRevenueChartData(type, entries, quarterlyRows, now = new Date()) {
+  if (!REVENUE_AI_CHART_TYPES.includes(type)) return null;
+  const completedQuarters = getCompletedQuarterRows(quarterlyRows, now);
+  const latest = completedQuarters.at(-1);
+  if (!latest) return null;
+
+  const quarterLabel = (row) => `${Number(row._id.year)} Q${Number(row._id.quarter)}`;
+  if (type === 'quarter_comparison') {
+    const previousQuarterIndex = Number(latest._id.year) * 4 + Number(latest._id.quarter) - 1;
+    const previousYear = Math.floor((previousQuarterIndex - 1) / 4);
+    const previousQuarterNumber = (previousQuarterIndex - 1) % 4 + 1;
+    const previous = completedQuarters.find((row) =>
+      Number(row._id.year) === previousYear
+      && Number(row._id.quarter) === previousQuarterNumber
+    );
+    const yearAgo = completedQuarters.find((row) =>
+      Number(row._id.year) === Number(latest._id.year) - 1
+      && Number(row._id.quarter) === Number(latest._id.quarter)
+    );
+    const comparisons = [latest, previous, yearAgo];
+    return {
+      type,
+      title: 'Completed quarter revenue comparison',
+      labels: comparisons.map((row) => row ? quarterLabel(row) : 'Unavailable'),
+      datasets: [{
+        label: 'Revenue',
+        data: comparisons.map((row) => row ? Number(row.revenue || 0) : null)
+      }]
+    };
+  }
+
+  if (type === 'quarterly_trend') {
+    const rows = completedQuarters.slice(-8);
+    return {
+      type,
+      title: 'Revenue across the last completed quarters',
+      labels: rows.map(quarterLabel),
+      datasets: [{
+        label: 'Revenue',
+        data: rows.map((row) => Number(row.revenue || 0))
+      }]
+    };
+  }
+
+  const latestEntries = (Array.isArray(entries) ? entries : []).filter((entry) =>
+    Number(entry.year) === Number(latest._id.year)
+    && Number(entry.quarter) === Number(latest._id.quarter)
+  );
+  if (!latestEntries.length) return null;
+  if (type === 'category_share') {
+    const categories = groupRevenueByCategory(latestEntries);
+    const total = categories.reduce((sum, item) => sum + item.revenue, 0);
+    if (!total) return null;
+    return {
+      type,
+      title: `Revenue share by category · ${quarterLabel(latest)}`,
+      labels: categories.map((item) => item._id),
+      datasets: [{
+        label: 'Revenue share',
+        data: categories.map((item) => Number((item.revenue / total * 100).toFixed(2)))
+      }]
+    };
+  }
+
+  const contributors = groupRevenueContributors(latestEntries).slice(0, 5);
+  if (!contributors.length) return null;
+  return {
+    type,
+    title: `Top contributors · ${quarterLabel(latest)}`,
+    labels: contributors.map((item) => item.name),
+    datasets: [{
+      label: 'Revenue',
+      data: contributors.map((item) => Number(item.revenue || 0))
+    }]
+  };
+}
+
 function calculateRevenueRisk(entries, quarterlyRows, now = new Date()) {
   const allContributors = groupRevenueContributors(entries);
   const totalRevenue = allContributors.reduce((sum, item) => sum + item.revenue, 0);
@@ -525,6 +608,7 @@ async function getRevenueEntries({ Order, Reservation, ServiceRequest, Product, 
 
 module.exports = {
   REVENUE_TIMEZONE,
+  REVENUE_AI_CHART_TYPES,
   REVENUE_RISK_THRESHOLDS,
   buildRevenuePipelines,
   getManilaDateParts,
@@ -537,6 +621,7 @@ module.exports = {
   getRevenueRiskLevel,
   calculateDashboardForecast,
   getCompletedQuarterRows,
+  buildRevenueChartData,
   calculateRevenueRisk,
   parseManilaDateBound,
   getRevenueEntries

@@ -1,4 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { REVENUE_AI_CHART_TYPES } = require('../utils/revenue');
 
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const CARD_INSIGHT_KEYS = ['trend', 'risk', 'concentration', 'service', 'forecast'];
@@ -220,6 +221,32 @@ Do not use tables or horizontal rules. Never invent products, dates, risk labels
   throw lastError;
 }
 
+async function generateRevenueChartType(question, dependencies = {}) {
+  const client = dependencies.client || gemini;
+  const modelNames = dependencies.modelNames || getModelNames();
+  const systemInstruction = `
+Choose a chart type for a revenue question. Return exactly one value from this list:
+${REVENUE_AI_CHART_TYPES.join(', ')}, none.
+Choose a chart only for comparison, trend, ranking, or share questions.
+For explanations, risks, or recommendations return none.
+Never return labels, numbers, values, datasets, or any other text.
+  `.trim();
+
+  let lastError;
+  for (const modelName of modelNames) {
+    try {
+      const model = client.getGenerativeModel({ model: modelName, systemInstruction });
+      const result = await model.generateContent(`Question: ${question}`);
+      const selectedType = result.response.text().trim().toLowerCase();
+      return REVENUE_AI_CHART_TYPES.includes(selectedType) ? selectedType : null;
+    } catch (error) {
+      lastError = error;
+      if (dependencies.onError) dependencies.onError(error, modelName);
+    }
+  }
+  throw lastError || new Error('No AI model is configured for chart selection.');
+}
+
 async function generateCardInsights(analysisData, dependencies = {}) {
   const client = dependencies.client || gemini;
   const modelNames = dependencies.modelNames || getModelNames();
@@ -274,6 +301,8 @@ module.exports = {
   CARD_INSIGHT_FIELDS,
   buildTemplateCardInsights,
   generateCardInsights,
+  generateRevenueChartType,
   generateRevenueInsights,
-  isValidCardInsights
+  isValidCardInsights,
+  REVENUE_AI_CHART_TYPES
 };

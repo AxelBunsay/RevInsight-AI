@@ -38,13 +38,22 @@ export function CustomerPrototypeProvider({ children }) {
       const cart = existing
         ? current.cart.map((entry) => entry.key === key
           ? item.kind === 'service'
-            ? { ...item, key, quantity: 1 }
+            ? { ...item, key, quantity: 1, selected: entry.selected !== false }
             : { ...entry, quantity: Math.min(entry.quantity + (item.quantity || 1), entry.stock ?? Infinity) }
           : entry)
-        : [...current.cart, { ...item, key, quantity: item.kind === 'service' ? 1 : item.quantity || 1 }];
+        : [...current.cart, { ...item, key, quantity: item.kind === 'service' ? 1 : item.quantity || 1, selected: true }];
       return { ...current, cart };
     });
   };
+
+  const setCartItemSelected = (key, selected) => setState((current) => ({
+    ...current,
+    cart: current.cart.map((item) => item.key === key ? { ...item, selected } : item)
+  }));
+  const setCartSectionSelected = (kind, selected) => setState((current) => ({
+    ...current,
+    cart: current.cart.map((item) => item.kind === kind ? { ...item, selected } : item)
+  }));
 
   const updateCartItem = (key, quantity) => setState((current) => ({
     ...current,
@@ -78,7 +87,9 @@ export function CustomerPrototypeProvider({ children }) {
       ...current,
       cart: item.kind === 'service'
         ? replaceServiceCartItemInList(current.cart, key, item).cart
-        : current.cart.map((entry) => entry.key === key ? { ...item, key, quantity: item.quantity || 1 } : entry)
+        : current.cart.map((entry) => entry.key === key
+          ? { ...item, key, quantity: item.quantity || 1, selected: entry.selected !== false }
+          : entry)
     }));
   };
   const toggleWishlist = (productId) => setState((current) => ({
@@ -100,7 +111,7 @@ export function CustomerPrototypeProvider({ children }) {
   };
 
   return (
-    <CustomerPrototypeContext.Provider value={{ ...state, addCartItem, updateCartItem, setCartItemStock, updateCartItemDetails, removeCartItem, replaceCartItem, toggleWishlist, updateProfile, addVehicle, clearCustomerData }}>
+    <CustomerPrototypeContext.Provider value={{ ...state, addCartItem, updateCartItem, setCartItemSelected, setCartSectionSelected, setCartItemStock, updateCartItemDetails, removeCartItem, replaceCartItem, toggleWishlist, updateProfile, addVehicle, clearCustomerData }}>
       {children}
     </CustomerPrototypeContext.Provider>
   );

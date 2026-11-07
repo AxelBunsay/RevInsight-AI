@@ -7,7 +7,7 @@ import ReservationPaymentForm from './ReservationPaymentForm';
 import { serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
-import { getServiceCartPaymentSummary } from './serviceCart';
+import { getServiceCartPaymentSummary, isCartItemSelected } from './serviceCart';
 import { calculateServicePayment, getServicePaymentSummary } from '../../utils/servicePayment';
 import '../styles/customer-flow.css';
 
@@ -17,11 +17,12 @@ export default function Checkout() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const reservationId = searchParams.get('reservation');
+  const checkoutFlow = searchParams.get('flow');
   const { cart, removeCartItem } = useCustomerPrototype();
-  const productItems = cart.filter((item) => item.kind === 'product');
-  const serviceItems = cart.filter((item) => item.kind === 'service');
+  const productItems = cart.filter((item) => item.kind === 'product' && isCartItemSelected(item));
+  const serviceItems = cart.filter((item) => item.kind === 'service' && isCartItemSelected(item));
   const [checkoutReservation, setCheckoutReservation] = useState(null);
-  const isReservationFlow = Boolean(reservationId || productItems.length || checkoutReservation);
+  const isReservationFlow = Boolean(reservationId || checkoutReservation || (checkoutFlow !== 'services' && productItems.length));
   const [step, setStep] = useState(reservationId ? 'payment' : isReservationFlow ? 'reservation' : 'payment');
   const [payment, setPayment] = useState('Cash at pickup');
   const [settings, setSettings] = useState(null);
@@ -66,13 +67,14 @@ export default function Checkout() {
     return () => { isMounted = false; };
   }, [reservationId, navigate]);
 
-  if (!cart.length && !reservationId && !checkoutReservation && !bookingResults) {
+  if (!productItems.length && !serviceItems.length && !reservationId && !checkoutReservation && !bookingResults) {
     return <CustomerPage title="Checkout" description="Review your cart before continuing.">
-      <p className="customer-empty">Your cart is empty. <Link to="/customer/shop">Continue shopping</Link></p>
+      <p className="customer-empty">{cart.length ? 'Select at least one cart item to continue.' : 'Your cart is empty.'} <Link to="/customer/cart">Return to cart</Link></p>
     </CustomerPage>;
   }
 
   const createPendingReservation = async () => {
+    if (!productItems.length) return;
     setError('');
     setIsSubmitting(true);
     try {
@@ -129,6 +131,7 @@ export default function Checkout() {
   };
 
   const completeServiceBooking = async () => {
+    if (!serviceItems.length) return;
     setError('');
     setIsSubmitting(true);
     try {
@@ -182,7 +185,7 @@ export default function Checkout() {
               {settings?.pickupAddress && <p className="customer-pickup-location">Pickup at {settings.pickupAddress}{settings.pickupHours ? ` · ${settings.pickupHours}` : ''}</p>}
             </div>
             {serviceItems.length > 0 && <p className="customer-reservation-note">Service bookings remain in your cart and are not changed by this item reservation.</p>}
-            <button type="button" className="customer-primary-button" onClick={createPendingReservation} disabled={isSubmitting || !settings || productItems.some((item) => item.quantity < 1 || item.quantity > item.stock)}>
+            <button type="button" className="customer-primary-button" onClick={createPendingReservation} disabled={!productItems.length || isSubmitting || !settings || productItems.some((item) => item.quantity < 1 || item.quantity > item.stock)}>
               {isSubmitting ? 'Creating reservation...' : 'Continue to payment'}
             </button>
           </>}
@@ -201,7 +204,7 @@ export default function Checkout() {
           {step === 'payment' ? <>
             <p className="customer-eyebrow">STEP 1 OF 2</p><h2>Payment method</h2>
             <div className="customer-payment-options">{['Cash at pickup', 'GCash', 'Card on pickup'].map((method) => <label className={payment === method ? 'is-selected' : ''} key={method}><input type="radio" name="payment" value={method} checked={payment === method} onChange={() => setPayment(method)} /><span><strong>{method}</strong><small>{method === 'Cash at pickup' ? 'Pay at the shop' : method === 'GCash' ? 'Submit payment after booking' : 'Pay at the shop'}</small></span></label>)}</div>
-            <button type="button" className="customer-primary-button" onClick={() => setStep('review')}>Review service booking</button>
+            <button type="button" className="customer-primary-button" onClick={() => setStep('review')} disabled={!serviceItems.length}>Review service booking</button>
           </> : <>
             <p className="customer-eyebrow">STEP 2 OF 2</p><h2>Review your service booking</h2>
             {bookingResults && <section className="customer-booking-results" aria-live="polite">
@@ -240,7 +243,7 @@ export default function Checkout() {
               </span></div>;
             })}</div>
             <div className="customer-review-meta"><p><span>Service total</span><strong>{money(serviceTotal)}</strong></p><p><span>Down payment ({serviceDownPaymentPercent}%)</span><strong>{money(servicePaymentEstimate.downPaymentAmount)}</strong></p><p><span>Balance due at the shop</span><strong>{money(servicePaymentEstimate.balanceDue)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>
-            {serviceItems.length > 0 && <div className="customer-checkout-actions"><button type="button" className="customer-secondary-button" onClick={() => setStep('payment')}>Back</button><button type="button" className="customer-primary-button" onClick={completeServiceBooking} disabled={isSubmitting}>{isSubmitting ? 'Submitting bookings...' : `Submit ${serviceItems.length} service booking${serviceItems.length === 1 ? '' : 's'}`}</button></div>}
+            {serviceItems.length > 0 && <div className="customer-checkout-actions"><button type="button" className="customer-secondary-button" onClick={() => setStep('payment')}>Back</button><button type="button" className="customer-primary-button" onClick={completeServiceBooking} disabled={!serviceItems.length || isSubmitting}>{isSubmitting ? 'Submitting bookings...' : `Submit ${serviceItems.length} service booking${serviceItems.length === 1 ? '' : 's'}`}</button></div>}
           </>}
         </section>
       </div>}

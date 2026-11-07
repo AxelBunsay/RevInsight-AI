@@ -6,7 +6,7 @@ import { useCustomerPrototype } from './useCustomerPrototype';
 import ProductImage from './ProductImage';
 import { calculateServiceAmounts, formatServiceName, serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
-import { getCartSummary } from './serviceCart';
+import { getCartSummary, isCartItemSelected } from './serviceCart';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
@@ -14,15 +14,21 @@ const money = (value) => `₱${Number(value).toLocaleString('en-PH', { maximumFr
 export default function Cart() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { cart, updateCartItem, updateCartItemDetails, setCartItemStock, removeCartItem } = useCustomerPrototype();
+  const { cart, updateCartItem, updateCartItemDetails, setCartItemStock, setCartItemSelected, setCartSectionSelected, removeCartItem } = useCustomerPrototype();
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState('');
   const products = cart.filter((item) => item.kind === 'product');
   const serviceItems = cart.filter((item) => item.kind === 'service');
+  const selectedProducts = products.filter(isCartItemSelected);
+  const selectedServices = serviceItems.filter(isCartItemSelected);
+  const cartSections = [
+    { kind: 'product', title: 'Products', items: products },
+    { kind: 'service', title: 'Services', items: serviceItems }
+  ].filter((section) => section.items.length);
   const [refreshingProducts, setRefreshingProducts] = useState(products.length > 0);
   const [refreshingServices, setRefreshingServices] = useState(serviceItems.length > 0);
-  const isRefreshingProducts = products.length > 0 && refreshingProducts;
-  const isRefreshingServices = serviceItems.length > 0 && refreshingServices;
+  const isRefreshingProducts = selectedProducts.length > 0 && refreshingProducts;
+  const isRefreshingServices = selectedServices.length > 0 && refreshingServices;
   const { productSubtotal, serviceSubtotal: serviceTotal, downPayment, balanceDueAtPickup, cartTotal } = getCartSummary(
     cart,
     settings?.downPaymentPercent ?? 30
@@ -145,18 +151,37 @@ export default function Cart() {
       {error && <p className="customer-error" role="alert">{error}</p>}
       {cart.length === 0 ? <section className="customer-empty-cart"><span aria-hidden="true">▱</span><h2>Your cart is empty</h2><p>Add a part or book a service to get started.</p><div><Link className="customer-primary-button" to="/customer/shop">Browse parts</Link><Link className="customer-secondary-button" to="/customer/services">Explore services</Link></div></section> : <div className="customer-cart-layout">
         <section className="customer-cart-items" aria-label="Cart items and bookings">
-          {cart.map((item) => <article className="customer-cart-item" key={item.key}>
+          {cartSections.map((section) => <section className="customer-cart-section" key={section.kind} aria-label={`${section.title} in cart`}>
+            <label className="customer-cart-section__select">
+              <input
+                type="checkbox"
+                checked={section.items.every(isCartItemSelected)}
+                onChange={(event) => setCartSectionSelected(section.kind, event.target.checked)}
+                aria-label={`Select all ${section.title.toLowerCase()}`}
+              />
+              <strong>{section.title}</strong>
+            </label>
+            {section.items.map((item) => <article className="customer-cart-item" key={item.key}>
+            <label className="customer-cart-item-select">
+              <input
+                type="checkbox"
+                checked={isCartItemSelected(item)}
+                onChange={(event) => setCartItemSelected(item.key, event.target.checked)}
+                aria-label={`Select ${item.name}`}
+              />
+            </label>
             <div className={`customer-cart-item-art${item.kind === 'service' ? ' is-service' : ''}${item.kind === 'product' && item.imageUrl ? ' has-image' : ''}`} aria-hidden="true">{item.kind === 'product'
               ? <ProductImage src={item.imageUrl} alt="" className="customer-inline-product-image" loading="lazy" fallback={<span>{item.icon || '▣'}</span>} />
               : <svg viewBox="0 0 48 48" focusable="false"><path d="M29.8 6.5a13 13 0 0 0-17.1 17.1L5.5 30.8a4.1 4.1 0 0 0 5.8 5.8l7.2-7.2a13 13 0 0 0 17.1-17.1l-8.1 8.1-7.2-7.2 8.1-8.1Z" /></svg>}</div>
-            <div className="customer-cart-item-copy"><span className="customer-cart-item-kind">{item.kind === 'service' ? 'SERVICE BOOKING' : 'ITEM RESERVATION'}</span>{item.kind === 'service' && item.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}<h2>{item.name}</h2><p>{item.kind === 'service' ? `${item.units ? `${serviceUnitSummary(item.units, item.unitLabel)} · ` : ''}${item.bookingDate} · ${item.timeSlot} · ${item.vehicle}` : isRefreshingProducts ? 'Checking current price and stock...' : item.unavailable ? 'This option is no longer available. Remove it and choose another.' : `${money(item.price)} each · Only ${item.stock} left`}</p>{item.kind === 'service' && (isRefreshingServices ? <small>Refreshing service price...</small> : item.pricingUnavailable ? <small>Service pricing is unavailable.</small> : <ServicePriceBreakdown servicePriceTotal={item.servicePriceTotal} mechanicFeeTotal={item.mechanicFeeTotal} estimatedPrice={item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)} />)} {item.notes && <small>Note: {item.notes}</small>}</div>
-            <div className="customer-cart-item-actions">{item.kind === 'product' && <div className="customer-quantity-control"><div><button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1 || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity - 1)}>−</button><output>{item.quantity}</output><button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock || isRefreshingProducts} onClick={() => updateCartItem(item.key, item.quantity + 1)}>+</button></div></div>}<strong>{item.kind === 'product' && (isRefreshingProducts || item.unavailable) || item.kind === 'service' && (isRefreshingServices || item.pricingUnavailable) ? '—' : item.kind === 'service' ? money(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)) : money(item.price * item.quantity)}</strong>{item.kind === 'service' && <Link className="customer-edit-item" to={`/customer/services/${item.serviceId || item.id}${item.partsSource === 'customer' ? '?parts=own' : ''}`} state={{ editCartKey: item.key }}>Edit</Link>}<button type="button" className="customer-remove-item" onClick={() => removeCartItem(item.key)}>Remove</button></div>
-          </article>)}
+            <div className="customer-cart-item-copy"><span className="customer-cart-item-kind">{item.kind === 'service' ? 'SERVICE BOOKING' : 'ITEM RESERVATION'}</span>{item.kind === 'service' && item.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}<h2>{item.name}</h2><p>{item.kind === 'service' ? `${item.units ? `${serviceUnitSummary(item.units, item.unitLabel)} · ` : ''}${item.bookingDate} · ${item.timeSlot} · ${item.vehicle}` : refreshingProducts ? 'Checking current price and stock...' : item.unavailable ? 'This option is no longer available. Remove it and choose another.' : `${money(item.price)} each · Only ${item.stock} left`}</p>{item.kind === 'service' && (refreshingServices ? <small>Refreshing service price...</small> : item.pricingUnavailable ? <small>Service pricing is unavailable.</small> : <ServicePriceBreakdown servicePriceTotal={item.servicePriceTotal} mechanicFeeTotal={item.mechanicFeeTotal} estimatedPrice={item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)} />)} {item.notes && <small>Note: {item.notes}</small>}</div>
+            <div className="customer-cart-item-actions">{item.kind === 'product' && <div className="customer-quantity-control"><div><button type="button" aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1 || refreshingProducts} onClick={() => updateCartItem(item.key, item.quantity - 1)}>−</button><output>{item.quantity}</output><button type="button" aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock || refreshingProducts} onClick={() => updateCartItem(item.key, item.quantity + 1)}>+</button></div></div>}<strong>{item.kind === 'product' && (refreshingProducts || item.unavailable) || item.kind === 'service' && (refreshingServices || item.pricingUnavailable) ? '—' : item.kind === 'service' ? money(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)) : money(item.price * item.quantity)}</strong>{item.kind === 'service' && <Link className="customer-edit-item" to={`/customer/services/${item.serviceId || item.id}${item.partsSource === 'customer' ? '?parts=own' : ''}`} state={{ editCartKey: item.key }}>Edit</Link>}<button type="button" className="customer-remove-item" onClick={() => removeCartItem(item.key)}>Remove</button></div>
+            </article>)}
+          </section>)}
           <Link className="customer-continue-link" to="/customer/shop">← Continue shopping</Link>
         </section>
         <aside className="customer-cart-summary">
-          <h2>{products.length ? 'Reservation summary' : 'Booking summary'}</h2>
-          {!!products.length && <>
+          <h2>{selectedProducts.length ? 'Reservation summary' : 'Booking summary'}</h2>
+          {!!selectedProducts.length && <>
             {isRefreshingProducts ? <p>Refreshing current prices and availability...</p> : <>
               <div className="customer-summary-line"><span>Items total</span><strong>{money(productSubtotal)}</strong></div>
               <div className="customer-summary-line"><span>Down payment ({settings?.downPaymentPercent ?? 30}%): due now</span><strong>{money(downPayment)}</strong></div>
@@ -165,18 +190,19 @@ export default function Cart() {
             <p className="customer-reservation-note">Your item is reserved only after the shop confirms your down payment.</p>
             {settings?.pickupAddress && <p className="customer-pickup-location">Pickup at {settings.pickupAddress}{settings.pickupHours ? ` · ${settings.pickupHours}` : ''}</p>}
           </>}
-          {!!serviceItems.length && <>
+          {!!selectedServices.length && <>
             <section className="customer-service-cart-summary" aria-label="Service bookings summary">
               <h3>Service bookings</h3>
-              {isRefreshingServices ? <p>Refreshing service prices...</p> : serviceItems.some((item) => item.pricingUnavailable) ? <p>Service pricing is unavailable. Try again before checkout.</p> : <>
+              {isRefreshingServices ? <p>Refreshing service prices...</p> : selectedServices.some((item) => item.pricingUnavailable) ? <p>Service pricing is unavailable. Try again before checkout.</p> : <>
                 <div className="customer-summary-line"><span>Service bookings subtotal</span><strong>{money(serviceTotal)}</strong></div>
                 <div className="customer-summary-line"><span>Amount due for services</span><strong>{money(serviceTotal)}</strong></div>
                 <p className="customer-reservation-note">Choose cash at pickup or submit the full service total by GCash after booking.</p>
               </>}
             </section>
           </>}
-          {!!products.length && !!serviceItems.length && <div className="customer-summary-total"><span>Cart total</span><strong>{isRefreshingProducts || isRefreshingServices || serviceItems.some((item) => item.pricingUnavailable) ? '—' : money(cartTotal)}</strong></div>}
-          <button type="button" className="customer-primary-button customer-checkout-button" disabled={isRefreshingProducts || isRefreshingServices || serviceItems.some((item) => item.pricingUnavailable) || products.some((item) => item.unavailable || item.stock < 1 || item.quantity > item.stock)} onClick={() => navigate('/customer/checkout')}>{products.length ? 'Continue to checkout' : 'Continue to service checkout'}</button>
+          {!!selectedProducts.length && !!selectedServices.length && <div className="customer-summary-total"><span>Cart total</span><strong>{isRefreshingProducts || isRefreshingServices || selectedServices.some((item) => item.pricingUnavailable) ? '—' : money(cartTotal)}</strong></div>}
+          {!!products.length && <button type="button" className="customer-primary-button customer-checkout-button" disabled={!selectedProducts.length || isRefreshingProducts || selectedProducts.some((item) => item.unavailable || item.stock < 1 || item.quantity > item.stock)} onClick={() => navigate('/customer/checkout?flow=products')}>Continue to checkout</button>}
+          {!!serviceItems.length && <button type="button" className="customer-primary-button customer-checkout-button" disabled={!selectedServices.length || isRefreshingServices || selectedServices.some((item) => item.pricingUnavailable)} onClick={() => navigate('/customer/checkout?flow=services')}>Continue to service checkout</button>}
         </aside>
       </div>}
     </div>

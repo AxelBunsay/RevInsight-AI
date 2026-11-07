@@ -4,6 +4,13 @@ import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import ProductImage from "../../Customer/react/ProductImage";
 import { LOW_STOCK_THRESHOLD, PRODUCT_CATEGORIES } from "../../../../shared/inventory.json";
 import SERVICE_CATEGORIES from "../../../../shared/serviceCategories.json";
+import {
+  isUniversalFitModel,
+  setUniversalFitModel,
+  shouldShowFitmentFields,
+  supportsUniversalFit,
+  validateVariantAttributes
+} from "./inventoryVariantFields";
 
 const stockClass = (available) => available <= 0
   ? "stock-text out"
@@ -47,10 +54,12 @@ const validateItemForm = (form, variants) => {
   return errors;
 };
 
-const validateVariantRows = (variants) => variants.map((variant) => {
+const validateVariantRows = (variants, showFitmentFields) => variants.map((variant) => {
   const errors = {};
-  if (![variant.brand, variant.model, variant.size, variant.color].some((value) => value.trim())) {
-    errors.attributes = "Fill in at least one attribute.";
+  if (!validateVariantAttributes(variant, showFitmentFields)) {
+    errors.attributes = showFitmentFields
+      ? "Add at least one brand, model, size, or color."
+      : "Add at least one size/type or color.";
   }
   const price = Number(variant.price);
   if (variant.price === "" || !Number.isFinite(price) || price < 0.01) {
@@ -63,13 +72,14 @@ const validateVariantRows = (variants) => variants.map((variant) => {
   return errors;
 });
 
-const variantLabel = (variant) => {
-  const fitment = [variant.brand, variant.model].filter(Boolean).join(" ");
-  const sizeAndColor = variant.color && variant.size
-    ? `${variant.color} / ${variant.size}`
-    : variant.color || variant.size;
-  return fitment && sizeAndColor ? `${fitment} - ${sizeAndColor}` : fitment || sizeAndColor || "Variant";
-};
+const variantAttributes = (variant) => [variant.brand, variant.model, variant.size, variant.color]
+  .map((value) => String(value || "").trim())
+  .filter(Boolean)
+  .join(" · ");
+
+const variantLabel = (variant) => isUniversalFitModel(variant.model)
+  ? variantAttributes(variant) || "Variant"
+  : variant.label || variantAttributes(variant) || "Variant";
 
 const formatPrice = (price) => `₱${Number(price || 0).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
 
@@ -130,6 +140,12 @@ function Inventory() {
     category: "",
   });
   const [variantRows, setVariantRows] = useState([]);
+  const showFitmentFields = shouldShowFitmentFields(
+    form.category,
+    editingItem?.variants || variantRows,
+    Boolean(editingItem)
+  );
+  const canSetUniversalFit = supportsUniversalFit(form.category);
   const [variantErrors, setVariantErrors] = useState([]);
   const [expandedItems, setExpandedItems] = useState({});
   const [itemFormErrors, setItemFormErrors] = useState({});
@@ -237,7 +253,7 @@ function Inventory() {
     const loadInventory = () => {
       setIsLoading(true);
       api
-        .getInventory(page, 15)
+        .getInventory(page, 12)
         .then((response) => {
           if (isMounted) {
             const data = response.data || [];
@@ -344,7 +360,7 @@ function Inventory() {
   const saveItem = async (event) => {
     event.preventDefault();
     const validationErrors = validateItemForm(form, variantRows);
-    const nextVariantErrors = validateVariantRows(variantRows);
+    const nextVariantErrors = validateVariantRows(variantRows, showFitmentFields);
     const hasVariantErrors = nextVariantErrors.some((errors) => Object.keys(errors).length);
     setItemFormErrors(validationErrors);
     setVariantErrors(nextVariantErrors);
@@ -671,8 +687,8 @@ function Inventory() {
                             const available = Math.max(0, Number(variant.stock || 0) - Number(variant.reservedQty || 0));
                             return <div className="inventory-mobile-card__variant" key={variant._id}>
                               <ProductImage src={variant.imageUrl} alt="" className="inventory-item-thumbnail" loading="lazy" width={80} fallback={<span className="inventory-item-thumbnail is-placeholder">V</span>} />
-                              <strong>{variant.label || variantLabel(variant)}</strong>
-                              <span>{[variant.brand, variant.model, variant.size, variant.color].filter(Boolean).join(" · ") || "Variant"}</span>
+                              <strong>{variantLabel(variant)}</strong>
+                              <span>{variantAttributes(variant) || "Variant"}</span>
                               <span>{formatPrice(variant.price)} · Stock {variant.stock} · Reserved {variant.reservedQty || 0} · <strong className={stockClass(available)}>Available {available}</strong></span>
                             </div>;
                           })}
@@ -772,10 +788,8 @@ function Inventory() {
                                         fallback={<span className="inventory-item-thumbnail is-placeholder">V</span>}
                                       />
                                       <div className="inventory-variant-description">
-                                        <strong>{variant.label || variantLabel(variant)}</strong>
-                                        <small>
-                                          {[variant.brand, variant.model, variant.size, variant.color].filter(Boolean).join(" · ") || "Variant"}
-                                        </small>
+                                        <strong>{variantLabel(variant)}</strong>
+                                        <small>{variantAttributes(variant) || "Variant"}</small>
                                       </div>
                                       <span>{formatPrice(variant.price)}</span>
                                       <span>Stock: <strong>{variant.stock}</strong></span>
@@ -861,7 +875,8 @@ function Inventory() {
                     </article>
                   )) : <p className="inventory-card-state">No services match this search.</p>}
               </div>
-              <table className="inventory-table inventory-service-table">
+              <div className="inventory-table-scroll">
+                <table className="inventory-table inventory-service-table">
                   <thead>
                     <tr>
                       <th>SERVICE</th>
@@ -913,7 +928,8 @@ function Inventory() {
                       </tr>
                     ))}
                   </tbody>
-              </table>
+                </table>
+              </div>
               <div className="pagination-container" aria-label="Services pagination">
                 <button
                   className={`pagination-button${page === 1 ? " disabled" : ""}`}
@@ -1027,7 +1043,9 @@ function Inventory() {
               <div className="inventory-variants-heading">
                 <div>
                   <h3 id="inventory-variants-title">Variants</h3>
-                  <small>Optional for any category. Add at least one attribute per variant.</small>
+                  <small>{showFitmentFields
+                    ? "Brand, model, size, and color are available. Add at least one per variant."
+                    : "Size / Type and color are available. Add at least one per variant."}</small>
                 </div>
                 <button className="btn-small" type="button" onClick={addVariantRow}>Add variant</button>
               </div>
@@ -1043,28 +1061,45 @@ function Inventory() {
                 <fieldset className="inventory-variant-editor" key={variant._id || `new-${index}`}>
                   <legend>Variant {index + 1}</legend>
                   <div className="inventory-variant-fields">
+                    {showFitmentFields && <>
+                      <label>
+                        Brand
+                        <input
+                          list="inventory-variant-brands"
+                          maxLength="120"
+                          value={variant.brand}
+                          onChange={(event) => updateVariantRow(index, { brand: event.target.value })}
+                        />
+                      </label>
+                      <div className="inventory-variant-model-field">
+                        <div className="inventory-variant-model-heading">
+                          <label htmlFor={`inventory-variant-model-${index}`}>Model</label>
+                          {canSetUniversalFit && <label className="inventory-variant-universal">
+                            <input
+                              type="checkbox"
+                              checked={isUniversalFitModel(variant.model)}
+                              onChange={(event) => updateVariantRow(index, {
+                                model: setUniversalFitModel(variant.model, event.target.checked)
+                              })}
+                            />
+                            <span>Universal fit</span>
+                          </label>}
+                        </div>
+                        <input
+                          id={`inventory-variant-model-${index}`}
+                          maxLength="120"
+                          value={variant.model}
+                          disabled={isUniversalFitModel(variant.model)}
+                          onChange={(event) => updateVariantRow(index, { model: event.target.value })}
+                        />
+                      </div>
+                    </>}
                     <label>
-                      Brand
-                      <input
-                        list="inventory-variant-brands"
-                        maxLength="120"
-                        value={variant.brand}
-                        onChange={(event) => updateVariantRow(index, { brand: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Model
-                      <input
-                        maxLength="120"
-                        value={variant.model}
-                        onChange={(event) => updateVariantRow(index, { model: event.target.value })}
-                      />
-                    </label>
-                    <label>
-                      Size
+                      {showFitmentFields ? "Size" : "Size / Type"}
                       <input
                         maxLength="120"
                         value={variant.size}
+                        placeholder={showFitmentFields ? "" : "7/8 inch, 12V, Large"}
                         onChange={(event) => updateVariantRow(index, { size: event.target.value })}
                       />
                     </label>

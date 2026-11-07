@@ -6,6 +6,7 @@ const {
   CARD_INSIGHT_KEYS,
   buildTemplateCardInsights,
   generateCardInsights,
+  generateRevenueChartType,
   generateRevenueInsights,
   isValidCardInsights
 } = require('../services/aiService');
@@ -141,5 +142,19 @@ describe('AI revenue insight generation', () => {
     expect(fake.configurations[0].systemInstruction).toContain('**Possible outcome**');
     expect(fake.configurations[0].systemInstruction).toContain('"If you act:" and "If you ignore it:"');
     expect(answer).toContain('**Possible outcome**');
+  });
+
+  it('accepts only whitelisted chart types and maps none or invalid output to no chart', async () => {
+    const trend = createFakeClient(['quarterly_trend']);
+    const invalid = createFakeClient(['category_share with 100 values']);
+    const none = createFakeClient(['none']);
+    const options = { modelNames: ['primary-test'] };
+
+    await expect(generateRevenueChartType('Show a trend.', { ...options, client: trend.client }))
+      .resolves.toBe('quarterly_trend');
+    await expect(generateRevenueChartType('Explain a risk.', { ...options, client: invalid.client }))
+      .resolves.toBeNull();
+    await expect(generateRevenueChartType('Explain a risk.', { ...options, client: none.client }))
+      .resolves.toBeNull();
   });
 });

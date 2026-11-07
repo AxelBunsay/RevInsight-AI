@@ -10,6 +10,16 @@ import '../styles/customer-flow.css';
 
 const formatPrice = (price) => `₱${Number(price || 0).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`;
 
+const variantDisplayLabel = (variant) => {
+  const attributes = [variant?.brand, variant?.model, variant?.size, variant?.color]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .join(' · ');
+  return String(variant?.model || '').trim().toLowerCase() === 'universal'
+    ? attributes
+    : variant?.label || attributes;
+};
+
 export default function ProductDetailContent({
   productId,
   isModal = false,
@@ -97,8 +107,8 @@ export default function ProductDetailContent({
       addCartItem({
         kind: 'product',
         id: latest._id,
-        ...(variant ? { variantId: variant._id, variantLabel: variant.label } : {}),
-        name: variant?.label ? `${latest.name} - ${variant.label}` : latest.name,
+        ...(variant ? { variantId: variant._id, variantLabel: variantDisplayLabel(variant) } : {}),
+        name: variantDisplayLabel(variant) ? `${latest.name} - ${variantDisplayLabel(variant)}` : latest.name,
         price: Number(variant?.price ?? latest.price),
         stock: available,
         category: latest.category,
@@ -148,8 +158,8 @@ export default function ProductDetailContent({
     addCartItem({
       kind: 'product',
       id: product._id,
-      ...(selectedVariant ? { variantId: selectedVariant._id, variantLabel: selectedVariant.label } : {}),
-      name: selectedVariant?.label ? `${product.name} - ${selectedVariant.label}` : product.name,
+      ...(selectedVariant ? { variantId: selectedVariant._id, variantLabel: variantDisplayLabel(selectedVariant) } : {}),
+      name: selectedVariant ? `${product.name} - ${variantDisplayLabel(selectedVariant)}` : product.name,
       price: displayedPrice,
       stock: availableStock,
       category: product.category,
@@ -213,7 +223,7 @@ export default function ProductDetailContent({
           >
             {variants.map((variant) => (
               <option key={variant._id} value={String(variant._id)} disabled={getVariantAvailability(variant) === 0}>
-                {variant.label || [variant.brand, variant.model, variant.size, variant.color].filter(Boolean).join(' · ')}
+                {variantDisplayLabel(variant)}
                 {getVariantAvailability(variant) === 0 ? ' — Out of stock' : ''}
               </option>
             ))}

@@ -81,8 +81,8 @@ export default function Services() {
   const serviceCardOpenerRef = useRef(null);
   const servicesListRef = useRef(null);
   const modeServices = useMemo(
-    () => servicesForPartsSource(services, partsSource),
-    [partsSource, services]
+    () => servicesForPartsSource(services),
+    [services]
   );
 
   useEffect(() => {
@@ -183,20 +183,13 @@ export default function Services() {
           <div><strong>3. A mechanic handles the rest</strong></div>
         </section>
 
-        <div
-          key={partsSource}
-          className={`customer-product-results${hasSwitchedPartsMode ? ' is-mode-transition' : ''}`}
-        >
+        <div className="customer-product-results">
           <h2>All services</h2>
           <span>{isLoading ? 'Loading services' : `${visibleServices.length} services`}</span>
         </div>
 
         {isLoading
-          ? <div
-            key={partsSource}
-            className={`product-grid${hasSwitchedPartsMode ? ' is-mode-transition' : ''}`}
-            aria-label="Loading services"
-          >{Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)}</div>
+          ? <div className="product-grid" aria-label="Loading services">{Array.from({ length: 6 }, (_, index) => <ServiceSkeleton key={index} />)}</div>
           : error
             ? <div className="shop-load-error" role="alert">
               <p>Could not load services. Try again.</p>

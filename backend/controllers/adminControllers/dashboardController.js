@@ -51,6 +51,16 @@ const getRevenueByPeriod = async (unit, fromDate) => {
   return groupRevenueByPeriod(entries, unit);
 };
 
+const getRevenueChartEntries = async (_req, res) => {
+  try {
+    const entries = await loadRevenueEntries();
+    return res.json({ success: true, data: entries });
+  } catch (error) {
+    console.error('[getRevenueChartEntries] error', error);
+    return res.status(500).json({ success: false, message: 'Failed to load revenue chart data.' });
+  }
+};
+
 const getRevenueConcentration = async (req, res) => {
   try {
     const entries = await loadRevenueEntries();
@@ -694,7 +704,8 @@ const serializeInventoryVariants = (variants = []) => variants.map((variant) => 
 
 const getAllInventory = async (req, res) => {
   try {
-    const { page = 1, limit = 15 } = req.query;
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 12));
 
     const inventory = await Product.find({ isActive: { $ne: false } })
       .limit(limit * 1)
@@ -1023,6 +1034,7 @@ const getMechanicsReport = async (req, res) => {
 module.exports = {
   getDashboardStats,
   getRevenueData,
+  getRevenueChartEntries,
   getServiceRevenue,
   getQuarterlyData,
   getDailyData,

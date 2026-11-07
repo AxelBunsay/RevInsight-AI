@@ -23,6 +23,7 @@ describe('Ask AI question submission', () => {
       request,
       setIsLoading: vi.fn(),
       setAnswer: vi.fn(),
+      setChart: vi.fn(),
       setTimestamp: vi.fn(),
       setError: vi.fn()
     });
@@ -41,6 +42,7 @@ describe('Ask AI question submission', () => {
       request,
       setIsLoading: vi.fn(),
       setAnswer: vi.fn(),
+      setChart: vi.fn(),
       setTimestamp: vi.fn(),
       setError: vi.fn()
     };
@@ -50,8 +52,9 @@ describe('Ask AI question submission', () => {
     expect(second).toBe(false);
     expect(request).toHaveBeenCalledOnce();
 
-    resolveRequest({ answer: 'Answer', timestamp: '2026-10-29T01:00:00.000Z' });
+    resolveRequest({ answer: 'Answer', chart: { type: 'quarterly_trend' }, timestamp: '2026-10-29T01:00:00.000Z' });
     await expect(first).resolves.toBe(true);
     expect(inFlightRef.current).toBe(false);
+    expect(callbacks.setChart).toHaveBeenCalledWith({ type: 'quarterly_trend' });
   });
 });

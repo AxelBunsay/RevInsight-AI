@@ -3,7 +3,7 @@ export function getServicePartsSource(search) {
   return params.get('parts') === 'own' ? 'customer' : 'shop';
 }
 
-export function servicesForPartsSource(services, partsSource) {
+export function servicesForPartsSource(services) {
   return services;
 }
 
