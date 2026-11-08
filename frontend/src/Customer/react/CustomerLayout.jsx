@@ -251,8 +251,10 @@ export function CustomerHeader() {
       </div>
       <nav ref={menuRef} id="customer-navigation" aria-label="Customer navigation" className={`customer-nav${isMenuOpen ? ' is-open' : ''}`}>
       {!hasCustomerAccount && <Link onClick={closeNavigation} className={isHomePage ? 'active' : ''} aria-current={isHomePage ? 'page' : undefined} to="/">Home</Link>}
-      <Link onClick={closeNavigation} className={isShopPage ? 'active' : ''} aria-current={isShopPage ? 'page' : undefined} to="/customer/shop">Shop</Link>
-      <Link onClick={closeNavigation} className={isServicesPage ? 'active' : ''} aria-current={isServicesPage ? 'page' : undefined} to="/customer/services">Services</Link>
+      {hasCustomerAccount && <>
+        <Link onClick={closeNavigation} className={isShopPage ? 'active' : ''} aria-current={isShopPage ? 'page' : undefined} to="/customer/shop">Shop</Link>
+        <Link onClick={closeNavigation} className={isServicesPage ? 'active' : ''} aria-current={isServicesPage ? 'page' : undefined} to="/customer/services">Services</Link>
+      </>}
       {hasCustomerAccount && <div className="customer-account-menu-area" ref={accountAreaRef}>
         <CustomerAccountMenuTrigger
           isActive={isAccountPage}
