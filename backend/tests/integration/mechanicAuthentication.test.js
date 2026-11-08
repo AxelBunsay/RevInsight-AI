@@ -5,7 +5,7 @@ import supertest from 'supertest';
 const require = createRequire(import.meta.url);
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const userController = require('../../controllers/userControllers/user');
+const emailSender = require('../../utils/sendEmail');
 const {
   app,
   Mechanic,
@@ -94,13 +94,14 @@ describe('mechanic username authentication', () => {
   });
 
   it('registers a customer through OTP and authenticates the same password afterwards', async () => {
-    const sendMail = vi.spyOn(userController.transporter, 'sendMail')
+    const sendMail = vi.spyOn(emailSender, 'sendEmail')
       .mockResolvedValue({ accepted: [] });
     const email = 'otp.customer@example.com';
     const password = 'OtpCustomer1';
     try {
       const registration = await api.post('/api/users/register-request').send({
         email,
+        username: 'otp_customer',
         password,
         firstName: 'Otp',
         lastName: 'Customer',

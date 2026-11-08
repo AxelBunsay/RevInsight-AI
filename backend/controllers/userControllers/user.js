@@ -6,23 +6,21 @@ const BusinessRecord = require('../../models/businessRecord');
 const Notification = require('../../models/notification');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const { removeReceipt } = require('../../utils/paymentReceipt');
+const emailSender = require('../../utils/sendEmail');
+const EMAIL_DELIVERY_USER_MESSAGE = 'We could not send the verification email. Please try again in a moment.';
 
-const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
-  }
-});
-
+const handleEmailDeliveryError = (res, error) => {
+  if (error?.code !== 'EMAIL_DELIVERY_FAILED') return false;
+  const status = error.statusCode === 503 ? 503 : 502;
+  res.status(status).json({ message: EMAIL_DELIVERY_USER_MESSAGE });
+  return true;
+};
 
 const sendVerificationEmail = async (user, otp) => {
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  await emailSender.sendEmail({
     to: user.email,
     subject: 'Verify your email',
     text: `
@@ -151,8 +149,7 @@ const sendVerificationEmail = async (user, otp) => {
 };
 
 const sendLoginOtpEmail = async (user, otp) => {
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
+  await emailSender.sendEmail({
     to: user.email,
     subject: 'Your RevInsight login code',
     text: `Hello ${user.firstName}, your RevInsight login code is ${otp}. It expires in 5 minutes.`,
@@ -269,7 +266,12 @@ const registerRequest = async (req, res) => {
       }
     );
 
-    await sendVerificationEmail(pendingUser, verificationOtp);
+    try {
+      await sendVerificationEmail(pendingUser, verificationOtp);
+    } catch (error) {
+      await PendingUser.deleteOne({ _id: pendingUser._id });
+      throw error;
+    }
 
     return res.status(202).json({
       message: 'Registration pending. OTP sent to your email.',
@@ -277,6 +279,8 @@ const registerRequest = async (req, res) => {
     });
   } catch (error) {
     console.error('[registerRequest] error:', error);
+
+    if (handleEmailDeliveryError(res, error)) return;
 
     if (error.code === 11000 && error.keyPattern?.usernameLower) {
       return res.status(409).json({ message: 'Username is already taken' });
@@ -411,6 +415,7 @@ const resendOtp = async (req, res) => {
     const newOtpExpiry = new Date(
       Date.now() + 10 * 60 * 1000
     );
+    const previousOtp = pendingUser.otp.toObject();
 
     const cooldownCutoff = new Date(Date.now() - 60 * 1000);
     const updatedPendingUser = await PendingUser.findOneAndUpdate(
@@ -436,7 +441,15 @@ const resendOtp = async (req, res) => {
         message: 'Please wait 60 seconds before requesting another verification code.'
       });
     }
-    await sendVerificationEmail(updatedPendingUser, newOtp);
+    try {
+      await sendVerificationEmail(updatedPendingUser, newOtp);
+    } catch (error) {
+      await PendingUser.updateOne(
+        { _id: updatedPendingUser._id, 'otp.code': newOtp },
+        { $set: { otp: previousOtp } }
+      );
+      throw error;
+    }
 
     return res.status(200).json({
       message: 'A new OTP was sent to your email.',
@@ -444,6 +457,8 @@ const resendOtp = async (req, res) => {
     });
   } catch (error) {
     console.error('[resendOtp] error:', error);
+
+    if (handleEmailDeliveryError(res, error)) return;
 
     return res.status(500).json({
       message: 'Failed to resend OTP'
@@ -506,6 +521,7 @@ const login = async (req, res) => {
     return res.status(200).json(customerLoginResponse(user, rememberMe));
   } catch (error) {
     console.error('[login] error', error);
+    if (handleEmailDeliveryError(res, error)) return;
     res.status(500).json({ message: 'Failed to login. Please try again.' });
   }
 };
@@ -572,6 +588,7 @@ const resendLoginOtp = async (req, res) => {
 
     const code = createLoginCode();
     const rememberMe = user.loginChallenge?.rememberMe === true;
+    const previousLoginChallenge = user.loginChallenge?.toObject?.() || user.loginChallenge;
     user.loginChallenge = {
       codeHash: hashLoginCode(code),
       expiresAt: loginChallengeExpiry(),
@@ -583,7 +600,7 @@ const resendLoginOtp = async (req, res) => {
     try {
       await sendLoginOtpEmail(user, code);
     } catch (error) {
-      user.loginChallenge = undefined;
+      user.loginChallenge = previousLoginChallenge || undefined;
       await user.save();
       throw error;
     }
@@ -594,6 +611,7 @@ const resendLoginOtp = async (req, res) => {
     });
   } catch (error) {
     console.error('[resendLoginOtp] error', error);
+    if (handleEmailDeliveryError(res, error)) return;
     return res.status(500).json({ message: 'Failed to resend login code. Please try again.' });
   }
 };
@@ -924,7 +942,6 @@ const getReceipts = async (req, res) => {
 };
 
 module.exports = {
-  transporter,
   registerRequest,
   verifyOtp,
   resendOtp,

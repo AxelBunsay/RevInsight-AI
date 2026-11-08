@@ -5,7 +5,7 @@ import supertest from 'supertest';
 const require = createRequire(import.meta.url);
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const userController = require('../../controllers/userControllers/user');
+const emailSender = require('../../utils/sendEmail');
 const {
   app,
   PendingUser,
@@ -61,7 +61,7 @@ describe('customer username authentication', () => {
   });
 
   it('registers, verifies, and signs in with a valid username', async () => {
-    const sendMail = vi.spyOn(userController.transporter, 'sendMail').mockResolvedValue({ accepted: [] });
+    const sendMail = vi.spyOn(emailSender, 'sendEmail').mockResolvedValue({ accepted: [] });
     try {
       const registration = await api.post('/api/users/register-request').send(registrationPayload());
       expect(registration.status).toBe(202);
@@ -85,6 +85,65 @@ describe('customer username authentication', () => {
       expect(login.body.user.username).toBe('rider_2026');
     } finally {
       sendMail.mockRestore();
+    }
+  });
+
+  it('removes a pending registration after email delivery fails so it can be retried', async () => {
+    const deliveryError = Object.assign(new Error('Email delivery failed.'), {
+      code: 'EMAIL_DELIVERY_FAILED',
+      statusCode: 502
+    });
+    const sendEmail = vi.spyOn(emailSender, 'sendEmail')
+      .mockRejectedValueOnce(deliveryError)
+      .mockResolvedValueOnce({});
+    try {
+      const failed = await api.post('/api/users/register-request').send(registrationPayload());
+      expect(failed.status).toBe(502);
+      expect(failed.body.message).toBe('We could not send the verification email. Please try again in a moment.');
+      expect(await PendingUser.findOne({ email: registrationPayload().email })).toBeNull();
+
+      const retried = await api.post('/api/users/register-request').send(registrationPayload());
+      expect(retried.status).toBe(202);
+      expect(await PendingUser.findOne({ email: registrationPayload().email })).not.toBeNull();
+    } finally {
+      sendEmail.mockRestore();
+    }
+  });
+
+  it('restores a registration OTP after a failed resend so another resend can succeed', async () => {
+    const deliveryError = Object.assign(new Error('Email delivery failed.'), {
+      code: 'EMAIL_DELIVERY_FAILED',
+      statusCode: 503
+    });
+    const sendEmail = vi.spyOn(emailSender, 'sendEmail')
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(deliveryError)
+      .mockResolvedValueOnce({});
+    try {
+      const registration = await api.post('/api/users/register-request').send(registrationPayload());
+      expect(registration.status).toBe(202);
+      await PendingUser.updateOne(
+        { email: registrationPayload().email },
+        { $set: { 'otp.lastSentAt': new Date(Date.now() - 61_000) } }
+      );
+      const previousOtp = (await PendingUser.findOne({ email: registrationPayload().email })).otp.toObject();
+
+      const failedResend = await api.post('/api/users/resend-otp').send({ email: registrationPayload().email });
+      expect(failedResend.status).toBe(503);
+      expect(failedResend.body.message).toBe('We could not send the verification email. Please try again in a moment.');
+      const restored = (await PendingUser.findOne({ email: registrationPayload().email })).otp.toObject();
+      expect(restored).toMatchObject({
+        code: previousOtp.code,
+        expiresAt: previousOtp.expiresAt,
+        attempts: previousOtp.attempts,
+        lastSentAt: previousOtp.lastSentAt
+      });
+
+      const retriedResend = await api.post('/api/users/resend-otp').send({ email: registrationPayload().email });
+      expect(retriedResend.status).toBe(200);
+      expect(sendEmail).toHaveBeenCalledTimes(3);
+    } finally {
+      sendEmail.mockRestore();
     }
   });
 
@@ -155,7 +214,7 @@ describe('customer username authentication', () => {
   });
 
   it('sends a hashed short-lived login code and issues the normal token after a correct code', async () => {
-    const sendMail = vi.spyOn(userController.transporter, 'sendMail').mockResolvedValue({ accepted: [] });
+    const sendMail = vi.spyOn(emailSender, 'sendEmail').mockResolvedValue({ accepted: [] });
     await prepareCustomerLogin();
     try {
       const login = await api.post('/api/users/login').send({
@@ -196,7 +255,7 @@ describe('customer username authentication', () => {
   });
 
   it('rejects wrong and expired login codes with clear messages', async () => {
-    const sendMail = vi.spyOn(userController.transporter, 'sendMail').mockResolvedValue({ accepted: [] });
+    const sendMail = vi.spyOn(emailSender, 'sendEmail').mockResolvedValue({ accepted: [] });
     await prepareCustomerLogin();
     try {
       await api.post('/api/users/login').send({ identifier: fixtures.customer.email, password: 'CustomerPass1' });
@@ -223,7 +282,7 @@ describe('customer username authentication', () => {
   });
 
   it('locks verification after five incorrect codes until another code is requested', async () => {
-    const sendMail = vi.spyOn(userController.transporter, 'sendMail').mockResolvedValue({ accepted: [] });
+    const sendMail = vi.spyOn(emailSender, 'sendEmail').mockResolvedValue({ accepted: [] });
     await prepareCustomerLogin();
     try {
       await api.post('/api/users/login').send({ identifier: fixtures.customer.email, password: 'CustomerPass1' });
