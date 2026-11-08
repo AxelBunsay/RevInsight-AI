@@ -1,0 +1,520 @@
+[
+  {
+    "name": "Classic Motorcycle Seat Cover",
+    "category": "Seat Works",
+    "price": 650,
+    "stock": 30,
+    "variants": [
+      { "size": "Standard", "color": "Black", "price": 650, "stock": 15 },
+      { "size": "Standard", "color": "Brown", "price": 700, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Rubber Handle Grips",
+    "category": "Accessory",
+    "price": 180,
+    "stock": 30,
+    "variants": [
+      { "size": "7/8 inch", "color": "Black", "price": 180, "stock": 15 },
+      { "size": "7/8 inch", "color": "Red", "price": 200, "stock": 15 }
+    ]
+  },
+  {
+    "name": "LED Headlight Bulb",
+    "category": "Accessory",
+    "price": 450,
+    "stock": 30,
+    "variants": [
+      { "size": "H4 12V", "color": "White", "price": 450, "stock": 15 },
+      { "size": "HS1 12V", "color": "White", "price": 500, "stock": 15 }
+    ]
+  },
+  {
+    "name": "LED Accessory Light Set",
+    "category": "Accessory",
+    "price": 380,
+    "stock": 30,
+    "variants": [
+      { "size": "12V", "color": "Blue", "price": 380, "stock": 15 },
+      { "size": "12V", "color": "White", "price": 420, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Adjustable Motorcycle Phone Holder",
+    "category": "Accessory",
+    "price": 350,
+    "stock": 30,
+    "variants": [
+      { "size": "Handlebar clamp", "color": "Black", "price": 350, "stock": 15 },
+      { "size": "Adjustable mount", "color": "Black", "price": 450, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Motorcycle Mirror Set",
+    "category": "Accessory",
+    "price": 450,
+    "stock": 30,
+    "variants": [
+      { "size": "8mm thread", "color": "Black", "price": 450, "stock": 15 },
+      { "size": "10mm thread", "color": "Chrome", "price": 520, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Ceramic Motorcycle Brake Pads",
+    "category": "Brakes",
+    "price": 280,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 280, "stock": 15 },
+      { "brand": "Yamaha", "model": "Mio i 125", "price": 360, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Brake Shoe Set",
+    "category": "Brakes",
+    "price": 300,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "110mm", "price": 300, "stock": 15 },
+      { "model": "Universal", "size": "130mm", "price": 360, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Heavy Duty Clutch Cable",
+    "category": "Cables",
+    "price": 160,
+    "stock": 25,
+    "variants": [
+      { "model": "Universal", "size": "Standard", "price": 160, "stock": 25 }
+    ]
+  },
+  {
+    "name": "Iridium Spark Plug",
+    "category": "Electrical",
+    "price": 450,
+    "stock": 30,
+    "variants": [
+      { "brand": "NGK", "model": "Universal", "size": "M10x1.0", "price": 450, "stock": 30 }
+    ]
+  },
+  {
+    "name": "High Flow Foam Air Filter",
+    "category": "Engine Parts",
+    "price": 230,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 230, "stock": 15 },
+      { "brand": "Yamaha", "model": "YTX 125", "price": 260, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Semi-Synthetic Motorcycle Engine Oil 10W-40",
+    "category": "Oil & Fluids",
+    "price": 530,
+    "stock": 24,
+    "variants": [
+      { "brand": "Shell", "model": "Universal", "size": "1L", "price": 530, "stock": 24 }
+    ]
+  },
+  {
+    "name": "Motorcycle Suspension Fork Oil 10W",
+    "category": "Oil & Fluids",
+    "price": 380,
+    "stock": 18,
+    "variants": [
+      { "brand": "Motul", "model": "Universal", "size": "500ml", "price": 380, "stock": 18 }
+    ]
+  },
+  {
+    "name": "Tubeless Motorcycle Tire 90/90-17",
+    "category": "Tires & Wheels",
+    "price": 1450,
+    "stock": 15,
+    "variants": [
+      { "brand": "CST", "model": "Universal", "size": "90/90-17", "price": 1450, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter CVT Drive Belt",
+    "category": "Engine Parts",
+    "price": 850,
+    "stock": 45,
+    "variants": [
+      { "brand": "Honda", "model": "Click 125", "size": "CVT", "price": 850, "stock": 15 },
+      { "brand": "Honda", "model": "Beat", "size": "CVT", "price": 820, "stock": 15 },
+      { "brand": "Yamaha", "model": "Mio i 125", "size": "CVT", "price": 880, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter Drive Face and Pulley Set",
+    "category": "Engine Parts",
+    "price": 1250,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Click 125", "price": 1250, "stock": 15 },
+      { "brand": "Yamaha", "model": "Mio i 125", "price": 1320, "stock": 15 }
+    ]
+  },
+  {
+    "name": "CVT Roller Weights Set",
+    "category": "Engine Parts",
+    "price": 220,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "10g", "price": 220, "stock": 15 },
+      { "model": "Universal", "size": "12g", "price": 240, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Automatic Scooter Clutch Shoe Set",
+    "category": "Engine Parts",
+    "price": 780,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Click 125", "price": 780, "stock": 15 },
+      { "brand": "Yamaha", "model": "Mio i 125", "price": 820, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter Torque Drive Assembly",
+    "category": "Engine Parts",
+    "price": 1450,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Click 125", "price": 1450, "stock": 15 },
+      { "brand": "Yamaha", "model": "Mio i 125", "price": 1520, "stock": 15 }
+    ]
+  },
+  {
+    "name": "CVT Variator Ramp Plate Set",
+    "category": "Engine Parts",
+    "price": 320,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Beat", "price": 320, "stock": 15 },
+      { "brand": "Yamaha", "model": "Mio i 125", "price": 350, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter CVT Cover Gasket",
+    "category": "Engine Parts",
+    "price": 180,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Click 125", "price": 180, "stock": 15 },
+      { "brand": "Yamaha", "model": "Mio i 125", "price": 190, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter Paper Air Filter Element",
+    "category": "Engine Parts",
+    "price": 260,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Click 125", "price": 260, "stock": 15 },
+      { "brand": "Yamaha", "model": "Nmax 155", "price": 340, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Scooter Spark Plug",
+    "category": "Electrical",
+    "price": 180,
+    "stock": 30,
+    "variants": [
+      { "brand": "NGK", "model": "Universal", "size": "M10", "price": 180, "stock": 15 },
+      { "brand": "Denso", "model": "Universal", "size": "M10", "price": 200, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter Front Disc Brake Pad Set",
+    "category": "Brakes",
+    "price": 300,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Click 125", "price": 300, "stock": 15 },
+      { "brand": "Yamaha", "model": "Nmax 155", "price": 420, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter Rear Brake Shoe Set",
+    "category": "Brakes",
+    "price": 320,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "110mm", "price": 320, "stock": 15 },
+      { "model": "Universal", "size": "130mm", "price": 380, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Scooter Tubeless Tire 90/90-14",
+    "category": "Tires & Wheels",
+    "price": 1850,
+    "stock": 30,
+    "variants": [
+      { "brand": "CST", "model": "Honda Click 125", "size": "90/90-14", "price": 1850, "stock": 15 },
+      { "brand": "CST", "model": "Yamaha Mio i 125", "size": "90/90-14", "price": 1800, "stock": 15 }
+    ]
+  },
+  {
+    "name": "12V Scooter Flasher Relay",
+    "category": "Electrical",
+    "price": 180,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "12V 2-pin", "price": 180, "stock": 15 },
+      { "model": "Universal", "size": "12V 3-pin", "price": 220, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Motorcycle CVT Cleaning Spray",
+    "category": "Oil & Fluids",
+    "price": 280,
+    "stock": 24
+  },
+  {
+    "name": "Scooter Final Drive Gear Oil 120ml",
+    "category": "Oil & Fluids",
+    "price": 120,
+    "stock": 30
+  },
+  {
+    "name": "Underbone Clutch Plate Set",
+    "category": "Engine Parts",
+    "price": 680,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 680, "stock": 15 },
+      { "brand": "Yamaha", "model": "Sniper 150", "price": 980, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Clutch Lifter Assembly",
+    "category": "Engine Parts",
+    "price": 420,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 420, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "price": 460, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Chain and Sprocket Kit",
+    "category": "Engine Parts",
+    "price": 1250,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "size": "14/36T", "price": 1250, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "size": "14/35T", "price": 1320, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Rear Shock Absorber Pair",
+    "category": "Engine Parts",
+    "price": 1650,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "size": "Standard length", "price": 1650, "stock": 15 },
+      { "brand": "Yamaha", "model": "Sniper 150", "size": "Standard length", "price": 1850, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Front Fork Oil Seal Pair",
+    "category": "Engine Parts",
+    "price": 280,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "size": "Standard", "price": 280, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "size": "Standard", "price": 300, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Carburetor Repair Kit",
+    "category": "Engine Parts",
+    "price": 480,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 480, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "price": 520, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Piston Ring Set",
+    "category": "Engine Parts",
+    "price": 380,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "size": "50mm", "price": 380, "stock": 15 },
+      { "brand": "Yamaha", "model": "Sniper 150", "size": "58.7mm", "price": 520, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Cylinder Head Gasket Set",
+    "category": "Engine Parts",
+    "price": 240,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 240, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "price": 260, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Air Filter Element",
+    "category": "Engine Parts",
+    "price": 220,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 220, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "price": 250, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Rear Brake Shoe Set",
+    "category": "Brakes",
+    "price": 300,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 300, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "price": 320, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Tire with Inner Tube 2.50-17",
+    "category": "Tires & Wheels",
+    "price": 1250,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "2.50-17", "price": 1250, "stock": 15 },
+      { "model": "Universal", "size": "2.75-17", "price": 1380, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Speedometer Cable",
+    "category": "Cables",
+    "price": 180,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 180, "stock": 15 },
+      { "brand": "Suzuki", "model": "Smash 115", "price": 200, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Underbone Tail Light Assembly",
+    "category": "Electrical",
+    "price": 380,
+    "stock": 30,
+    "variants": [
+      { "brand": "Honda", "model": "Wave 110", "price": 380, "stock": 15 },
+      { "brand": "Yamaha", "model": "Sniper 150", "price": 520, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Gear Shift Lever",
+    "category": "Engine Parts",
+    "price": 280,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "10mm spline", "color": "Black", "price": 280, "stock": 15 },
+      { "model": "Universal", "size": "12mm spline", "color": "Silver", "price": 320, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Street Motorcycle Clutch Cable",
+    "category": "Cables",
+    "price": 220,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "Standard", "price": 220, "stock": 15 },
+      { "model": "Universal", "size": "Long", "price": 260, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Front Brake Lever",
+    "category": "Brakes",
+    "price": 180,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "Short", "color": "Black", "price": 180, "stock": 15 },
+      { "model": "Universal", "size": "Standard", "color": "Silver", "price": 200, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Kick Starter Lever",
+    "category": "Engine Parts",
+    "price": 420,
+    "stock": 30,
+    "variants": [
+      { "model": "Universal", "size": "10mm spline", "price": 420, "stock": 15 },
+      { "model": "Universal", "size": "12mm spline", "price": 450, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Manual Motorcycle Clutch Disc Set",
+    "category": "Engine Parts",
+    "price": 980,
+    "stock": 30,
+    "variants": [
+      { "brand": "Yamaha", "model": "Sniper 150", "price": 980, "stock": 15 },
+      { "brand": "Honda", "model": "TMX 125", "price": 880, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Street Motorcycle Chain and Sprocket Kit",
+    "category": "Engine Parts",
+    "price": 1450,
+    "stock": 30,
+    "variants": [
+      { "brand": "Yamaha", "model": "Sniper 150", "size": "14/42T", "price": 1450, "stock": 15 },
+      { "brand": "Honda", "model": "TMX 125", "size": "15/42T", "price": 1380, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Motorcycle Handlebar",
+    "category": "Accessory",
+    "price": 780,
+    "stock": 30,
+    "variants": [
+      { "size": "22mm", "color": "Black", "price": 780, "stock": 15 },
+      { "size": "22mm", "color": "Chrome", "price": 850, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Motorcycle Foot Peg Set",
+    "category": "Accessory",
+    "price": 420,
+    "stock": 30,
+    "variants": [
+      { "size": "Standard mount", "color": "Black", "price": 420, "stock": 15 },
+      { "size": "Standard mount", "color": "Silver", "price": 450, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Street Motorcycle Rear Sprocket",
+    "category": "Engine Parts",
+    "price": 520,
+    "stock": 30,
+    "variants": [
+      { "brand": "Yamaha", "model": "Sniper 150", "size": "42T", "price": 520, "stock": 15 },
+      { "brand": "Honda", "model": "TMX 125", "size": "42T", "price": 480, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Street Motorcycle Front Brake Pad Set",
+    "category": "Brakes",
+    "price": 360,
+    "stock": 30,
+    "variants": [
+      { "brand": "Yamaha", "model": "Sniper 150", "price": 360, "stock": 15 },
+      { "brand": "Honda", "model": "TMX 125", "price": 420, "stock": 15 }
+    ]
+  },
+  {
+    "name": "Universal Motorcycle Clutch Lever",
+    "category": "Accessory",
+    "price": 220,
+    "stock": 30,
+    "variants": [
+      { "size": "Short", "color": "Black", "price": 220, "stock": 15 },
+      { "size": "Standard", "color": "Silver", "price": 250, "stock": 15 }
+    ]
+  }
+]

@@ -658,7 +658,7 @@ const getAllServiceRequests = async (req, res) => {
       ServiceRequest.find(filter)
       .populate("user")
       .populate("mechanic")
-      .sort({ paymentStatus: -1, createdAt: -1 })
+      .sort({ paymentStatus: -1, createdAt: -1, _id: -1 })
       .skip(shouldPaginate ? (page - 1) * limit : 0)
       .limit(shouldPaginate ? limit : 0),
       shouldPaginate ? ServiceRequest.countDocuments(filter) : Promise.resolve(null),

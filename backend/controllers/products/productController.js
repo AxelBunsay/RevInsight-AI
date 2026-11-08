@@ -79,7 +79,7 @@ const getProducts = async (req, res) => {
     const filter = { isActive: { $ne: false } };
     if (Object.keys(fitment).length) filter.variants = { $elemMatch: fitment };
     const [products, total] = await Promise.all([
-      Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Product.find(filter).sort({ _id: 1 }).skip(skip).limit(limit),
       Product.countDocuments(filter)
     ]);
 

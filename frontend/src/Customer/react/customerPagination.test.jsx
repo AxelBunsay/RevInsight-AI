@@ -54,15 +54,28 @@ describe('customer pagination', () => {
 
   it('uses ten items per page for Shop, Services, and purchases at every width', () => {
     expect(CUSTOMER_PAGE_SIZES).toEqual({
-      shop: 10,
+      shop: 15,
       services: 10,
       purchases: 10
     });
     for (const width of [320, 360, 390, 600, 768, 1024, 1920]) {
-      expect(getCustomerPageSize('shop', width)).toBe(10);
+      expect(getCustomerPageSize('shop', width)).toBe(15);
       expect(getCustomerPageSize('services', width)).toBe(10);
       expect(getCustomerPageSize('purchases', width)).toBe(10);
     }
+  });
+
+  it('shows fifteen products per Shop page with matching ranges and navigation', () => {
+    const firstPage = renderPagination(1, 4, 60, CUSTOMER_PAGE_SIZES.shop);
+    const secondPage = renderPagination(2, 4, 60, CUSTOMER_PAGE_SIZES.shop);
+
+    expect(firstPage).toContain('Showing 1-15 of 60');
+    expect(firstPage).toContain('aria-label="Previous page" disabled=""');
+    expect(firstPage).toContain('aria-label="Next page"');
+    expect(firstPage).toContain('>4</button>');
+    expect(secondPage).toContain('Showing 16-30 of 60');
+    expect(getCustomerPageItems(Array.from({ length: 60 }, (_, index) => index + 1), 1, CUSTOMER_PAGE_SIZES.shop))
+      .toHaveLength(15);
   });
 
   it('slices one page while preserving full result totals and ranges', () => {

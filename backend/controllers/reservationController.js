@@ -399,7 +399,7 @@ const submitPayment = async (req, res) => {
 const getCustomerReservations = async (req, res) => {
   try {
     await expireReservations();
-    const reservations = await Reservation.find({ customerId: req.user.userId, code: { $exists: true } }).sort({ createdAt: -1 });
+    const reservations = await Reservation.find({ customerId: req.user.userId, code: { $exists: true } }).sort({ createdAt: -1, _id: -1 });
     res.json({ success: true, reservations: reservations.map(customerReservationPayload) });
   } catch (error) {
     sendError(res, error);
@@ -492,17 +492,18 @@ const getAdminReservations = async (req, res) => {
     let reservations;
     if (!status) {
       const [submitted, otherReservations] = await Promise.all([
-        populateAdminReservation(Reservation.find({ ...query, status: 'Payment Submitted' }).sort({ createdAt: -1 }).limit(200)),
-        populateAdminReservation(Reservation.find({ ...query, status: { $ne: 'Payment Submitted' } }).sort({ createdAt: -1 }).limit(200))
+        populateAdminReservation(Reservation.find({ ...query, status: 'Payment Submitted' }).sort({ createdAt: -1, _id: -1 }).limit(200)),
+        populateAdminReservation(Reservation.find({ ...query, status: { $ne: 'Payment Submitted' } }).sort({ createdAt: -1, _id: -1 }).limit(200))
       ]);
       reservations = [...submitted, ...otherReservations].slice(0, 200);
     } else {
-      reservations = await populateAdminReservation(Reservation.find(query).sort({ createdAt: -1 }).limit(200));
+      reservations = await populateAdminReservation(Reservation.find(query).sort({ createdAt: -1, _id: -1 }).limit(200));
     }
     const sortedReservations = reservations.sort((left, right) => {
       const leftPending = left.status === 'Payment Submitted' ? 0 : 1;
       const rightPending = right.status === 'Payment Submitted' ? 0 : 1;
-      return leftPending - rightPending || right.createdAt - left.createdAt;
+      return leftPending - rightPending || right.createdAt - left.createdAt
+        || String(right._id).localeCompare(String(left._id));
     });
     res.json({ success: true, reservations: sortedReservations.map((reservation) => {
       const value = reservation.toObject();

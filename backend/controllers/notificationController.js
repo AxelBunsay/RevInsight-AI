@@ -9,7 +9,7 @@ const getAdminNotifications = async (req, res) => {
   try {
     const filter = getAdminNotificationFilter(req.admin.id);
     const [notifications, unreadCount] = await Promise.all([
-      Notification.find(filter).sort({ createdAt: -1 }).limit(50).lean(),
+      Notification.find(filter).sort({ createdAt: -1, _id: -1 }).limit(50).lean(),
       Notification.countDocuments({ ...filter, read: false })
     ]);
     res.json({ notifications, unreadCount });
@@ -69,7 +69,7 @@ const getCustomerNotifications = async (req, res) => {
     const customerId = req.user.userId;
     const filter = { audience: 'customer', customerId, clearedAt: null };
     const [notifications, unreadCount] = await Promise.all([
-      Notification.find(filter).sort({ createdAt: -1 }).limit(50).lean(),
+      Notification.find(filter).sort({ createdAt: -1, _id: -1 }).limit(50).lean(),
       Notification.countDocuments({ ...filter, read: false })
     ]);
     res.json({ notifications, unreadCount });
@@ -119,7 +119,7 @@ const getMechanicNotifications = async (req, res) => {
   try {
     const filter = { audience: 'mechanic', mechanicId: req.user.userId, clearedAt: null };
     const [notifications, unreadCount] = await Promise.all([
-      Notification.find(filter).sort({ createdAt: -1 }).limit(50).lean(),
+      Notification.find(filter).sort({ createdAt: -1, _id: -1 }).limit(50).lean(),
       Notification.countDocuments({ ...filter, read: false })
     ]);
     res.json({ notifications, unreadCount });

@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import supertest from 'supertest';
 
 const require = createRequire(import.meta.url);
+const mongoose = require('mongoose');
 const {
   app,
   BusinessRecord,
@@ -267,6 +268,22 @@ describe('reservation business flow integration', () => {
     expect(response.body.products[0].variants[0]).not.toHaveProperty('reservedQty');
   });
 
+  it('returns stable product pages without repeating products across page boundaries', async () => {
+    await Product.create([
+      { _id: new mongoose.Types.ObjectId('000000000000000000000003'), name: 'Page Part C', price: 30, quantity: 1, category: 'Electrical' },
+      { _id: new mongoose.Types.ObjectId('000000000000000000000001'), name: 'Page Part A', price: 10, quantity: 1, category: 'Electrical' },
+      { _id: new mongoose.Types.ObjectId('000000000000000000000002'), name: 'Page Part B', price: 20, quantity: 1, category: 'Electrical' }
+    ]);
+    const expectedIds = (await Product.find({ isActive: { $ne: false } }).sort({ _id: 1 }).select('_id').lean())
+      .map((product) => String(product._id));
+    const pages = await Promise.all(expectedIds.map((_, index) => api.get(`/api/products?page=${index + 1}&limit=1`)));
+    const pagedIds = pages.flatMap((response) => response.body.products.map((product) => product._id));
+
+    expect(pages.every((response) => response.status === 200)).toBe(true);
+    expect(pagedIds).toEqual(expectedIds);
+    expect(new Set(pagedIds).size).toBe(expectedIds.length);
+  });
+
   it('normalizes and rejects product categories through both inventory controllers', async () => {
     const inventoryCreate = await adminPost('/api/dashboard/inventory').send({
       name: 'Mixed Case Inventory',
@@ -448,6 +465,31 @@ describe('reservation business flow integration', () => {
         imageUrl: ''
       });
     }
+  });
+
+  it('paginates admin inventory deterministically and reports the full search total', async () => {
+    const createdProducts = await Product.create(Array.from({ length: 25 }, (_, index) => ({
+      _id: new mongoose.Types.ObjectId(String(index + 1).padStart(24, '0')),
+      name: `Inventory Page Test ${index + 1}`,
+      price: 100 + index,
+      quantity: 1,
+      category: 'Electrical'
+    })));
+    expect(createdProducts.every((product) => product.createdAt === undefined)).toBe(true);
+
+    const pages = await Promise.all([1, 2, 3].map((page) => adminGet(
+      `/api/dashboard/inventory?page=${page}&limit=12&search=Inventory%20Page%20Test`
+    )));
+    const pageIds = pages.flatMap((response) => response.body.data.map((product) => product._id));
+    const expectedIds = createdProducts
+      .map((product) => String(product._id))
+      .sort((left, right) => right.localeCompare(left));
+
+    expect(pages.every((response) => response.status === 200)).toBe(true);
+    expect(pages.map((response) => response.body.data.length)).toEqual([12, 12, 1]);
+    expect(pages[0].body.pagination).toMatchObject({ totalRecords: 25, totalPages: 3 });
+    expect(pageIds).toEqual(expectedIds);
+    expect(new Set(pageIds).size).toBe(createdProducts.length);
   });
 
   it('rejects reducing a variant stock below its reserved quantity', async () => {

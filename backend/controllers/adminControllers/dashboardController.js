@@ -419,13 +419,13 @@ const getBusinessRecords = async (req, res) => {
       BusinessRecord.countDocuments(itemBusinessRecordsQuery),
       BusinessRecord.countDocuments(serviceQuery),
       BusinessRecord.find(filteredQuery)
-        .sort({ completedAt: -1, createdAt: -1 })
+        .sort({ completedAt: -1, createdAt: -1, _id: -1 })
         .limit(page * limit),
       includeReservations
         ? Reservation.aggregate([
           { $match: reservationQuery },
           { $addFields: { sortDate: { $ifNull: ['$completedAt', '$createdAt'] } } },
-          { $sort: { sortDate: -1 } },
+          { $sort: { sortDate: -1, _id: -1 } },
           { $limit: page * limit }
         ])
         : []
@@ -532,6 +532,7 @@ const getBusinessRecords = async (req, res) => {
     });
     const combinedRows = [...recordsWithQuantity, ...reservationRecords].sort(
       (left, right) => new Date(right.completedAt || right.createdAt) - new Date(left.completedAt || left.createdAt)
+        || String(right._id).localeCompare(String(left._id))
     );
     const pageRows = combinedRows.slice((page - 1) * limit, page * limit);
     const totalAmount = (businessAmount[0]?.total || 0) + (reservationAmount[0]?.total || 0);
@@ -567,11 +568,11 @@ const getAllTransactions = async (req, res) => {
     const includeCompletedReservations = !status || String(status).toLowerCase() === 'completed';
     const [orders, orderCount, reservationRows, reservationCount] = await Promise.all([
       Order.find(query)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1, _id: -1 })
         .limit(page * limit),
       Order.countDocuments(query),
       includeCompletedReservations
-        ? Reservation.find({ status: 'Completed', code: { $exists: true } }).sort({ completedAt: -1 }).limit(page * limit)
+        ? Reservation.find({ status: 'Completed', code: { $exists: true } }).sort({ completedAt: -1, _id: -1 }).limit(page * limit)
         : [],
       includeCompletedReservations ? Reservation.countDocuments({ status: 'Completed', code: { $exists: true } }) : 0
     ]);
@@ -589,7 +590,8 @@ const getAllTransactions = async (req, res) => {
       }))
     }));
     const transactions = [...orders, ...reservations]
-      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt))
+      .sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)
+        || String(right._id).localeCompare(String(left._id)))
       .slice((page - 1) * limit, page * limit);
     const total = orderCount + reservationCount;
 
@@ -706,11 +708,16 @@ const getAllInventory = async (req, res) => {
   try {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 12));
-
-    const inventory = await Product.find({ isActive: { $ne: false } })
-      .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const filter = { isActive: { $ne: false } };
+    if (search) {
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.name = { $regex: escapedSearch, $options: 'i' };
+    }
+    const [inventory, total] = await Promise.all([
+      Product.find(filter).sort({ _id: -1 }).skip((page - 1) * limit).limit(limit),
+      Product.countDocuments(filter)
+    ]);
     const activeReservations = await Reservation.find({
       code: { $exists: true },
       status: { $in: ['Pending Down Payment', 'Payment Submitted', 'Reserved'] },
@@ -725,8 +732,6 @@ const getAllInventory = async (req, res) => {
       available: Number(item.quantity || 0) - Number(item.reservedQty || 0),
       hasActiveReservation: activeProductIds.has(item._id.toString())
     }));
-
-    const total = await Product.countDocuments({ isActive: { $ne: false } });
 
     res.json({
       success: true,
