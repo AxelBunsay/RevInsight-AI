@@ -214,7 +214,7 @@ export function CustomerHeader() {
 
   return <header ref={headerRef} className="customer-header">
     <div className="customer-header-inner">
-      <Link className="customer-brand" to={hasCustomerAccount ? '/customer/shop' : '/'} aria-label="Manoy's Motorcycle Parts, Accessories & Services"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="40" height="40" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small></span></Link>
+      <Link className="customer-brand" to={hasCustomerAccount ? '/customer/shop' : '/'} aria-label="Manoy's Motorcycle Parts, Accessories & Services"><img className="customer-brand__mark" src="/logo.svg" alt="Manoy's Motorcycle logo" width="40" height="40" decoding="async" /><span className="customer-brand__copy"><strong>MANOY&apos;S</strong><small><span>MOTORCYCLE PARTS,</span> <span>ACCESSORIES &amp; SERVICES</span></small></span></Link>
       <div className="customer-header-actions">
       <Link className="customer-header-icon-button customer-header-cart" to="/customer/cart" aria-label={`Open Reservation Cart${cartCount ? `, ${cartCount} items` : ''}`} title="Reservation Cart">
         <svg viewBox="0 0 24 24" aria-hidden="true"><g transform="translate(0.5 -0.1)"><path d="M3 4h2l2.2 10.1a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L20 8H6" /><circle cx="10" cy="19" r="1.2" /><circle cx="17" cy="19" r="1.2" /></g></svg>
