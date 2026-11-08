@@ -1,5 +1,5 @@
 export const CUSTOMER_PAGE_SIZES = Object.freeze({
-  shop: 10,
+  shop: 15,
   services: 10,
   purchases: 10
 });

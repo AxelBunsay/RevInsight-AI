@@ -159,7 +159,7 @@ const getMechanicStats = async (req, res) => {
       })
         .select('mechanicRating mechanicRatingComment mechanicRatedAt serviceType scheduledDate user')
         .populate('user', 'firstName')
-        .sort({ mechanicRatedAt: -1 })
+        .sort({ mechanicRatedAt: -1, _id: -1 })
         .limit(5)
         .lean()
     ]);

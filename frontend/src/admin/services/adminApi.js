@@ -242,7 +242,11 @@ export const adminApi = {
     if (useDemoData) return dashboardMock.salesSeries[period] || [];
     return makeSeries(await getOrders(), period);
   },
-  getInventory: (page = 1, limit = 12) => request(`/api/dashboard/inventory?page=${page}&limit=${limit}`),
+  getInventory: (page = 1, limit = 12, search = '') => {
+    const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+    if (search) params.set('search', search);
+    return request(`/api/dashboard/inventory?${params}`);
+  },
   createInventory: (item) => request('/api/dashboard/inventory', { method: 'POST', body: item }),
   updateInventory: (id, item) => request(`/api/dashboard/inventory/${id}`, { method: 'PUT', body: item }),
   deleteInventory: (id) => request(`/api/dashboard/inventory/${id}`, { method: 'DELETE' }),

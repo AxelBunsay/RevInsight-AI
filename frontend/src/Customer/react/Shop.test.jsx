@@ -75,13 +75,12 @@ describe('shop product card', () => {
   });
 
   it('uses a compact left-aligned responsive grid with keyboard focus styling', () => {
-    expect(shopStyles).toContain('grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));');
-    expect(shopStyles).toContain('grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));');
-    expect(shopStyles).toContain('grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));');
-    expect(shopStyles).toContain('aspect-ratio: 1 / 1;');
-    expect(shopStyles).toContain('padding: 8px 10px 10px;');
+    expect(shopStyles).toContain('grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));');
+    expect(shopStyles).toContain('gap: 16px;');
     expect(shopStyles).toContain('.shop-page .product-card:focus-visible');
+    expect(shopStyles).toContain('outline: 2px solid #ef701b;');
     expect(shopStyles).toContain('align-items: start;');
+    expect(shopStyles).toContain('justify-content: start;');
     expect(shopSource).toContain('scrollY: window.scrollY');
     expect(shopSource).toContain('preserveScrollOnMount={Boolean(restoredShopView)}');
     expect(customerLayoutSource).toContain('if (!preserveScrollOnMount) window.scrollTo(0, 0);');

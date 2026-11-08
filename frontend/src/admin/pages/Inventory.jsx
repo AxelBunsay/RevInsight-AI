@@ -161,6 +161,7 @@ function Inventory() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalInventoryItems, setTotalInventoryItems] = useState(0);
   const [activeTab, setActiveTab] = useState("items");
   const [services, setServices] = useState([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
@@ -253,7 +254,7 @@ function Inventory() {
     const loadInventory = () => {
       setIsLoading(true);
       api
-        .getInventory(page, 12)
+        .getInventory(page, 12, search)
         .then((response) => {
           if (isMounted) {
             const data = response.data || [];
@@ -272,6 +273,7 @@ function Inventory() {
               })),
             );
             setTotalPages(response.pagination?.totalPages || 1);
+            setTotalInventoryItems(Number(response.pagination?.totalRecords ?? data.length));
           }
         })
         .catch((fetchError) => {
@@ -291,7 +293,7 @@ function Inventory() {
       isMounted = false;
       window.clearInterval(refreshInterval);
     };
-  }, [page, refreshKey]);
+  }, [page, refreshKey, search]);
 
   useEffect(() => {
     let isMounted = true;
@@ -653,7 +655,7 @@ function Inventory() {
                 />
               </div>
               <div className="inventory-info">
-                {isLoading ? "Loading..." : filteredItems.length} inventory
+                {isLoading ? "Loading..." : totalInventoryItems} inventory
                 items
               </div>
               <div className="inventory-card-list" aria-label="Inventory item cards">
