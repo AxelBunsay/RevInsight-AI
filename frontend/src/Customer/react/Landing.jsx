@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getAuthToken } from '../../auth/authSession';
 import { api } from '../../services/api';
 import ShopProductCard from './ShopProductCard';
 import { CustomerPage } from './CustomerLayout';
@@ -55,16 +54,12 @@ export default function Landing() {
   const [productsLoading, setProductsLoading] = useState(true);
   const [services, setServices] = useState([]);
   const [downPaymentPercent, setDownPaymentPercent] = useState(null);
-  const [hasCustomerAccount] = useState(() => {
-    const token = getAuthToken('customer');
-    return Boolean(token && token !== 'prototype-guest');
-  });
   const featuredProducts = useMemo(() => selectLandingProducts(products), [products]);
   const popularServices = useMemo(() => selectLandingServices(services), [services]);
   useEffect(() => {
     let active = true;
     Promise.allSettled([
-      api.getProducts(1, 4),
+      api.getProducts(1, 6),
       api.getServices(),
       api.getShopSettings()
     ]).then(([productsResult, servicesResult, settingsResult]) => {
@@ -83,17 +78,6 @@ export default function Landing() {
 
   return <CustomerPage title="Home" description="Everything your ride needs.">
     <div className="landing-content">
-      <section className="shop-market-hero landing-hero" aria-label="Manoy's Motorcycle home">
-        <div className="shop-promo-primary landing-hero-primary">
-          <h1>Everything your ride needs.</h1>
-          <span>Quality parts, trusted accessories, and expert service in one place. Reserve online, pay the down payment, and pick up at the shop.</span>
-          <div className="landing-hero-actions">
-            <Link to="/customer/shop">Shop parts</Link>
-            <Link to="/customer/services">Book a service</Link>
-          </div>
-        </div>
-      </section>
-
       <section className="landing-trust-strip" aria-label="Shop highlights">
         <div className="landing-trust-card">
           <span className="landing-trust-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M4 13.5h16l-1.6-5a2 2 0 0 0-1.9-1.4H7.5a2 2 0 0 0-1.9 1.4L4 13.5Zm0 0v4h2m12 0h2v-4m-14 0v2h16v-2M7 17.5v1m10-1v1" /><circle cx="7" cy="13.5" r="1" /><circle cx="17" cy="13.5" r="1" /></svg></span>
@@ -116,7 +100,7 @@ export default function Landing() {
         </div>
         <div className="landing-product-grid" aria-busy={productsLoading}>
           {productsLoading
-            ? Array.from({ length: 4 }, (_, index) => <article className="landing-product-skeleton" key={`product-skeleton-${index}`} aria-hidden="true"><div /><span /><span /></article>)
+            ? Array.from({ length: 6 }, (_, index) => <article className="landing-product-skeleton" key={`product-skeleton-${index}`} aria-hidden="true"><div /><span /><span /></article>)
             : featuredProducts.map((product) => featuredProductCard(product, downPaymentPercent))}
         </div>
       </section>}
@@ -151,13 +135,6 @@ export default function Landing() {
         </div>
       </section>
 
-      {!hasCustomerAccount && <section className="landing-final-cta" aria-label="Customer account">
-        <div>
-          <h2>Ready to ride?</h2>
-          <p>Create an account to reserve parts and book services.</p>
-        </div>
-        <div><Link to="/customer/login">Sign in</Link><Link to="/customer/register">Register</Link></div>
-      </section>}
     </div>
   </CustomerPage>;
 }

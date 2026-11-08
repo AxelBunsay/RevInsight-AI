@@ -12,11 +12,11 @@ export function selectLandingProducts(products = []) {
   return products
     .filter((product) => product.isActive !== false && productAvailability(product).isAvailable)
     .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))
-    .slice(0, 4);
+    .slice(0, 6);
 }
 
 export function selectLandingServices(services = []) {
-  return services.filter((service) => service.isActive !== false).slice(0, 2);
+  return services.filter((service) => service.isActive !== false).slice(0, 3);
 }
 
 export function shouldShowFeaturedProducts(isLoading, products) {

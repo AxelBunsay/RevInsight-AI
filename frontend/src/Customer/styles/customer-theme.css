@@ -175,27 +175,16 @@
   color: var(--c-brand-text);
 }
 
-.customer-page .landing-hero,
-.customer-page .landing-labor-card,
-.customer-page .landing-final-cta {
+.customer-page .landing-labor-card {
   background-image: linear-gradient(105deg, var(--c-dark), var(--c-brand-text) 62%, var(--c-primary));
 }
 
-.customer-page .landing-hero-primary .landing-hero-actions a:first-child,
-.customer-page .landing-labor-card a,
-.customer-page .landing-final-cta a {
+.customer-page .landing-labor-card a {
   background-color: #fff;
   color: var(--c-brand-text);
 }
 
-.customer-page .landing-hero-primary .landing-hero-actions a:last-child {
-  background-color: transparent;
-  color: #fff;
-}
-
-.customer-page .landing-hero-primary .landing-hero-actions a:first-child:hover,
-.customer-page .landing-labor-card a:hover,
-.customer-page .landing-final-cta a:hover {
+.customer-page .landing-labor-card a:hover {
   background-color: #fff;
   color: var(--c-brand-text);
 }

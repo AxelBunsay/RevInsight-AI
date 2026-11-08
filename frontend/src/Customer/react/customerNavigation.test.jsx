@@ -166,6 +166,8 @@ describe('customer account menu', () => {
     expect(markup).toContain('class="customer-brand" href="/"');
     expect(markup).toContain('aria-current="page" href="/"');
     expect(markup).toContain('>Home</a>');
+    expect(markup).not.toContain('>Shop</a>');
+    expect(markup).not.toContain('>Services</a>');
     expect(cart).toBeGreaterThan(actions);
     expect(bell).toBeGreaterThan(cart);
     expect(toggle).toBeGreaterThan(bell);
@@ -175,6 +177,33 @@ describe('customer account menu', () => {
     expect(markup.match(/customer-header-icon-button/g)).toHaveLength(3);
     expect(markup).not.toContain('customer-header-cart-count');
     expect(markup).not.toContain('customer-notification-count');
+  });
+
+  it('keeps Shop, Services, and Account links in the signed-in customer navbar', () => {
+    const originalLocalStorage = globalThis.localStorage;
+    const originalSessionStorage = globalThis.sessionStorage;
+    const storage = {
+      getItem: (key) => key === 'customerToken' ? 'customer-token' : null,
+      setItem: () => {},
+      removeItem: () => {}
+    };
+    globalThis.localStorage = storage;
+    globalThis.sessionStorage = storage;
+    let markup;
+    try {
+      markup = renderToStaticMarkup(<MemoryRouter><CustomerPrototypeProvider><CustomerHeader /></CustomerPrototypeProvider></MemoryRouter>);
+    } finally {
+      if (originalLocalStorage === undefined) delete globalThis.localStorage;
+      else globalThis.localStorage = originalLocalStorage;
+      if (originalSessionStorage === undefined) delete globalThis.sessionStorage;
+      else globalThis.sessionStorage = originalSessionStorage;
+    }
+
+    expect(markup).toContain('>Shop</a>');
+    expect(markup).toContain('>Services</a>');
+    expect(markup).toContain('Account');
+    expect(markup).not.toContain('>Home</a>');
+    expect(markup).not.toContain('>Register</a>');
   });
 
   it('keeps customer chrome mounted while route content changes by pathname', () => {
