@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RevenueAnswerChart from './RevenueAnswerChart';
 import { adminApi } from '../../services/adminApi';
 import MarkdownAnswer from './MarkdownAnswer';
@@ -6,6 +6,7 @@ import { askRevenueQuestion, handleQuestionKeyDown } from './askRevenueQuestion'
 import { AdminModalPortal } from '../../pages/ManagementPageComponents';
 import useAdminModalEffects from '../useAdminModalEffects';
 import RevenueCardInsights from './RevenueCardInsights';
+import { createRevenueFiguresFingerprint } from './revenueAnalysisFingerprint';
 import riskThresholds from '../../../../../shared/revenueRiskConfig.json';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
@@ -364,7 +365,7 @@ function currentQuarterProgress(today = new Date()) {
   };
 }
 
-function AskRevenueAIPanel() {
+function AskRevenueAIPanel({ onActivityChange }) {
   const suggestions = [
     'Why did revenue change last quarter?',
     'What are the biggest revenue risks?',
@@ -379,13 +380,15 @@ function AskRevenueAIPanel() {
   const [copyMessage, setCopyMessage] = useState('');
   const inFlightRef = useRef(false);
   const lastQuestionRef = useRef('');
+  const questionFocusedRef = useRef(false);
+  const updateActivity = () => onActivityChange?.(questionFocusedRef.current || inFlightRef.current);
 
   const submitQuestion = async (value = question) => {
     const trimmedQuestion = value.trim();
-    if (!trimmedQuestion) return;
+    if (!trimmedQuestion || inFlightRef.current) return;
     lastQuestionRef.current = trimmedQuestion;
     setCopyMessage('');
-    await askRevenueQuestion({
+    const request = askRevenueQuestion({
       question: trimmedQuestion,
       inFlightRef,
       request: adminApi.askRevenueAI,
@@ -395,6 +398,9 @@ function AskRevenueAIPanel() {
       setTimestamp: setAnswerTimestamp,
       setError
     });
+    updateActivity();
+    await request;
+    updateActivity();
   };
 
   const submitForm = (event) => {
@@ -444,6 +450,14 @@ function AskRevenueAIPanel() {
               textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
               textarea.style.overflowY = textarea.scrollHeight > 160 ? 'auto' : 'hidden';
             }}
+            onFocus={() => {
+              questionFocusedRef.current = true;
+              updateActivity();
+            }}
+            onBlur={() => {
+              questionFocusedRef.current = false;
+              updateActivity();
+            }}
             onKeyDown={(event) => handleQuestionKeyDown(event, () => submitQuestion(question))}
           />
         </label>
@@ -485,11 +499,16 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [analysis, setAnalysis] = useState({ quarters: [], risk: null, concentration: null });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [refreshError, setRefreshError] = useState(false);
+  const [dataUpdatedAt, setDataUpdatedAt] = useState(null);
+  const [collectedAmount, setCollectedAmount] = useState(Number(dashboardData?.stats?.collected || 0));
+  const [outstandingAmount, setOutstandingAmount] = useState(Number(dashboardData?.stats?.outstanding || 0));
   const [cardInsights, setCardInsights] = useState({});
   const [cardInsightSource, setCardInsightSource] = useState('template');
   const [cardInsightGeneratedAt, setCardInsightGeneratedAt] = useState('');
   const [cardInsightsLoading, setCardInsightsLoading] = useState(true);
   const [cardInsightsError, setCardInsightsError] = useState('');
+  const [cardInsightRequestInFlight, setCardInsightRequestInFlight] = useState(false);
   const [refreshRemainingSeconds, setRefreshRemainingSeconds] = useState(0);
   const [selectedQuarterKey, setSelectedQuarterKey] = useState(null);
   const [modalId, setModalId] = useState(null);
@@ -500,6 +519,13 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [reportError, setReportError] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportCardPage, setReportCardPage] = useState(1);
+  const dataRefreshInFlightRef = useRef(false);
+  const cardInsightRequestInFlightRef = useRef(false);
+  const askAIActiveRef = useRef(false);
+  const latestFiguresFingerprintRef = useRef('');
+  const lastAIRequestFingerprintRef = useRef('');
+  const lastAIRequestAtRef = useRef(0);
+  const lastDataRefreshStartedAtRef = useRef(0);
   const openAnalysis = (cardId) => setModalId(cardId);
   const handleCardKeyDown = (event, cardId) => {
     if (event.target !== event.currentTarget) return;
@@ -513,6 +539,38 @@ function AIRevenueAnalysis({ dashboardData }) {
   useAdminModalEffects(reportOpen, () => setReportOpen(false));
   useAdminModalEffects(Boolean(modalId), () => setModalId(null));
 
+  const requestCardInsights = useCallback(async ({ fingerprint, forceRefresh = false, showLoading = false } = {}) => {
+    if (cardInsightRequestInFlightRef.current) return false;
+    cardInsightRequestInFlightRef.current = true;
+    setCardInsightRequestInFlight(true);
+    lastAIRequestAtRef.current = Date.now();
+    lastAIRequestFingerprintRef.current = fingerprint || latestFiguresFingerprintRef.current;
+    if (showLoading) {
+      setCardInsightsLoading(true);
+      setCardInsightsError('');
+    }
+    try {
+      const result = await adminApi.getRevenueCardInsights(forceRefresh);
+      setCardInsights(result.insights || {});
+      setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
+      setCardInsightGeneratedAt(result.generatedAt || '');
+      setCardInsightsError('');
+      if (forceRefresh) setRefreshRemainingSeconds(30);
+      return true;
+    } catch (error) {
+      setCardInsights({});
+      setCardInsightSource('template');
+      setCardInsightGeneratedAt('');
+      setCardInsightsError(error.message || 'AI insights are unavailable.');
+      if (forceRefresh) setRefreshRemainingSeconds(Number(error.details?.retryAfterSeconds || 0));
+      return false;
+    } finally {
+      cardInsightRequestInFlightRef.current = false;
+      setCardInsightRequestInFlight(false);
+      if (showLoading) setCardInsightsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!refreshRemainingSeconds) return undefined;
     const timer = window.setInterval(() => {
@@ -523,24 +581,108 @@ function AIRevenueAnalysis({ dashboardData }) {
 
   useEffect(() => {
     let active = true;
-    adminApi.getRevenueAnalysisData()
-      .then((result) => {
+    let refreshTimer = null;
+
+    const refreshData = async (initial = false) => {
+      if (!active || dataRefreshInFlightRef.current) return;
+      if (!initial && (document.hidden || askAIActiveRef.current)) return;
+      const now = Date.now();
+      if (!initial && now - lastDataRefreshStartedAtRef.current < 1000) return;
+      dataRefreshInFlightRef.current = true;
+      if (!initial) lastDataRefreshStartedAtRef.current = now;
+
+      try {
+        const [result, statsResponse] = await Promise.all([
+          adminApi.getRevenueAnalysisData(),
+          adminApi.getDashboardStats()
+        ]);
         if (!active) return;
-        setAnalysis({
+        const nextAnalysis = {
           quarters: getQuarterRows(result.quarterly?.data),
           risk: result.risk?.data || null,
           concentration: result.concentration?.data || null
+        };
+        const nextCollected = Number(statsResponse.data?.collected || 0);
+        const nextOutstanding = Number(statsResponse.data?.outstanding || 0);
+        const fingerprint = createRevenueFiguresFingerprint({
+          analysis: nextAnalysis,
+          collectedAmount: nextCollected,
+          outstandingAmount: nextOutstanding
         });
+        const figuresChanged = Boolean(latestFiguresFingerprintRef.current)
+          && fingerprint !== latestFiguresFingerprintRef.current;
+        latestFiguresFingerprintRef.current = fingerprint;
+        setAnalysis(nextAnalysis);
+        setCollectedAmount(nextCollected);
+        setOutstandingAmount(nextOutstanding);
+        setDataUpdatedAt(new Date());
+        setRefreshError(false);
         setLoadError('');
-      })
-      .catch((error) => {
-        if (active) setLoadError(error.message || 'Revenue analysis could not be loaded.');
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-    return () => { active = false; };
-  }, []);
+
+        if (figuresChanged) {
+          setCardInsights({});
+          setCardInsightSource('template');
+          setCardInsightGeneratedAt('');
+          setCardInsightsError('');
+        }
+
+        if (initial) {
+          void requestCardInsights({ fingerprint, showLoading: true });
+        } else if (
+          fingerprint !== lastAIRequestFingerprintRef.current
+          && Date.now() - lastAIRequestAtRef.current >= 5 * 60 * 1000
+        ) {
+          void requestCardInsights({ fingerprint, forceRefresh: true });
+        }
+      } catch (error) {
+        if (!active) return;
+        if (initial) {
+          setLoadError(error.message || 'Revenue analysis could not be loaded.');
+          setCardInsightsLoading(false);
+        } else {
+          setRefreshError(true);
+        }
+      } finally {
+        dataRefreshInFlightRef.current = false;
+        if (active && initial) setIsLoading(false);
+      }
+    };
+
+    const stopRefreshTimer = () => {
+      if (refreshTimer !== null) {
+        window.clearInterval(refreshTimer);
+        refreshTimer = null;
+      }
+    };
+    const startRefreshTimer = () => {
+      if (refreshTimer === null && !document.hidden) {
+        refreshTimer = window.setInterval(() => { void refreshData(); }, 60 * 1000);
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        stopRefreshTimer();
+        return;
+      }
+      startRefreshTimer();
+      void refreshData();
+    };
+    const onWindowFocus = () => {
+      if (!document.hidden) void refreshData();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', onWindowFocus);
+    startRefreshTimer();
+    void refreshData(true);
+
+    return () => {
+      active = false;
+      stopRefreshTimer();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('focus', onWindowFocus);
+    };
+  }, [requestCardInsights]);
 
   const todayQuarter = currentQuarterProgress();
   const quarters = useMemo(
@@ -617,8 +759,6 @@ function AIRevenueAnalysis({ dashboardData }) {
   const monthNames = reportYear && reportQuarterNumber
     ? [0, 1, 2].map((offset) => new Date(reportYear, (reportQuarterNumber - 1) * 3 + offset, 1).toLocaleString('en-PH', { month: 'short' }))
     : [];
-  const collectedAmount = Number(dashboardData?.stats?.collected || 0);
-  const outstandingAmount = Number(dashboardData?.stats?.outstanding || 0);
   const selectedAnalysis = modalId === 'risk'
     ? { title: 'Revenue risk by category', items: categoryItems }
     : modalId === 'concentration'
@@ -692,47 +832,13 @@ function AIRevenueAnalysis({ dashboardData }) {
     estimate
   });
 
-  useEffect(() => {
-    if (isLoading || loadError) return undefined;
-    let active = true;
-    adminApi.getRevenueCardInsights()
-      .then((result) => {
-        if (!active) return;
-        setCardInsights(result.insights || {});
-        setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
-        setCardInsightGeneratedAt(result.generatedAt || '');
-      })
-      .catch((error) => {
-        if (!active) return;
-        setCardInsights({});
-        setCardInsightSource('template');
-        setCardInsightGeneratedAt('');
-        setCardInsightsError(error.message || 'AI insights are unavailable.');
-      })
-      .finally(() => {
-        if (active) setCardInsightsLoading(false);
-      });
-    return () => { active = false; };
-  }, [analysis, isLoading, loadError, selectedQuarterKey]);
-
   const refreshCardInsights = async () => {
-    setCardInsightsLoading(true);
-    setCardInsightsError('');
-    try {
-      const result = await adminApi.getRevenueCardInsights(true);
-      setCardInsights(result.insights || {});
-      setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
-      setCardInsightGeneratedAt(result.generatedAt || '');
-      setRefreshRemainingSeconds(30);
-    } catch (error) {
-      setCardInsights({});
-      setCardInsightSource('template');
-      setCardInsightGeneratedAt('');
-      setCardInsightsError(error.message || 'AI insights are unavailable.');
-      setRefreshRemainingSeconds(Number(error.details?.retryAfterSeconds || 0));
-    } finally {
-      setCardInsightsLoading(false);
-    }
+    if (cardInsightRequestInFlightRef.current) return;
+    await requestCardInsights({
+      fingerprint: latestFiguresFingerprintRef.current,
+      forceRefresh: true,
+      showLoading: true
+    });
   };
 
   const renderCardInsight = (cardKey) => {
@@ -756,7 +862,7 @@ function AIRevenueAnalysis({ dashboardData }) {
   return <>
   <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
     <div className="ai-revenue-analysis__header">
-      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue, risk, and concentration from business data</p></div></div>
+      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue, risk, and concentration from business data</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
       <div className="ai-revenue-toolbar">
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>ⓘ Risk thresholds</button>
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportMonth(null); setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
@@ -828,7 +934,7 @@ function AIRevenueAnalysis({ dashboardData }) {
                 {cardInsightsError ? ' · AI unavailable; showing data-based summaries.' : ''}
                 {cardInsightGeneratedAt && ` · Updated ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(cardInsightGeneratedAt))}`}
               </span>
-              <button type="button" className="ai-revenue-toolbar__action" onClick={refreshCardInsights} disabled={cardInsightsLoading || refreshRemainingSeconds > 0}>
+              <button type="button" className="ai-revenue-toolbar__action" onClick={refreshCardInsights} disabled={cardInsightsLoading || cardInsightRequestInFlight || refreshRemainingSeconds > 0}>
                 {refreshRemainingSeconds > 0 ? `Refresh insights (${refreshRemainingSeconds}s)` : 'Refresh insights'}
               </button>
             </div>
@@ -966,7 +1072,7 @@ function AIRevenueAnalysis({ dashboardData }) {
       </section>
     </div></AdminModalPortal>}
   </section>
-  <AskRevenueAIPanel />
+  <AskRevenueAIPanel onActivityChange={(isActive) => { askAIActiveRef.current = isActive; }} />
   </>;
 }
 

@@ -601,6 +601,16 @@
   color: var(--muted);
   font-size: 11px;
 }
+.admin-root .ai-revenue-analysis__updated,
+.admin-root .ai-revenue-analysis__refresh-error {
+  display: inline-block;
+  margin: 4px 8px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.admin-root .ai-revenue-analysis__refresh-error {
+  color: #a64b13;
+}
 .admin-root .ai-revenue-toolbar {
   display: flex;
   align-items: center;
