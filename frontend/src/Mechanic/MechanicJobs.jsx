@@ -35,12 +35,14 @@ export default function MechanicJobs() {
       && (!createdDate || String(job.createdAt || '').slice(0, 10) === createdDate);
   }), [jobs, search, status, priority, createdDate]);
 
-  const runAction = async (job, action) => {
+  const runAction = async (job, action, details) => {
     setBusy(true);
     setError('');
     try {
-      const result = await performJobAction(job, action);
-      if (result.serviceRequest) {
+      const result = await performJobAction(job, action, details);
+      if (action === 'quote') {
+        setJobs((currentJobs) => currentJobs.filter((currentJob) => (currentJob._id || currentJob.id) !== (job._id || job.id)));
+      } else if (result.serviceRequest) {
         const updatedJob = result.serviceRequest;
         setJobs((currentJobs) => currentJobs.map((currentJob) =>
           (currentJob._id || currentJob.id) === (updatedJob._id || updatedJob.id)
@@ -59,7 +61,7 @@ export default function MechanicJobs() {
     <section className="mechanic-panel jobs-panel">
       <div className="mechanic-job-filters">
         <label className="mechanic-field search-field"><span>Search</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Job ID, customer, plate or vehicle" /></label>
-        <label className="mechanic-field"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="pending">Pending</option><option value="assigned">Assigned</option><option value="awaiting-response">Awaiting response</option><option value="confirmed">Confirmed</option><option value="inspection">Inspection</option><option value="accepted">Accepted</option><option value="in-progress">In progress</option><option value="waiting-parts">Waiting for parts</option><option value="quality-check">Quality check</option><option value="completed">Completed</option><option value="declined">Declined</option></select></label>
+        <label className="mechanic-field"><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">All statuses</option><option value="quote_requested">Quote requests</option><option value="pending">Pending</option><option value="assigned">Assigned</option><option value="awaiting-response">Awaiting response</option><option value="confirmed">Confirmed</option><option value="inspection">Inspection</option><option value="accepted">Accepted</option><option value="in-progress">In progress</option><option value="waiting-parts">Waiting for parts</option><option value="quality-check">Quality check</option><option value="completed">Completed</option><option value="declined">Declined</option></select></label>
         <label className="mechanic-field"><span>Priority</span><select value={priority} onChange={(event) => setPriority(event.target.value)}><option value="all">All priorities</option><option value="high">High</option><option value="normal">Normal</option></select></label>
         <label className="mechanic-field created-date-field"><span>Date created</span><select value={createdDate} onChange={(event) => setCreatedDate(event.target.value)}><option value="">Any date</option>{createdDates.map((date) => <option value={date} key={date}>{new Date(`${date}T12:00:00`).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</option>)}</select></label>
       </div>

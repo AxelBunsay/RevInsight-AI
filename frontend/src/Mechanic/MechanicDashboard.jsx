@@ -4,6 +4,7 @@ import { getJobActions, getMechanicJobs, getMechanicProfile, performJobAction, u
 
 const queueGroups = [
   { label: 'To inspect / accept', statuses: ['pending', 'assigned', 'awaiting-response', 'confirmed', 'inspection', 'accepted'] },
+  { label: 'Quote requests', statuses: ['quote_requested'] },
   { label: 'Waiting approval', statuses: ['waiting-approval'] },
   { label: 'Waiting parts', statuses: ['waiting-parts', 'waiting-for-parts'] },
   { label: 'For quality check', statuses: ['quality-check'] },
@@ -37,12 +38,14 @@ export default function MechanicDashboard() {
     } catch (updateError) { setError(updateError.message || 'Availability could not be updated.'); }
   };
 
-  const runAction = async (job, action) => {
+  const runAction = async (job, action, details) => {
     setBusy(true);
     setError('');
     try {
-      const result = await performJobAction(job, action);
-      if (result.serviceRequest) {
+      const result = await performJobAction(job, action, details);
+      if (action === 'quote') {
+        setJobs((currentJobs) => currentJobs.filter((currentJob) => (currentJob._id || currentJob.id) !== (job._id || job.id)));
+      } else if (result.serviceRequest) {
         const updatedJob = result.serviceRequest;
         setJobs((currentJobs) => currentJobs.map((currentJob) =>
           (currentJob._id || currentJob.id) === (updatedJob._id || updatedJob.id)

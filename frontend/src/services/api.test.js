@@ -190,4 +190,33 @@ describe('role-specific API authorization', () => {
       null
     ]);
   });
+
+  it('uses the mechanic token for notification and quote endpoints', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn((key) => key === 'mechanicToken' ? 'mechanic-token' : null),
+      removeItem: vi.fn()
+    });
+    vi.stubGlobal('sessionStorage', { getItem: () => null, removeItem: vi.fn() });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({ notifications: [], requests: [], notification: {} })
+    }));
+
+    await api.getMechanicNotifications();
+    await api.markMechanicNotificationRead('notification-id');
+    await api.clearMechanicNotifications();
+    await api.getMechanicQuoteRequests();
+    await api.submitMechanicQuote('request-id', { price: 250, note: 'Parts and labor estimate.' });
+
+    expect(fetch.mock.calls.map(([url]) => url.replace(/^.*?(?=\/api\/)/, ''))).toEqual([
+      '/api/mechanics/notifications',
+      '/api/mechanics/notifications/notification-id/read',
+      '/api/mechanics/notifications',
+      '/api/service-requests/mechanic/quotes',
+      '/api/service-requests/request-id/quote'
+    ]);
+    expect(fetch.mock.calls.every(([, options]) => options.headers.get('Authorization') === 'Bearer mechanic-token')).toBe(true);
+    expect(JSON.parse(fetch.mock.calls[4][1].body)).toEqual({ price: 250, note: 'Parts and labor estimate.' });
+  });
 });
