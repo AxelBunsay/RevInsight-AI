@@ -30,6 +30,18 @@ export function getDateChangeState(date) {
   return { bookingDate: date, timeSlot: '' };
 }
 
+export async function runWithBookingLock(lockRef, setSending, submit) {
+  if (lockRef.current) return false;
+  lockRef.current = true;
+  setSending(true);
+  try {
+    return await submit();
+  } finally {
+    lockRef.current = false;
+    setSending(false);
+  }
+}
+
 export function canSubmitServiceBooking({ bookingDate, timeSlot, selectedSlot, motorcycle, isLoadingSlots }) {
   return Boolean(bookingDate && timeSlot && selectedSlot?.status === 'available'
     && motorcycle.trim() && !isLoadingSlots);

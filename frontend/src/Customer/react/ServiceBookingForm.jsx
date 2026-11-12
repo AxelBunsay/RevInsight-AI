@@ -10,7 +10,8 @@ import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction
 import { getAuthToken } from '../../auth/authSession';
 import {
   canSubmitServiceBooking,
-  getDateChangeState
+  getDateChangeState,
+  runWithBookingLock
 } from './serviceBookingTime';
 import ServiceBookingTimeSelect from './ServiceBookingTimeSelect';
 import { getServicePartsSource } from './servicePartsMode';
@@ -107,11 +108,13 @@ export default function ServiceBookingForm({ service: providedService = null, pa
   const [closedMessage, setClosedMessage] = useState('');
   const [bookingError, setBookingError] = useState(location.state?.message || '');
   const [bookingSuccess, setBookingSuccess] = useState('');
+  const [isSendingBooking, setIsSendingBooking] = useState(false);
   const [isFindingNext, setIsFindingNext] = useState(false);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [vehicleForm, setVehicleForm] = useState({ make: '', model: '', year: '', plate: '' });
   const resumedActionRef = useRef('');
   const resumeRequestedRef = useRef(Boolean(location.state?.resumeAction));
+  const bookingSendingRef = useRef(false);
   const slotRequestRef = useRef(0);
   const nextAvailableRequestRef = useRef(0);
   const today = manilaDateKey();
@@ -337,25 +340,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
     setVehicleForm({ make: '', model: '', year: '', plate: '' });
   };
 
-  const addBooking = async () => {
-    if (!canAddBooking || !selectedSlot || (quoteRequired && !customerPartsNote.trim())) return;
-    const customerToken = getAuthToken('customer');
-    if (!customerToken || customerToken === 'prototype-guest') {
-      const returnPath = isModal
-        ? `/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`
-        : `${location.pathname}${location.search}`;
-      saveCustomerAuthAction({
-        type: 'service',
-        returnPath,
-        serviceId: service._id,
-        date: bookingDate,
-        time: timeSlot,
-        motorcycle: vehicle.trim()
-      });
-      const redirectParams = new URLSearchParams({ redirect: returnPath, returnTo: returnPath });
-      navigate(`/customer/login?${redirectParams.toString()}`);
-      return;
-    }
+  const submitBooking = async () => {
     setBookingError('');
     try {
       const latest = await api.getServiceSlots(service._id, bookingDate, units);
@@ -427,6 +412,28 @@ export default function ServiceBookingForm({ service: providedService = null, pa
       setBookingError(error.message || 'That booking time could not be checked. Please try again.');
       await loadSlots(bookingDate);
     }
+  };
+
+  const addBooking = async () => {
+    if (!canAddBooking || !selectedSlot || (quoteRequired && !customerPartsNote.trim()) || bookingSendingRef.current) return;
+    const customerToken = getAuthToken('customer');
+    if (!customerToken || customerToken === 'prototype-guest') {
+      const returnPath = isModal
+        ? `/customer/services/${service._id}${partsSource === 'customer' ? '?parts=own' : ''}`
+        : `${location.pathname}${location.search}`;
+      saveCustomerAuthAction({
+        type: 'service',
+        returnPath,
+        serviceId: service._id,
+        date: bookingDate,
+        time: timeSlot,
+        motorcycle: vehicle.trim()
+      });
+      const redirectParams = new URLSearchParams({ redirect: returnPath, returnTo: returnPath });
+      navigate(`/customer/login?${redirectParams.toString()}`);
+      return;
+    }
+    return runWithBookingLock(bookingSendingRef, setIsSendingBooking, submitBooking);
   };
 
   const missingBookingChoice = !bookingDate
@@ -550,7 +557,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         <div className="customer-booking-summary">
           <p>{summary}</p>
           {!quoteRequired && <ServicePriceBreakdown {...serviceAmounts} className={isModal ? 'is-modal-summary' : ''} />}
-          <div className="customer-booking-footer">{!quoteRequired && <p>Estimated total <strong>₱{Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}</strong></p>}<button type="button" className="customer-primary-button" disabled={!canAddBooking || (quoteRequired && !customerPartsNote.trim()) || Boolean(bookingSuccess)} onClick={addBooking}>{quoteRequired ? 'Send request' : editCartKey ? 'Update booking' : 'Add booking to cart'}</button></div>
+          <div className="customer-booking-footer">{!quoteRequired && <p>Estimated total <strong>₱{Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}</strong></p>}<button type="button" className="customer-primary-button" disabled={isSendingBooking || !canAddBooking || (quoteRequired && !customerPartsNote.trim()) || Boolean(bookingSuccess)} onClick={addBooking}>{quoteRequired ? (isSendingBooking ? 'Sending...' : 'Send request') : editCartKey ? 'Update booking' : 'Add booking to cart'}</button></div>
           {!canAddBooking && <small className="customer-booking-hint">{missingBookingChoice || (closedMessage ? 'Choose an open date.' : 'Choose an available time to continue.')}</small>}
           {quoteRequired && !customerPartsNote.trim() && <small className="customer-field-error" role="status">List the parts you will bring to send a quote request.</small>}
         </div>

@@ -14,6 +14,9 @@ export async function request(path, options = {}) {
   delete requestOptions.tokenKey;
   const suppressAuthRedirect = requestOptions.suppressAuthRedirect === true;
   delete requestOptions.suppressAuthRedirect;
+  const timeoutMs = requestOptions.timeout;
+  delete requestOptions.timeout;
+  if (timeoutMs) requestOptions.signal = AbortSignal.timeout(timeoutMs);
   const headers = new Headers(options.headers);
 
   if (options.body && !(options.body instanceof FormData) && !headers.has('Content-Type')) {
@@ -28,11 +31,22 @@ export async function request(path, options = {}) {
   try {
     response = await fetch(`${API_URL}${path}`, { ...requestOptions, headers });
   } catch (error) {
+    if (timeoutMs && requestOptions.signal.aborted) {
+      throw new Error('The request took too long. Please check My Bookings before trying again.', { cause: error });
+    }
     throw new Error(`Unable to reach the backend at ${API_URL}. Start the backend server and check its database connection.`, { cause: error });
   }
 
   const contentType = response.headers.get('content-type') || '';
-  const body = contentType.includes('application/json') ? await response.json() : await response.text();
+  let body;
+  try {
+    body = contentType.includes('application/json') ? await response.json() : await response.text();
+  } catch (error) {
+    if (timeoutMs && requestOptions.signal.aborted) {
+      throw new Error('The request took too long. Please check My Bookings before trying again.', { cause: error });
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     const isAuthException = /\/(?:users|mechanics)\/login(?:[/?]|$)/.test(path)
@@ -180,7 +194,7 @@ export const api = {
     return request(`/api/service-requests/${requestId}/payment`, { method: 'POST', body, tokenKey: 'customerToken' });
   },
   getServiceSlots: (serviceId, date, units = 1) => request(`/api/services/${encodeURIComponent(serviceId)}/slots?date=${encodeURIComponent(date)}&units=${encodeURIComponent(units)}`, { tokenKey: 'customerToken', cache: 'no-store' }),
-  createServiceBookings: (bookings) => request('/api/services/bookings', { method: 'POST', body: JSON.stringify({ bookings }), tokenKey: 'customerToken' }),
+  createServiceBookings: (bookings) => request('/api/services/bookings', { method: 'POST', body: JSON.stringify({ bookings }), tokenKey: 'customerToken', timeout: 20_000 }),
   getAvailableMechanics: () => request('/api/mechanics/available', { tokenKey: 'customerToken' }),
   getMechanicStats: (mechanicId) => request(`/api/mechanic/${encodeURIComponent(mechanicId)}/stats`, { tokenKey: 'mechanicToken' }),
   updateMechanicProfile: (profile) => request('/api/mechanics/profile', { method: 'PUT', body: JSON.stringify(profile), tokenKey: 'mechanicToken' }),

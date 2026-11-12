@@ -8,7 +8,9 @@ const {
   BusinessRecord,
   Product,
   Reservation,
+  Notification,
   ServiceRequest,
+  ServiceSlotLock,
   mongoose,
   startReplicaSet,
   stopReplicaSet,
@@ -25,6 +27,7 @@ const Mechanic = require('../../models/mechanic');
 const ReservationSettings = require('../../models/reservationSettings');
 const revenueUtils = require('../../utils/revenue');
 const { getServicePaymentSummary } = require('../../utils/servicePayment');
+const { ensureSlotLocks } = require('../../utils/serviceSlotCapacity');
 
 const api = supertest(app);
 const png = Buffer.from(
@@ -785,6 +788,80 @@ describe('service booking business flow integration', () => {
       status: 409,
       message: 'That time was just booked. Please choose another.'
     });
+  });
+
+  it('creates a single booking on a free slot', async () => {
+    const response = await createBookings(customerToken, [booking(fixtures.service._id)]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results).toHaveLength(1);
+    expect(response.body.results[0]).toMatchObject({ ok: true });
+    expect(await ServiceRequest.countDocuments({
+      user: fixtures.customer._id,
+      serviceId: fixtures.service._id,
+      startTime: '10:00'
+    })).toBe(1);
+  });
+
+  it('allows an availability read to run alongside a booking', async () => {
+    const [availability, response] = await Promise.all([
+      api.get(`/api/services/${fixtures.service._id}/slots?date=${serviceDate}`),
+      createBookings(customerToken, [booking(fixtures.service._id)])
+    ]);
+
+    expect(availability.status).toBe(200);
+    expect(availability.body.slots.some((slot) => slot.startTime === '10:00')).toBe(true);
+    expect(response.status).toBe(200);
+    expect(response.body.results[0]).toMatchObject({ ok: true });
+  });
+
+  it('does not update an existing lock timestamp while ensuring locks', async () => {
+    const lock = await ServiceSlotLock.create({
+      dateKey: serviceDate,
+      startTime: '10:00',
+      bookingVersion: 4
+    });
+
+    await ensureSlotLocks(serviceDate, '10:00', '11:00');
+
+    const unchanged = await ServiceSlotLock.findById(lock._id).lean();
+    expect(unchanged.updatedAt).toEqual(lock.updatedAt);
+    expect(unchanged.bookingVersion).toBe(4);
+  });
+
+  it.each([
+    { partsSource: 'shop', label: 'shop-parts', laborOnly: 'No' },
+    { partsSource: 'customer', label: 'labor-only', laborOnly: 'Yes' }
+  ])('notifies a selected mechanic when a $label booking is created', async ({ partsSource, laborOnly }) => {
+    await Service.updateOne({ _id: fixtures.service._id }, { $set: { laborOnlyPrice: 200 } });
+    const response = await createBookings(customerToken, [booking(fixtures.service._id, {
+      partsSource,
+      mechanicId: String(fixtures.mechanic._id)
+    })]);
+
+    expect(response.body.results[0].ok).toBe(true);
+    const notification = await Notification.findOne({
+      audience: 'mechanic',
+      mechanicId: fixtures.mechanic._id,
+      type: 'service_booking_requested',
+      recordId: response.body.results[0].serviceRequest._id
+    }).lean();
+    expect(notification.message).toContain(fixtures.service.name);
+    expect(notification.message).toContain(serviceDate);
+    expect(notification.message).toContain('10:00 AM');
+    expect(notification.message).toContain(`${fixtures.customer.firstName} ${fixtures.customer.lastName}`);
+    expect(notification.message).toContain(`Labor-only: ${laborOnly}`);
+  });
+
+  it('keeps a booking successful if its mechanic notification cannot be created', async () => {
+    const notificationCreate = vi.spyOn(Notification, 'create').mockRejectedValueOnce(new Error('notification unavailable'));
+    const response = await createBookings(customerToken, [booking(fixtures.service._id, {
+      mechanicId: String(fixtures.mechanic._id)
+    })]);
+    notificationCreate.mockRestore();
+
+    expect(response.body.results[0].ok).toBe(true);
+    expect(await ServiceRequest.exists({ _id: response.body.results[0].serviceRequest._id })).not.toBeNull();
   });
 
   it('rejects a closed day and a time that has already passed', async () => {

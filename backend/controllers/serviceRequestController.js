@@ -570,16 +570,38 @@ const assignMechanic = async (req, res) => {
     serviceRequest.mechanicId = mechanicId;
     serviceRequest.status = "assigned";
     await serviceRequest.save();
-    if (serviceRequest.quoteStatus === 'quote_requested') {
+    try {
+      const customer = await User.findById(serviceRequest.customerId || serviceRequest.user).select('firstName lastName name').lean();
+      const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || customer?.name || 'Customer';
+      const serviceDate = serviceRequest.scheduledDate
+        ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(serviceRequest.scheduledDate)
+        : 'date not set';
       await Notification.create({
         audience: 'mechanic',
         mechanicId,
-        type: 'service_quote_requested',
-        message: `New labor-only quote request: ${serviceRequest.serviceType}`,
+        type: 'service_booking_assigned',
+        message: `Service booking assigned: ${serviceRequest.serviceType}. Date: ${serviceDate}, time: ${serviceRequest.startTime || 'time not set'}. Customer: ${customerName}. Labor-only: ${serviceRequest.partsSource === 'customer' ? 'Yes' : 'No'}.`,
         link: '/mechanic/jobs',
         recordId: serviceRequest._id,
         recordType: 'service'
       });
+    } catch (notificationError) {
+      console.error('[assignMechanic] mechanic notification failed', notificationError);
+    }
+    if (serviceRequest.quoteStatus === 'quote_requested') {
+      try {
+        await Notification.create({
+          audience: 'mechanic',
+          mechanicId,
+          type: 'service_quote_requested',
+          message: `New labor-only quote request: ${serviceRequest.serviceType}`,
+          link: '/mechanic/jobs',
+          recordId: serviceRequest._id,
+          recordType: 'service'
+        });
+      } catch (notificationError) {
+        console.error('[assignMechanic] quote notification failed', notificationError);
+      }
     }
 
     res.status(200).json({
