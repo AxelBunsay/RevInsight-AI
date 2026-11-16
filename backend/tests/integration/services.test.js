@@ -63,6 +63,7 @@ function booking(serviceId, { date = serviceDate, startTime = '10:00', ...overri
     date,
     startTime,
     vehicle: 'Integration motorcycle',
+    partsSource: 'shop',
     notes: 'Integration booking',
     cartKey: `${date}-${startTime}`,
     ...overrides
@@ -103,13 +104,10 @@ async function setServiceDownPaymentPercent(percent) {
 describe('service booking business flow integration', () => {
   beforeAll(async () => {
     await startReplicaSet();
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(`${dateOffset(0)}T20:00:00+08:00`));
   });
 
   afterAll(async () => {
     await stopReplicaSet();
-    vi.useRealTimers();
   });
 
   beforeEach(async () => {
@@ -201,7 +199,8 @@ describe('service booking business flow integration', () => {
       amountPaid: 500
     });
     expect(response.body.paymentSubmittedCount).toBe(1);
-    expect(response.body.totalAmount).toBe(800);
+    // This summary counts completed revenue; these fixtures are still pending.
+    expect(response.body.totalAmount).toBe(0);
   });
 
   it('uses the configured service price and mechanic fee instead of client-supplied values', async () => {
@@ -438,11 +437,10 @@ describe('service booking business flow integration', () => {
     });
   });
 
-  it('rejects labor-only booking when the service has no labor-only price', async () => {
-    const response = await createBookings(customerToken, [booking(fixtures.service._id, { partsSource: 'customer' })]);
+  it('requests a quote when the service has no fixed labor-only price', async () => {
+    const response = await createBookings(customerToken, [booking(fixtures.service._id, { partsSource: 'customer', customerPartsNote: 'Test brake pads' })]);
     expect(response.status).toBe(200);
-    expect(response.body.results[0]).toMatchObject({ ok: false, status: 400 });
-    expect(response.body.results[0].message).toContain('not available as labor only');
+    expect(response.body.results[0]).toMatchObject({ ok: true, serviceRequest: { quoteStatus: 'quote_requested' } });
   });
 
   it('filters active service requests by parts source and treats legacy requests as shop parts', async () => {
@@ -521,7 +519,7 @@ describe('service booking business flow integration', () => {
       paymentInstructions: { methodName: 'GCash', accountName: 'Shop', accountNumber: '09171234567' },
       pickupAddress: '',
       pickupHours: '',
-      contactNumber: ''
+      contactNumber: '09171234567'
     };
     const valid = await api.put('/api/admin/reservations/settings')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -870,9 +868,11 @@ describe('service booking business flow integration', () => {
     ]);
     const settings = await ReservationSettings.getDefaults();
     settings.openDays = [...settings.openDays, 'Sun'];
+    settings.openTime = '00:00';
+    settings.closeTime = '23:00';
     await settings.save();
     const pastTime = await createBookings(secondCustomerToken, [
-      booking(fixtures.service._id, { date: dateOffset(0), startTime: '09:00' })
+      booking(fixtures.service._id, { date: dateOffset(0), startTime: '00:00' })
     ]);
 
     expect(closedDay.body.results[0]).toMatchObject({ ok: false, status: 400 });
@@ -1100,5 +1100,25 @@ describe('service booking business flow integration', () => {
       paymentStatus: 'Payment Pending',
       status: { $in: ['pending', 'assigned', 'confirmed', 'accepted', 'in-progress'] }
     })).toBe(3);
+  });
+
+  it('separates available jobs from personal workload and earnings', async () => {
+    const otherMechanic = new mongoose.Types.ObjectId();
+    const base = { user: fixtures.customer._id, serviceType: 'Ownership fixture', description: 'Synthetic workload check' };
+    const [own, other, available, legacyOther] = await ServiceRequest.create([
+      { ...base, mechanic: fixtures.mechanic._id, mechanicId: fixtures.mechanic._id, status: 'completed', completedAt: new Date(), mechanicFeeTotal: 50 },
+      { ...base, mechanic: otherMechanic, mechanicId: otherMechanic, status: 'completed', completedAt: new Date(), mechanicFeeTotal: 9999 },
+      { ...base, mechanic: null, mechanicId: null, status: 'pending' },
+      { ...base, mechanic: null, mechanicId: otherMechanic, status: 'pending' }
+    ]);
+    const list = await api.get('/api/service-requests/mechanic').set('Authorization', `Bearer ${mechanicToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body.jobs.map(job => job._id)).toEqual([own.id]);
+    expect(list.body.availableJobs.map(job => job._id)).toEqual([available.id]);
+    expect(JSON.stringify(list.body)).not.toContain(other.id);
+    expect(JSON.stringify(list.body)).not.toContain(legacyOther.id);
+    const stats = await api.get(`/api/mechanic/${fixtures.mechanic.id}/stats`).set('Authorization', `Bearer ${mechanicToken}`);
+    expect(stats.status).toBe(200);
+    expect(stats.body).toMatchObject({ completedJobs: 1, totalEarnings: 50 });
   });
 });

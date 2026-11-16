@@ -228,7 +228,7 @@ const createServiceBookings = async (req, res) => {
         if (!booking || typeof booking !== 'object') {
           throw Object.assign(new Error('A booking must include service and schedule details.'), { status: 400 });
         }
-        const partsSource = booking.partsSource === undefined ? 'shop' : booking.partsSource;
+        const partsSource = booking.partsSource;
         const selectedMechanicId = booking.mechanicId || booking.mechanic || null;
         if (!['shop', 'customer'].includes(partsSource)) {
           throw Object.assign(new Error('Choose whether parts come from the shop or the customer.'), { status: 400 });

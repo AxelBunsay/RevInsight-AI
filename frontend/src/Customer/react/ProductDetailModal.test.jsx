@@ -85,11 +85,11 @@ describe('product detail modal', () => {
   it('provides a responsive scrollable dialog and reduced-motion-safe animation', () => {
     expect(modalStyles).toContain('width: min(880px, 100%);');
     expect(modalStyles).toContain('max-height: 90vh;');
-    expect(modalStyles).toContain('grid-template-columns: minmax(0, 45%) minmax(0, 1fr);');
+    expect(modalStyles).toContain('grid-template-columns: minmax(0, 45fr) minmax(0, 55fr);');
     expect(modalStyles).toContain('@media (max-width: 767px)');
-    expect(modalStyles).toContain('max-height: 92dvh;');
-    expect(responsiveStyles).toContain('customer-product-modal-footer');
-    expect(modalSource).toContain('modalFooter={isCompactLayout ? modalFooter : null}');
+    expect(responsiveStyles).toContain('max-height: calc(90dvh - 48px);');
+    expect(responsiveStyles).toContain('.customer-product-modal-scroll');
+    expect(modalSource).toContain('className="customer-product-modal-scroll"');
     expect(modalStyles).toContain('@media (prefers-reduced-motion: no-preference)');
     expect(modalStyles).toContain('180ms ease-out');
     expect(responsiveStyles).toContain('max-height: calc(100dvh - 24px);');

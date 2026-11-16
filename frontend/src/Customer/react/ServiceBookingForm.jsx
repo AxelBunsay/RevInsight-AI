@@ -157,6 +157,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
     return () => { active = false; };
   }, [
     editingCartItem?.bookingDate,
+    editingCartItem?.customerPartsNote,
     editingCartItem?.notes,
     editingCartItem?.startTime,
     editingCartItem?.units,
@@ -234,7 +235,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
     } finally {
       if (requestId === slotRequestRef.current) setIsLoadingSlots(false);
     }
-  }, [editingCartItem, location.pathname, navigate, serviceId, units]);
+  }, [editingCartItem, location.pathname, location.search, navigate, serviceId, units]);
 
   useEffect(() => {
     if (service) void Promise.resolve().then(() => loadSlots(bookingDate));
@@ -559,7 +560,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
           {!quoteRequired && <ServicePriceBreakdown {...serviceAmounts} className={isModal ? 'is-modal-summary' : ''} />}
           <div className="customer-booking-footer">{!quoteRequired && <p>Estimated total <strong>₱{Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}</strong></p>}<button type="button" className="customer-primary-button" disabled={isSendingBooking || !canAddBooking || (quoteRequired && !customerPartsNote.trim()) || Boolean(bookingSuccess)} onClick={addBooking}>{quoteRequired ? (isSendingBooking ? 'Sending...' : 'Send request') : editCartKey ? 'Update booking' : 'Add booking to cart'}</button></div>
           {!canAddBooking && <small className="customer-booking-hint">{missingBookingChoice || (closedMessage ? 'Choose an open date.' : 'Choose an available time to continue.')}</small>}
-          {quoteRequired && !customerPartsNote.trim() && <small className="customer-field-error" role="status">List the parts you will bring to send a quote request.</small>}
+          {quoteRequired && !customerPartsNote.trim() && <small className="customer-field-error" role="status">Describe the parts you will provide.</small>}
         </div>
       </section>
   </>;

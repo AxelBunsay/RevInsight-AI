@@ -201,6 +201,7 @@ export const api = {
   getMechanicJobs: () => request('/api/service-requests/mechanic', { tokenKey: 'mechanicToken' }),
   getMechanicQuoteRequests: () => request('/api/service-requests/mechanic/quotes', { tokenKey: 'mechanicToken' }),
   submitMechanicQuote: (requestId, quote) => request(`/api/service-requests/${requestId}/quote`, { method: 'POST', body: JSON.stringify(quote), tokenKey: 'mechanicToken' }),
+  declineMechanicQuoteRequest: (requestId, reason) => request(`/api/service-requests/${requestId}/quote/decline`, { method: 'POST', body: JSON.stringify({ reason }), tokenKey: 'mechanicToken' }),
   acceptMechanicJob: (requestId, startTime) => request('/api/service-requests/accept', { method: 'PUT', body: JSON.stringify({ requestId, startTime }), tokenKey: 'mechanicToken' }),
   updateMechanicJobStatus: (requestId, status) => request('/api/service-requests/status', { method: 'PUT', body: JSON.stringify({ requestId, status }), tokenKey: 'mechanicToken' })
 };

@@ -80,7 +80,7 @@ describe('admin responsive layout styles', () => {
   it('places the dashboard heading and notification controls in one top row', () => {
     expect(adminLayout).toContain("pathname === '/admin/dashboard'");
     expect(adminLayout).toContain('admin-topbar--dashboard');
-    expect(adminLayout).toContain('admin-page-heading admin-topbar-heading');
+    expect(adminLayout).toContain('<AdminPageHeader title={pageTitle} className="admin-topbar-heading" />');
     expect(dashboardPage).not.toContain('admin-page-heading');
     expect(layoutStyles).toContain('.admin-root .admin-topbar--dashboard {\n  justify-content: space-between;');
     expect(layoutStyles).toContain('.admin-root .admin-topbar-heading {\n  flex: 1 1 auto;\n  align-self: center;');

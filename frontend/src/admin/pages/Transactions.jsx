@@ -415,6 +415,8 @@ function Transactions() {
       ? transactionStatuses
       : [...reservationStatuses, ...transactionStatuses.filter((status) => !reservationStatuses.includes(status))];
   const changeTab = (tab) => {
+    setIsLoading(true);
+    setTransactions([]);
     setPage(1);
     setStatusFilter("All");
     setPartsSourceFilter("All");
@@ -979,7 +981,7 @@ function Transactions() {
                       {activeTab === "items" && transaction.customerPhone && <small className="transaction-reservation-detail">{transaction.customerPhone}</small>}
                     </td>
                     <td className={`transaction-col-items${activeTab === "items" ? " transaction-reservation-cell" : ""}`}>
-                      {activeTab === "items" && transaction.reservationItems.length
+                      {activeTab === "items" && transaction.reservationItems?.length
                         ? transaction.reservationItems.map((item) => (
                             <span className="transaction-reservation-item" key={item.variantId || item.productId || item.name}>
                               {item.imageUrl && <img src={item.imageUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = "none"; }} />}

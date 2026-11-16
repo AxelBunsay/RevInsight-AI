@@ -187,7 +187,7 @@ export default function Cart() {
               <div className="customer-summary-line"><span>Down payment ({settings?.downPaymentPercent ?? 30}%): due now</span><strong>{money(downPayment)}</strong></div>
               <div className="customer-summary-line"><span>Balance due at pickup</span><strong>{money(balanceDueAtPickup)}</strong></div>
             </>}
-            <p className="customer-reservation-note">Your item is reserved only after the shop confirms your down payment.</p>
+            <p className="customer-reservation-note">Checkout holds your items until the payment deadline. Submit your down payment to keep the reservation.</p>
             {settings?.pickupAddress && <p className="customer-pickup-location">Pickup at {settings.pickupAddress}{settings.pickupHours ? ` · ${settings.pickupHours}` : ''}</p>}
           </>}
           {!!selectedServices.length && <>

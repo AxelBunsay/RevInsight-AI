@@ -100,7 +100,7 @@ describe('mechanic job completion balance prompt', () => {
       <JobDialog job={quoteJob} onClose={() => {}} actions={getJobActions(quoteJob)} onAction={() => {}} busy={false} />
     );
 
-    expect(getJobActions(quoteJob)).toEqual(['quote']);
+    expect(getJobActions(quoteJob)).toEqual(['quote', 'decline-quote']);
     expect(markup).toContain('Awaiting quote');
     expect(markup).toContain('Quote price (PHP)');
     expect(markup).toContain('type="number" required="" max="999999.99" step="any"');

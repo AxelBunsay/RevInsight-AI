@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const { rateLimit } = require('express-rate-limit');
+const apiRateLimitKey = require('./middleware/apiRateLimitKey');
 const userRoutes = require('./routes/user');
 const customerRoutes = require('./routes/customer');
 const mechanicRoutes = require('./routes/mechanic');
@@ -74,6 +75,7 @@ app.use(
     : rateLimit({
       windowMs: 15 * 60 * 1000,
       limit: 300,
+      keyGenerator: apiRateLimitKey,
       standardHeaders: 'draft-8',
       legacyHeaders: false
     })

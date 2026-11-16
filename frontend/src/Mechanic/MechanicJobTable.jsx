@@ -98,6 +98,7 @@ export function JobTable({ jobs, onSelect, emptyMessage = 'No jobs match these f
 export function JobDialog({ job, onClose, actions, onAction, busy, error = '' }) {
   const [quotePrice, setQuotePrice] = useState('');
   const [quoteNote, setQuoteNote] = useState('');
+  const [declineReason, setDeclineReason] = useState('');
   if (!job) return null;
   const labels = { accept: 'Accept job', decline: 'Decline', start: 'Start work', 'waiting-parts': 'Wait for parts', 'quality-check': 'Send to quality check', complete: 'Mark complete' };
   const paymentSummary = getServicePaymentSummary(job);
@@ -106,7 +107,9 @@ export function JobDialog({ job, onClose, actions, onAction, busy, error = '' })
     event.preventDefault();
     if (!isValidMechanicQuotePrice(quotePrice)) {
       const input = event.currentTarget.elements.quotePrice;
-      input.setCustomValidity('Enter a quote price greater than zero and no more than PHP 999,999.99.');
+      input.setCustomValidity(Number(quotePrice) <= 0
+        ? 'Quote price must be greater than zero.'
+        : 'Enter a quote price no more than PHP 999,999.99.');
       input.reportValidity();
       return;
     }
@@ -117,6 +120,17 @@ export function JobDialog({ job, onClose, actions, onAction, busy, error = '' })
       return;
     }
     onAction(job, 'quote', { price: Number(quotePrice), note: quoteNote.trim() });
+  };
+  const submitDecline = (event) => {
+    event.preventDefault();
+    const reason = declineReason.trim();
+    if (reason.length < 3 || reason.length > 500) {
+      const input = event.currentTarget.elements.declineReason;
+      input.setCustomValidity('Provide a reason between 3 and 500 characters.');
+      input.reportValidity();
+      return;
+    }
+    onAction(job, 'decline-quote', { reason });
   };
   return <div className="mechanic-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="mechanic-dialog job-dialog" role="dialog" aria-modal="true" aria-labelledby="job-dialog-title">
@@ -130,9 +144,13 @@ export function JobDialog({ job, onClose, actions, onAction, busy, error = '' })
         <label className="mechanic-field">Quote note<textarea name="quoteNote" required maxLength={1000} value={quoteNote} onChange={(event) => { event.currentTarget.setCustomValidity(''); setQuoteNote(event.target.value); }} /></label>
         <button className="button-primary" type="submit" disabled={busy}>Send quote</button>
       </form>}
+      {actions.includes('decline-quote') && <form className="mechanic-quote-form" onSubmit={submitDecline}>
+        <label className="mechanic-field">Reason for declining<textarea name="declineReason" required minLength={3} maxLength={500} value={declineReason} onChange={(event) => { event.currentTarget.setCustomValidity(''); setDeclineReason(event.target.value); }} /></label>
+        <button className="button-secondary danger" type="submit" disabled={busy}>Decline request</button>
+      </form>}
       {actions.includes('complete') && balanceDue > 0 && <p className="mechanic-alert">Collect balance of {money(balanceDue)} at the shop.</p>}
       {error && <p className="mechanic-alert" role="alert">{error}</p>}
-      <div className="mechanic-dialog-actions job-dialog-actions">{actions.filter((action) => action !== 'quote').map((action) => <button className={action === 'decline' ? 'button-secondary danger' : 'button-primary'} type="button" key={action} disabled={busy} onClick={() => onAction(job, action)}>{labels[action] || action}</button>)}<button className="button-secondary" type="button" onClick={onClose}>Close</button></div>
+      <div className="mechanic-dialog-actions job-dialog-actions">{actions.filter((action) => !['quote', 'decline-quote'].includes(action)).map((action) => <button className={action === 'decline' ? 'button-secondary danger' : 'button-primary'} type="button" key={action} disabled={busy} onClick={() => onAction(job, action)}>{labels[action] || action}</button>)}<button className="button-secondary" type="button" onClick={onClose}>Close</button></div>
     </section>
   </div>;
 }

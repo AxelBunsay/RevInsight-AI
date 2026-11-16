@@ -21,8 +21,12 @@
 }
 .admin-root .admin-dashboard {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: 14px;
+}
+.admin-root .admin-dashboard > * {
+  min-width: 0;
 }
 .admin-root .admin-dashboard > .admin-stat-strip,
 .admin-root .admin-dashboard > .admin-sales-hero,
@@ -1708,55 +1712,6 @@
   margin-top: 18px;
 }
 
-@media print {
-  body * {
-    visibility: hidden !important;
-  }
-  .admin-root .ai-revenue-report,
-  .admin-root .ai-revenue-report * {
-    visibility: visible !important;
-  }
-  .admin-root .ai-revenue-report {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    max-height: none;
-    overflow: visible;
-    padding: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-  .admin-root .ai-revenue-report .ai-revenue-modal__eyebrow,
-  .admin-root .ai-revenue-report h2,
-  .admin-root .ai-revenue-report__month-tabs,
-  .admin-root .ai-revenue-report .ai-revenue-modal__close,
-  .admin-root .ai-revenue-report .ai-revenue-settings__actions,
-  .admin-root .ai-revenue-report .ai-revenue-settings__actions--report {
-    display: none !important;
-  }
-  .admin-root .ai-revenue-report__table-wrap {
-    overflow: visible;
-    border: 0;
-  }
-  .admin-root .ai-revenue-modal__body {
-    display: block;
-    overflow: visible;
-  }
-  .admin-root .ai-revenue-modal__footer {
-    display: none !important;
-  }
-  .admin-root .ai-revenue-report__table {
-    min-width: 0;
-  }
-  .admin-root .ai-revenue-report-card-list,
-  .admin-root .ai-revenue-report-card-pagination {
-    display: none !important;
-  }
-  .admin-root .ai-revenue-report__table-wrap {
-    display: block !important;
-  }
-}
-
 @media (max-width: 1024px) {
   .admin-root .ai-revenue-modal-layer {
     z-index: 1100;
@@ -2035,5 +1990,77 @@
   .admin-root .admin-inline-error {
     align-items: flex-start;
     flex-wrap: wrap;
+  }
+}
+
+/* Printed reports must flow across pages outside the viewport-sized dialog. */
+@media print {
+  @page { size: A4 landscape; margin: 10mm; }
+  body:has(.ai-revenue-report) {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body:has(.ai-revenue-report) > :not(.admin-modal-portal) {
+    display: none !important;
+  }
+  body:has(.ai-revenue-report) * {
+    visibility: hidden !important;
+  }
+  .admin-root .ai-revenue-report,
+  .admin-root .ai-revenue-report * {
+    visibility: visible !important;
+  }
+  .admin-root.admin-modal-portal,
+  .admin-root.admin-modal-portal .admin-management-page,
+  .admin-root .ai-revenue-modal-layer,
+  .admin-root .ai-revenue-modal-layer .ai-revenue-report,
+  .admin-root .ai-revenue-report .ai-revenue-modal__body {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border-radius: 0;
+    background: white !important;
+    box-shadow: none;
+  }
+  .admin-root .ai-revenue-report .ai-revenue-modal__eyebrow,
+  .admin-root .ai-revenue-report h2,
+  .admin-root .ai-revenue-report__month-tabs,
+  .admin-root .ai-revenue-report .ai-revenue-modal__close,
+  .admin-root .ai-revenue-report .ai-revenue-modal__footer,
+  .admin-root .ai-revenue-report-card-list,
+  .admin-root .ai-revenue-report-card-pagination {
+    display: none !important;
+  }
+  .admin-root .ai-revenue-report__table-wrap {
+    display: block !important;
+    overflow: visible;
+    border: 0;
+  }
+  .admin-root .ai-revenue-report__table {
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
+  }
+  .admin-root .ai-revenue-report__table th,
+  .admin-root .ai-revenue-report__table td {
+    padding: 5px 4px;
+    font-size: 9px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .admin-root .ai-revenue-report__table th:first-child {
+    width: 18%;
+  }
+  .admin-root .ai-revenue-report__table tr {
+    break-inside: avoid;
   }
 }

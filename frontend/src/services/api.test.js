@@ -87,7 +87,7 @@ describe('request authentication expiry handling', () => {
       ok: false,
       status: 401,
       headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => ({ message: 'Unauthorized' })
+      json: async () => ({ message: 'Invalid token' })
     }));
     return { removeItem, assign };
   };

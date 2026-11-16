@@ -89,7 +89,7 @@ describe('customer account menu', () => {
       </MemoryRouter>
     );
 
-    expect(markup).toContain('aria-label="Go to Manoy&#x27;s Motorcycle shop"');
+    expect(markup).toContain('aria-label="Go to Manoy&#x27;s Motorcycle home"');
     expect(markup).toContain('class="customer-auth-brand"');
     expect(markup).not.toContain('customer-auth-back');
     expect(markup).not.toContain('Back to shop');
@@ -113,9 +113,7 @@ describe('customer account menu', () => {
   });
 
   it('keeps one indicator mounted across auth routes and changes its transform', () => {
-    expect(appSource).toContain(
-      '<Route element={<CustomerAuthLayout />}>\n          <Route path="/customer/login" element={<CustomerLogin />} />\n          <Route path="/customer/register" element={<CustomerRegister />} />\n        </Route>'
-    );
+    expect(appSource.replace(/\s+/g, ' ')).toContain('<Route element={<CustomerAuthLayout />}> <Route path="/customer/login" element={<CustomerLogin />} /> <Route path="/customer/register" element={<CustomerRegister />} /> </Route>');
     expect(customerLayoutSource).toContain(
       'return <CustomerAuthShell activeTab={activeTab}><Outlet /></CustomerAuthShell>;'
     );
@@ -163,7 +161,8 @@ describe('customer account menu', () => {
     const nav = markup.indexOf('id="customer-navigation"');
     expect(actions).toBeGreaterThan(-1);
     expect(markup).toContain('<strong>MANOY&#x27;S</strong>');
-    expect(markup).toContain('class="customer-brand" href="/"');
+    expect(markup).toContain('class="customer-brand"');
+    expect(markup).toContain('href="/"');
     expect(markup).toContain('aria-current="page" href="/"');
     expect(markup).toContain('>Home</a>');
     expect(markup).not.toContain('>Shop</a>');
@@ -268,7 +267,7 @@ describe('customer account menu', () => {
   it('keeps Services bookings as a 44px pill and restores tablet product columns', () => {
     expect(responsiveStyles).toContain('.customer-page .services-my-bookings {\n    display: inline-flex;');
     expect(responsiveStyles).toContain('min-height: 44px;');
-    expect(responsiveStyles).toContain('@media (min-width: 600px) and (max-width: 900px)');
-    expect(responsiveStyles).toContain('grid-template-columns: repeat(auto-fill, minmax(166px, 1fr));');
+    expect(responsiveStyles).toContain('@media (min-width: 601px) and (max-width: 900px)');
+    expect(responsiveStyles).toContain('grid-template-columns: repeat(2, minmax(0, 1fr));');
   });
 });

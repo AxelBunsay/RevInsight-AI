@@ -52,9 +52,9 @@ afterEach(() => {
 
 describe('session bootstrap route isolation', () => {
   it.each([
-    ['mechanicToken', '/admin/login', createElement(AdminLogin), 'ADMIN ACCESS'],
+    ['mechanicToken', '/admin/login', createElement(AdminLogin), 'Authorized staff only.'],
     ['mechanicToken', '/customer/services', customerServicesScreen(), 'Motorcycle Services'],
-    ['customerToken', '/admin/login', createElement(AdminLogin), 'ADMIN ACCESS'],
+    ['customerToken', '/admin/login', createElement(AdminLogin), 'Authorized staff only.'],
     ['customerToken', '/mechanic/login', createElement(MechanicLogin), 'Mechanic Login'],
     ['adminToken', '/mechanic/login', createElement(MechanicLogin), 'Mechanic Login'],
     ['adminToken', '/customer/services', customerServicesScreen(), 'Motorcycle Services'],

@@ -58,6 +58,7 @@ export default function MechanicProfile() {
         <div className="mechanic-panel-heading"><h2>Performance</h2></div>
         <div className="mechanic-workload-stats">
           <div><strong>{stats?.completedJobs ?? 0}</strong><span>Completed repairs</span></div>
+          <div><strong>{Number(stats?.totalEarnings || 0).toLocaleString('en-PH', { style: 'currency', currency: 'PHP' })}</strong><span>Earnings from completed jobs</span></div>
           <div><strong>{ratingCount ? averageRating.toFixed(1) : '-'}</strong><span>Average rating</span><small>{ratingCount ? `from ${ratingCount} rating${ratingCount === 1 ? '' : 's'}` : 'No ratings yet'}</small></div>
         </div>
         <div className="mechanic-recent-ratings">

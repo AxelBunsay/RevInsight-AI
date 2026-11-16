@@ -553,9 +553,13 @@ const markServicePaidAtShop = async (req, res) => {
 const assignMechanic = async (req, res) => {
   try {
     const { requestId, mechanicId } = req.body;
+    if (!mongoose.Types.ObjectId.isValid(requestId) || !mongoose.Types.ObjectId.isValid(mechanicId)) {
+      return res.status(400).json({ message: 'Choose a valid booking and mechanic.' });
+    }
     const mechanic = await Mechanic.findOne({
       _id: mechanicId,
       isActive: true,
+      availabilityStatus: { $nin: ['busy', 'on-leave'] },
     });
     if (!mechanic)
       return res.status(400).json({ message: "Mechanic is not available" });
@@ -1158,7 +1162,8 @@ const getMechanicJobs = async (req, res) => {
     const jobs = await ServiceRequest.find({
       $or: [
         { mechanic: mechanicId },
-        { mechanic: null, status: "pending" },
+        { mechanicId },
+        { mechanic: null, mechanicId: null, status: "pending" },
       ],
       quoteStatus: { $nin: ['quote_requested', 'quoted', 'rejected', 'declined', 'cancelled'] }
     })
@@ -1172,7 +1177,10 @@ const getMechanicJobs = async (req, res) => {
         "Customer";
       return request;
     });
-    res.status(200).json({ jobs: formattedJobs });
+    res.status(200).json({
+      jobs: formattedJobs.filter((job) => String(job.mechanic || job.mechanicId) === String(mechanicId)),
+      availableJobs: formattedJobs.filter((job) => !job.mechanic && !job.mechanicId)
+    });
   } catch (error) {
     console.error("[getMechanicJobs] error", error);
     res

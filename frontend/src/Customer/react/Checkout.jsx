@@ -181,7 +181,7 @@ export default function Checkout() {
               <p><strong>Items total</strong><strong>{money(productSubtotal)}</strong></p>
               <p><strong>Down payment ({settings?.downPaymentPercent ?? 30}%): due now</strong><strong>{money(downPaymentAmount)}</strong></p>
               <p><strong>Balance due at pickup</strong><strong>{money(productSubtotal - downPaymentAmount)}</strong></p>
-              <p className="customer-reservation-note">Your item is reserved only after the shop confirms your down payment.</p>
+              <p className="customer-reservation-note">Checkout holds your items until the payment deadline. Submit your down payment to keep the reservation.</p>
               {settings?.pickupAddress && <p className="customer-pickup-location">Pickup at {settings.pickupAddress}{settings.pickupHours ? ` · ${settings.pickupHours}` : ''}</p>}
             </div>
             {serviceItems.length > 0 && <p className="customer-reservation-note">Service bookings remain in your cart and are not changed by this item reservation.</p>}

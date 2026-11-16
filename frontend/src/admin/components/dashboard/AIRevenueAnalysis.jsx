@@ -519,7 +519,6 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [reportError, setReportError] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportCardPage, setReportCardPage] = useState(1);
-  const dataRefreshInFlightRef = useRef(false);
   const cardInsightRequestInFlightRef = useRef(false);
   const askAIActiveRef = useRef(false);
   const latestFiguresFingerprintRef = useRef('');
@@ -582,13 +581,14 @@ function AIRevenueAnalysis({ dashboardData }) {
   useEffect(() => {
     let active = true;
     let refreshTimer = null;
+    let refreshInFlight = false;
 
     const refreshData = async (initial = false) => {
-      if (!active || dataRefreshInFlightRef.current) return;
+      if (!active || refreshInFlight) return;
       if (!initial && (document.hidden || askAIActiveRef.current)) return;
       const now = Date.now();
       if (!initial && now - lastDataRefreshStartedAtRef.current < 1000) return;
-      dataRefreshInFlightRef.current = true;
+      refreshInFlight = true;
       if (!initial) lastDataRefreshStartedAtRef.current = now;
 
       try {
@@ -643,7 +643,7 @@ function AIRevenueAnalysis({ dashboardData }) {
           setRefreshError(true);
         }
       } finally {
-        dataRefreshInFlightRef.current = false;
+        refreshInFlight = false;
         if (active && initial) setIsLoading(false);
       }
     };
@@ -938,7 +938,8 @@ function AIRevenueAnalysis({ dashboardData }) {
                 {refreshRemainingSeconds > 0 ? `Refresh insights (${refreshRemainingSeconds}s)` : 'Refresh insights'}
               </button>
             </div>
-            <div className="ai-revenue-cards">
+              {refreshRemainingSeconds > 0 && <p role="status">Please wait before refreshing revenue insights again.</p>}
+              <div className="ai-revenue-cards">
               <div className="ai-revenue-card" role="button" tabIndex={0} onClick={() => openAnalysis('trend')} onKeyDown={(event) => handleCardKeyDown(event, 'trend')}>
                 <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">↗</span><strong className="ai-revenue-card__title">Revenue trend &amp; growth</strong></span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
                 <b>{peso.format(current.revenue)}</b>

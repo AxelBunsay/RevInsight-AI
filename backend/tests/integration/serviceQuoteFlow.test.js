@@ -149,6 +149,7 @@ describe('labor-only service quote flow', () => {
       .set('Authorization', `Bearer ${customerToken}`)
       .send({ bookings: [{
         serviceId: String(fixtures.service._id),
+        partsSource: 'shop',
         date: nextOpenDate(),
         startTime: '10:00',
         vehicle: 'Integration motorcycle'

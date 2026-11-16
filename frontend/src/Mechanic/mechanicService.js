@@ -75,7 +75,7 @@ export function isWaitingForPaymentConfirmation(job) {
 }
 
 export function getJobActions(job) {
-  if (job.quoteStatus === 'quote_requested' || job.status === 'quote_requested') return ['quote'];
+  if (job.quoteStatus === 'quote_requested' || job.status === 'quote_requested') return ['quote', 'decline-quote'];
   const actions = (job.status === 'pending' && !job.mechanic && !job.mechanicId)
     ? ['accept']
     : ({
@@ -89,6 +89,7 @@ export function getJobActions(job) {
 
 export async function performJobAction(job, action, details) {
   if (action === 'quote') return api.submitMechanicQuote(job._id, details);
+  if (action === 'decline-quote') return api.declineMechanicQuoteRequest(job._id, details.reason);
   if (action === 'complete') return api.updateMechanicJobStatus(job._id, 'completed');
   if (action === 'accept') return api.acceptMechanicJob(job._id, job.startTime || '');
   const status = { decline: 'declined', start: 'in-progress' }[action];

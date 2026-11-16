@@ -6,7 +6,8 @@ const apiMocks = vi.hoisted(() => ({
   getMechanicNotifications: vi.fn(),
   markMechanicNotificationRead: vi.fn(),
   clearMechanicNotifications: vi.fn(),
-  submitMechanicQuote: vi.fn()
+  submitMechanicQuote: vi.fn(),
+  declineMechanicQuoteRequest: vi.fn()
 }));
 
 vi.mock('../services/api', () => ({ api: apiMocks }));
@@ -108,5 +109,10 @@ describe('mechanic portal service', () => {
   it('does not offer Accept on unpaid jobs', () => {
     expect(getJobActions({ status: 'pending', paymentStatus: 'Payment Pending' })).toEqual([]);
     expect(getJobActions({ status: 'pending', paymentStatus: 'Confirmed' })).toEqual(['accept']);
+  });
+  it('offers quote-request decline and sends its reason to the dedicated endpoint', async () => {
+    expect(getJobActions({ quoteStatus: 'quote_requested' })).toEqual(['quote', 'decline-quote']);
+    await performJobAction({ _id: 'quote-request' }, 'decline-quote', { reason: 'Parts are unsuitable' });
+    expect(apiMocks.declineMechanicQuoteRequest).toHaveBeenCalledWith('quote-request', 'Parts are unsuitable');
   });
 });

@@ -38,7 +38,7 @@ describe('customer account responsive layout', () => {
     expect(accountStyles).toContain('height: 40px;\n  padding: 0 20px;');
     expect(accountStyles).toContain('@media (min-width: 481px) and (max-width: 1199px)');
     expect(accountStyles).toContain('@media (max-width: 480px)');
-    expect(profilePage).toContain('className="customer-password-toggle"');
+    expect(profilePage).toContain('<PasswordInput');
   });
 
   it('renders username as a read-only profile field', () => {
@@ -46,7 +46,7 @@ describe('customer account responsive layout', () => {
   });
 
   it('uses the navbar brand tagline and omits the duplicate eyebrow only on Account', () => {
-    expect(customerLayout).toContain('<strong>MANOY&apos;S</strong><small>MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</small>');
+    expect(customerLayout).toContain('<strong>MANOY&apos;S</strong><small><span>MOTORCYCLE PARTS,</span> <span>ACCESSORIES &amp; SERVICES</span></small>');
     expect(customerLayout).toContain("{title !== 'Account' && <p className=\"customer-eyebrow\">MOTORCYCLE PARTS, ACCESSORIES &amp; SERVICES</p>}");
     expect(accountStyles).toContain('font: 800 24px/1 \'Segoe UI\', sans-serif;');
     expect(accountStyles).toContain('font: 700 11px/1.2 \'Segoe UI\', sans-serif;');
