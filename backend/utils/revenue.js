@@ -1,3 +1,4 @@
+const { revenueCoverage } = require('./revenueCoverage');
 const REVENUE_TIMEZONE = 'Asia/Manila';
 const ORDER_STATUSES = ['completed', 'Paid'];
 const REVENUE_AI_CHART_TYPES = [
@@ -509,6 +510,7 @@ function calculateRevenueRisk(entries, quarterlyRows, now = new Date()) {
     qoqChange: {
       value: qoqChange,
       level: enoughQuarterData ? getRevenueRiskLevel('qoqChange', qoqChange) : 'Not enough data',
+      coverageWarning: 'Recorded-revenue comparison only; period completeness is unknown. Missing transactions can resemble a decline.',
       reason: !enoughQuarterData
         ? `Fewer than ${REVENUE_RISK_THRESHOLDS.minimumCompletedQuarters} completed quarters are available.`
         : !adjacentQuarters
@@ -571,6 +573,8 @@ function calculateRevenueRisk(entries, quarterlyRows, now = new Date()) {
     indicators,
     overallRisk,
     completedQuarterCount: completedQuarters.length,
+    coverage: revenueCoverage(entries, {}, now),
+    comparisonNotice: 'Quarter comparisons and forecasts use recorded revenue; coverage is unverified, including closed calendar quarters.',
     officialForecast: forecast,
     thresholds: REVENUE_RISK_THRESHOLDS
   };

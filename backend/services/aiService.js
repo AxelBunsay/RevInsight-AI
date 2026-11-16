@@ -96,7 +96,7 @@ function buildTemplateCardInsights(analysisData = {}) {
   };
   const recommendations = {
     trend: {
-      High: 'Compare the last two completed-quarter totals and revise promotions after the revenue decline.',
+      High: 'Verify quarter coverage before responding to a decline in recorded revenue.',
       Moderate: 'Review completed-quarter revenue monthly and adjust promotions if the change persists.',
       Normal: 'Keep effective promotions in place and verify revenue at the next quarter close.',
       default: 'Record more completed-quarter sales before changing the promotion plan.'
@@ -134,7 +134,7 @@ function buildTemplateCardInsights(analysisData = {}) {
   };
   const outcomes = {
     trend: {
-      High: ['Responding to the decline may stabilize quarter-over-quarter revenue momentum.', 'Ignoring the decline could prolong weaker completed-quarter sales.'],
+      High: ['Responding to the decline may stabilize quarter-over-quarter revenue momentum.', 'Unverified coverage could make the recorded decline misleading.'],
       Moderate: ['Adjusting promotions may support revenue recovery if the change continues.', 'Overlooking the change could delay a response to shifting sales.'],
       Normal: ['Maintaining effective promotions may preserve the current revenue trend.', 'Unnecessary promotion changes could disrupt a stable sales pattern.']
     },
@@ -190,7 +190,7 @@ async function generateRevenueInsights(question, revenueData, dependencies = {})
   const modelNames = dependencies.modelNames || getModelNames();
   const systemInstruction = `
 You are a revenue analyst for a motorcycle parts shop.
-Answer using only supplied revenue data. Respect analysisScopes and revenueConcentration.scope: concentration and overallRisk use the explicitly selected scope, either Selected quarter or All records. selectedQuarter is separate quarter context. Trend and officialForecast use all recorded completed-quarter history and must be labeled separately. Never present all-records shares as selected-quarter shares. Never invent or infer a number that is not present in the data.
+Answer using only supplied revenue data. Respect analysisScopes and revenueConcentration.scope: concentration and overallRisk use the explicitly selected scope, either Selected quarter or All records. selectedQuarter is separate quarter context. Trend and officialForecast use all recorded completed-quarter history and must be labeled separately. Never present all-records shares as selected-quarter shares. Never invent or infer a number that is not present in the data. Coverage is unverified: missing transactions do not establish zero sales or a complete quarter. Explain this limitation when comparing quarters, describing a decline or discussing projections.
 Always format monetary amounts as Philippine pesos with thousands separators (for example ₱25,390); never use $ or USD.
 Keep the answer concise and use only the supplied Normal, Moderate, and High risk labels and their supplied thresholds.
 Start with an opening paragraph of one to three sentences and no heading, describing what the supplied numbers show now.
@@ -248,7 +248,7 @@ async function generateCardInsights(analysisData, dependencies = {}) {
   const systemInstruction = `
 You write concise revenue-card insights for a motorcycle shop owner.
 Use only the supplied computed numbers, risk labels, and thresholds. Respect analysisScopes and revenueConcentration.scope: concentration, service and risk cards use the selected scope, either Selected quarter or All records. Trend and forecast use all-records completed-quarter history and must be labeled separately. selectedQuarter is separate context. Never invent figures, products, or dates.
-Return a JSON object with exactly these card keys: ${CARD_INSIGHT_KEYS.join(', ')}.
+Coverage is unknown unless explicitly certified. In trend summaries, comparisons and decline warnings, say that coverage is unverified. No records does not prove zero sales.\nReturn a JSON object with exactly these card keys: ${CARD_INSIGHT_KEYS.join(', ')}.
 Each card value must contain exactly four string properties: summary, recommendation, ifFollowed, and ifIgnored.
 Each property must be one short sentence of no more than 25 words, with no line breaks. Summary describes the supplied numbers now. Recommendation is a specific action the shop owner can take, not generic tracking advice.
 ifFollowed and ifIgnored are qualitative, conditional possibilities based on that card's supplied numbers, never guarantees. Do not repeat the same sentence across cards. Only the forecast card may mention the official forecast; use the supplied forecast only and call it a projection. If relevant data is insufficient, say "Not enough data yet" in that property.

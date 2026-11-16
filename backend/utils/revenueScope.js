@@ -1,3 +1,4 @@
+const { revenueCoverage } = require('./revenueCoverage');
 const {
   groupRevenueContributors, groupRevenueByPeriod, calculateRevenueRisk,
   getRevenueRiskLevel, REVENUE_RISK_THRESHOLDS
@@ -30,6 +31,7 @@ function buildScopedRevenue(allEntries, input = {}, now = new Date()) {
   const scope = resolveRevenueScope(input);
   const entries = scope.mode === 'allRecords' ? allEntries : allEntries.filter(row =>
     row.dateLabel >= scope.startDate && row.dateLabel < scope.endDateExclusive);
+  const coverage = revenueCoverage(entries, scope, now);
   const quarters = groupRevenueByPeriod(allEntries, 'quarter');
   const risk = calculateRevenueRisk(entries, quarters, now);
   const totalRevenue = entries.reduce((sum, row) => sum + row.revenue, 0);
@@ -47,13 +49,14 @@ function buildScopedRevenue(allEntries, input = {}, now = new Date()) {
     getRevenueRiskLevel('topContributorShare', topOneShare)
   ].sort((a, b) => levels.indexOf(b) - levels.indexOf(a))[0] : 'Not enough data';
   const concentration = {
-    scope, totalRevenue, analyzedRevenue, uncategorized: risk.uncategorized, contributors,
+    scope, coverage, totalRevenue, analyzedRevenue, uncategorized: risk.uncategorized, contributors,
     indicators: { topOneShare, topThreeShare, hhi, concentrationLevel, thresholds: REVENUE_RISK_THRESHOLDS },
     dependentOnLimitedContributors: ['Moderate', 'High'].includes(concentrationLevel)
   };
   // History-based growth and forecasting remain explicitly separate from the
   // selected-scope concentration classification.
   risk.scope = scope;
+  risk.coverage = coverage;
   risk.contributors = contributors;
   risk.indicators.concentrationHhi = { value: hhi, level: analyzedRevenue ? getRevenueRiskLevel('concentrationHhi', hhi) : 'Not enough data' };
   risk.indicators.topContributorShare = { value: topOneShare, level: analyzedRevenue ? getRevenueRiskLevel('topContributorShare', topOneShare) : 'Not enough data' };
@@ -68,7 +71,7 @@ function buildScopedRevenue(allEntries, input = {}, now = new Date()) {
     record.itemNames.add(row.name);record.amount += row.revenue;records.set(key, record);
   }
   const reportRecords = [...records.values()].map(({ itemNames, ...row }) => ({ ...row, itemName: [...itemNames].join(', ') }));
-  return { scope, concentration, risk, quarters, entries, reportRecords };
+  return { scope, coverage, concentration, risk, quarters, entries, reportRecords };
 }
 
 module.exports = { resolveRevenueScope, buildScopedRevenue };

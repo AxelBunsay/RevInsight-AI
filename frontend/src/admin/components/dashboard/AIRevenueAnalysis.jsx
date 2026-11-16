@@ -124,7 +124,7 @@ function getLocalCardInsightTemplates({ current, indicators, overallRisk, concen
   };
   const recommendations = {
     trend: {
-      High: 'Compare the last two completed-quarter totals and revise promotions after the revenue decline.',
+      High: 'Verify quarter coverage before responding to a decline in recorded revenue.',
       Moderate: 'Review completed-quarter revenue monthly and adjust promotions if the change persists.',
       Normal: 'Keep effective promotions in place and verify revenue at the next quarter close.',
       default: 'Record more completed-quarter sales before changing the promotion plan.'
@@ -156,7 +156,7 @@ function getLocalCardInsightTemplates({ current, indicators, overallRisk, concen
   };
   const outcomes = {
     trend: {
-      High: ['Responding to the decline may stabilize quarter-over-quarter revenue momentum.', 'Ignoring the decline could prolong weaker completed-quarter sales.'],
+      High: ['Responding to the decline may stabilize quarter-over-quarter revenue momentum.', 'Unverified coverage could make the recorded decline misleading.'],
       Moderate: ['Adjusting promotions may support revenue recovery if the change continues.', 'Overlooking the change could delay a response to shifting sales.'],
       Normal: ['Maintaining effective promotions may preserve the current revenue trend.', 'Unnecessary promotion changes could disrupt a stable sales pattern.']
     },
@@ -271,7 +271,7 @@ function QuarterlyBarChart({ quarters, estimate, selectedKey, currentKey }) {
       estimate: true
     }] : [])
   ];
-  const max = Math.max(...chartBars.map((bar) => bar.value), 1);
+  const max = Math.max(...chartBars.map((bar) => bar.value || 0), 1);
   const width = Math.max(minWidth, chartBars.length * 45);
   const baseline = height - 28;
   const plotHeight = height - 48;
@@ -302,7 +302,7 @@ function QuarterlyBarChart({ quarters, estimate, selectedKey, currentKey }) {
           rx="2"
           tabIndex="0"
         >
-          <title>{`${bar.label}: ${peso.format(bar.value)} · ${countLabel}${bar.inProgress ? ' · in progress' : ''}`}</title>
+          <title>{`${bar.label}: ${(bar.count === 0 ? 'No recorded transactions; completeness unknown' : peso.format(bar.value))} · ${countLabel}${bar.inProgress ? ' · in progress' : ''}`}</title>
         </rect>;
       })}
     </svg>
@@ -520,6 +520,7 @@ function AIRevenueAnalysis({ dashboardData }) {
     setAnalysis(previous => ({ ...previous, risk: null, concentration: null }));
     setIsLoading(true);
     setModalId(null);
+    setReportRows([]);
     setSelectedQuarterKey(quarter);
     setRevenueScope(mode);
   };
@@ -727,8 +728,9 @@ function AIRevenueAnalysis({ dashboardData }) {
   const current = quarters[selectedIndex];
   const previous = quarters[selectedIndex - 1];
   const yearAgo = current && quarters.find((row) => row.year === current.year - 1 && row.quarter === current.quarter);
-  const qoq = current && previous ? percentChange(current.revenue, previous.revenue) : null;
-  const yoy = current && yearAgo ? percentChange(current.revenue, yearAgo.revenue) : null;
+  const qoq = current?.count && previous?.count ? percentChange(current.revenue, previous.revenue) : null;
+  const yoy = current?.count && yearAgo?.count ? percentChange(current.revenue, yearAgo.revenue) : null;
+  const coverage = analysis.concentration?.coverage;
   const estimate = analysis.risk?.officialForecast || null;
   const chartEstimate = estimate;
   const currentQuarterKey = todayQuarter.key;
@@ -824,7 +826,7 @@ function AIRevenueAnalysis({ dashboardData }) {
       items: contributorItems,
       riskLevel: indicators.concentrationHhi?.level || 'Not enough data',
       why: getRiskWhy('concentrationHhi'),
-      description: analysis.concentration?.indicators
+      description: analysis.concentration?.analyzedRevenue > 0 && analysis.concentration?.indicators
         ? `HHI ${Number(analysis.concentration.indicators.hhi || 0).toFixed(3)} · ${Number(analysis.concentration.indicators.topOneShare || 0).toFixed(1)}% top contributor · ${Number(analysis.concentration.indicators.topThreeShare || 0).toFixed(2)}% top three`
         : 'No contributor data is available'
     },
@@ -887,6 +889,13 @@ function AIRevenueAnalysis({ dashboardData }) {
       <button type="button" aria-pressed={revenueScope === 'selectedQuarter'} onClick={() => changeRevenueScope(selectedQuarterKey, 'selectedQuarter')}>Selected quarter</button>
       <button type="button" aria-pressed={revenueScope === 'allRecords'} onClick={() => changeRevenueScope(selectedQuarterKey, 'allRecords')}>All records</button>
     </div>
+    <div className="ai-revenue-completeness-banner" role="status" aria-label="Revenue data completeness">
+      <strong>{scopeLabel} · {coverage?.includedTransactions ?? '—'} included transactions</strong>
+      <span>{coverage?.firstRecordedDate ? 'Recorded dates: ' + coverage.firstRecordedDate + ' to ' + coverage.lastRecordedDate : 'No recorded transactions.'}</span>
+      {coverage?.quarterInProgress && <span>Selected quarter is still in progress.</span>}
+      <span>Completeness unknown. Zero sales has not been confirmed. Missing records may affect quarter comparisons, decline signals and forecasts.</span>
+      {coverage && !coverage.empty && <span>Recorded revenue: {peso.format(analysis.concentration.totalRevenue)}</span>}
+    </div>
     <div className="ai-revenue-overall-risk">
       <div className="ai-revenue-overall-risk__title">
         <strong>Concentration risk — {scopeLabel}</strong>
@@ -923,10 +932,10 @@ function AIRevenueAnalysis({ dashboardData }) {
             <div className="ai-revenue-summary">
               <div>
                 <span>Total revenue - {quarterName(current.year, current.quarter)}</span>
-                <strong>{peso.format(current.revenue)}</strong>
+                <strong>{current.count ? peso.format(current.revenue) : 'No recorded transactions'}</strong>
                 <em className={qoq === null || qoq >= 0 ? 'is-positive' : 'is-negative'}>{qoq === null ? '—' : `${qoq >= 0 ? '▲' : '▼'} ${Math.abs(qoq).toFixed(1)}% QoQ`}</em>
-                <small>{current.count} records · avg {peso.format(current.count ? current.revenue / current.count : 0)} per record</small>
-                <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
+                <small>{current.count} records · avg {current.count ? peso.format(current.revenue / current.count) : '—'} per record</small>
+                <small>Coverage unverified; recorded-revenue comparisons only. {yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
               </div>
               <div className="ai-revenue-summary__chart">
                 <QuarterlyBarChart
@@ -961,7 +970,7 @@ function AIRevenueAnalysis({ dashboardData }) {
               <div className="ai-revenue-card" role="button" tabIndex={0} onClick={() => openAnalysis('trend')} onKeyDown={(event) => handleCardKeyDown(event, 'trend')}>
                 <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">↗</span><strong className="ai-revenue-card__title">Revenue trend &amp; growth · all-records history</strong></span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
                 <b>{peso.format(current.revenue)}</b>
-                <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
+                <small>Coverage unverified; recorded-revenue comparisons only. {yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
                 <a className="ai-revenue-card__view" href="#trend-analysis" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAnalysis('trend'); }}>View analysis <span aria-hidden="true">›</span></a>
               </div>
               {cardDetails.map((card) => {
@@ -1012,6 +1021,7 @@ function AIRevenueAnalysis({ dashboardData }) {
         </header>
         <div className="ai-revenue-modal__body">
         <div className="ai-revenue-report__summary">
+          <span>{coverage?.includedTransactions ?? 0} included transactions · {coverage?.firstRecordedDate || 'No recorded dates'} to {coverage?.lastRecordedDate || '—'} · Completeness unknown{coverage?.quarterInProgress ? '; quarter still in progress' : ''}. Missing records may affect comparisons and decline signals.</span>
           <strong>{scopeLabel} · same records as concentration</strong>
           <span>Leading contributor: {contributorItems[0]?.name || 'None'} · Top one {analysis.concentration?.indicators?.topOneShare ?? '—'}% · Top three {analysis.concentration?.indicators?.topThreeShare ?? '—'}% · HHI {analysis.concentration?.indicators?.hhi ?? '—'} · {analysis.concentration?.indicators?.concentrationLevel || 'Not enough data'}</span>
           <span>Generated {new Date().toLocaleDateString('en-PH', { day: 'numeric', month: 'long', year: 'numeric' })} · Total: {peso.format(reportTotal)} ({peso.format(reportPaid)} paid, {peso.format(reportOutstanding)} outstanding)</span>

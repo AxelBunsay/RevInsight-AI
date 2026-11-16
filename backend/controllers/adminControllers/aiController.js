@@ -133,6 +133,7 @@ async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntr
     const scoped = (await getControllerResult(dashboard.getScopedRevenue, { ...req, query: req.body })).data;
     return {
       stats: { totalRevenue: scoped.concentration.totalRevenue, totalTransactions: scoped.reportRecords.length },
+      coverage: scoped.coverage,
       analysisScopes: { concentration: scope.label, overallRisk: scope.label, trend: 'All recorded completed quarters', forecast: 'All recorded completed quarters', selectedQuarter: period?.key || null },
       selectedQuarter: quarterRevenueContext(chartEntriesRes.data, period),
       quarterly: quarterlyRes.data,
