@@ -121,7 +121,7 @@ const createService = async (req, res) => {
     }
     const service = await Service.create({
       name: req.body.name.trim(),
-      description: req.body.description.trim(),
+      description: typeof req.body.description === 'string' ? req.body.description.trim() : '',
       price: Number(req.body.price),
       laborOnlyPrice: req.body.laborOnlyPrice === '' || req.body.laborOnlyPrice == null
         ? null

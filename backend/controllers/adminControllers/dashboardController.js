@@ -63,8 +63,11 @@ const getRevenueChartEntries = async (_req, res) => {
 
 const getRevenueConcentration = async (req, res) => {
   try {
-    const entries = await loadRevenueEntries();
-    const data = calculateRevenueRisk(entries, []);
+    const [entries, quarters] = await Promise.all([
+      loadRevenueEntries(),
+      getRevenueByPeriod('quarter')
+    ]);
+    const data = calculateRevenueRisk(entries, quarters);
     const topOneShare = data.indicators.topContributorShare.value || 0;
     const topThreeShare = data.contributors.slice(0, 3).reduce((sum, item) => sum + item.share, 0);
     const hhi = data.indicators.concentrationHhi.value || 0;

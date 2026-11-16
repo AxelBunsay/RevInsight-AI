@@ -98,8 +98,11 @@ async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntr
       : Promise.resolve({ data: [] })
   ]);
 
+  const { totalRevenue, totalTransactions, collected, outstanding } = statsRes.data;
   return {
-    stats: statsRes.data,
+    // Keep volatile timestamps and unrelated account/inventory counts out of the
+    // AI payload so identical revenue data has a stable 15-minute cache key.
+    stats: { totalRevenue, totalTransactions, collected, outstanding },
     quarterly: quarterlyRes.data,
     ...(includeChartEntries ? { chartEntries: chartEntriesRes.data } : {}),
     revenueRisk: riskRes.data,

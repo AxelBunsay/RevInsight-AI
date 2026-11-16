@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { getServicePartsSource, servicesForPartsSource, withServicePartsSource } from './servicePartsMode';
 
 const servicesSource = readFileSync(new URL('./Services.jsx', import.meta.url), 'utf8');
-const detailSource = readFileSync(new URL('./ServiceDetail.jsx', import.meta.url), 'utf8');
+const detailSource = readFileSync(new URL('./ServiceBookingForm.jsx', import.meta.url), 'utf8');
 const purchaseCardsSource = readFileSync(new URL('./CustomerPurchaseCards.jsx', import.meta.url), 'utf8');
 
 const services = [

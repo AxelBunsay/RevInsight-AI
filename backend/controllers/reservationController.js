@@ -67,6 +67,24 @@ async function releaseReservedStock(reservation, session, changedProductIds = ne
     await product.save({ session });
     changedProductIds.add(product._id.toString());
   }
+  reservation.stockHeld = false;
+}
+
+async function holdReservationStock(items, session, changedProductIds = new Set()) {
+  for (const item of items) {
+    const product = await Product.findOne({ _id: item.productId, isActive: { $ne: false } }).session(session);
+    const variant = item.variantId ? product?.variants?.id(item.variantId) : null;
+    const available = item.variantId
+      ? (variant ? Number(variant.stock || 0) - Number(variant.reservedQty || 0) : 0)
+      : (product && !product.variants?.length ? product.quantity - Number(product.reservedQty || 0) : 0);
+    if (available < item.qty) {
+      throw Object.assign(new Error(`Only ${Math.max(0, available)} of ${item.name} are currently available.`), { status: 409 });
+    }
+    if (variant) variant.reservedQty = Number(variant.reservedQty || 0) + item.qty;
+    else product.reservedQty = Number(product.reservedQty || 0) + item.qty;
+    await product.save({ session });
+    changedProductIds.add(product._id.toString());
+  }
 }
 
 async function expireReservations() {
@@ -118,6 +136,7 @@ async function expireReservations() {
             reservation.status = 'Expired';
             reservation.expiredAt = now;
             reservation.cancelReason = 'The down payment deadline passed.';
+            if (reservation.stockHeld) await releaseReservedStock(reservation, session, changedProductIds);
             await reservation.save({ session });
           } else if (reservation.status === 'Reserved' && reservation.reservedUntil <= now
             && canTransitionReservationStatus(reservation.status, 'Expired')) {
@@ -222,6 +241,7 @@ const createReservation = async (req, res) => {
     let reservation;
     try {
       await session.withTransaction(async () => {
+        await holdReservationStock(items, session);
         const counter = await Counter.findOneAndUpdate(
           { _id: 'reservation' },
           { $inc: { sequence: 1 } },
@@ -239,6 +259,7 @@ const createReservation = async (req, res) => {
           downPaymentPercent,
           downPaymentAmount,
           amountPaid: 0,
+          stockHeld: true,
           balanceDue: total,
           paymentDueAt: new Date(Date.now() + settings.pendingPaymentHours * 60 * 60 * 1000)
         }], { session });
@@ -420,6 +441,7 @@ const getCustomerReservation = async (req, res) => {
 
 const cancelCustomerReservation = async (req, res) => {
   let session;
+  const changedProductIds = new Set();
   try {
     if (!isValidReservationId(req.params.id)) return res.status(400).json({ success: false, message: 'Invalid reservation ID.' });
     const reason = req.body?.reason ?? 'Cancelled by customer';
@@ -444,7 +466,13 @@ const cancelCustomerReservation = async (req, res) => {
         },
         { new: true, runValidators: true, session }
       );
-      if (reservation) return;
+      if (reservation) {
+        if (reservation.stockHeld) {
+          await releaseReservedStock(reservation, session, changedProductIds);
+          await reservation.save({ session });
+        }
+        return;
+      }
 
       const current = await Reservation.findOne({
         _id: req.params.id,
@@ -457,6 +485,7 @@ const cancelCustomerReservation = async (req, res) => {
       }
       throw Object.assign(new Error('Customers can only cancel reservations with a pending down payment.'), { status: 409 });
     });
+    for (const productId of changedProductIds) await evaluateLowStockAlert(productId);
     res.json({ success: true, reservation: customerReservationPayload(reservation) });
   } catch (error) {
     sendError(res, error);
@@ -563,26 +592,9 @@ const confirmReservation = async (req, res) => {
       if (!canTransitionReservationStatus(reservation.status, 'Reserved')) {
         throw Object.assign(new Error('Only submitted payments can be confirmed.'), { status: 409 });
       }
-      for (const item of reservation.items) {
-        const product = await Product.findOne({ _id: item.productId, isActive: { $ne: false } }).session(session);
-        if (!product) {
-          throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
-        }
-        if (item.variantId) {
-          const variant = product.variants?.id(item.variantId);
-          if (!variant || Number(variant.stock || 0) - Number(variant.reservedQty || 0) < item.qty) {
-            throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
-          }
-          variant.reservedQty = Number(variant.reservedQty || 0) + item.qty;
-        } else {
-          if (product.variants?.length || product.quantity - Number(product.reservedQty || 0) < item.qty) {
-            throw Object.assign(new Error(`Not enough available stock for ${item.name}. Cancel this reservation and refund the payment.`), { status: 409 });
-          }
-          product.reservedQty = Number(product.reservedQty || 0) + item.qty;
-        }
-        await product.save({ session });
-        changedProductIds.add(product._id.toString());
-      }
+      // Old pending reservations acquire a hold here; new checkouts already own one.
+      if (!reservation.stockHeld) await holdReservationStock(reservation.items, session, changedProductIds);
+      reservation.stockHeld = true;
       const settings = await getSettings();
       reservation.status = 'Reserved';
       reservation.amountPaid = reservation.downPaymentAmount;
@@ -697,6 +709,7 @@ const completeReservation = async (req, res) => {
         changedProductIds.add(product._id.toString());
       }
       reservation.status = 'Completed';
+      reservation.stockHeld = false;
       reservation.amountPaid = reservation.total;
       reservation.balanceDue = 0;
       reservation.completedAt = new Date();
@@ -774,7 +787,7 @@ async function cancelReservation(req, res, isRefundDecisionOnly = false) {
           throw Object.assign(new Error('Refund decisions only apply after a down payment has been confirmed.'), { status: 400 });
         }
       }
-      if (reservation.status === 'Reserved') await releaseReservedStock(reservation, session, changedProductIds);
+      if (reservation.stockHeld || reservation.status === 'Reserved') await releaseReservedStock(reservation, session, changedProductIds);
       if (!isRefundDecisionOnly) {
         reservation.status = 'Cancelled';
         reservation.cancelledAt = new Date();

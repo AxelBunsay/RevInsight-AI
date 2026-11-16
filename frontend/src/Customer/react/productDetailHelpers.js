@@ -15,12 +15,11 @@ export function getVariantControlLabel(variants) {
 
 export function getProductDetailSelection(product, selectedVariantId) {
   const variants = product?.variants || [];
-  const selectedVariant = variants.find((variant) => String(variant._id) === String(selectedVariantId))
-    || variants.find((variant) => getVariantAvailability(variant) > 0)
-    || variants[0];
+  const selectedVariant = variants.find((variant) => String(variant._id) === String(selectedVariantId));
   const availableStock = selectedVariant
     ? getVariantAvailability(selectedVariant)
-    : Math.max(0, Number(product?.quantity || 0));
+    : variants.length ? variants.reduce((sum, variant) => sum + getVariantAvailability(variant), 0)
+      : Math.max(0, Number(product?.quantity || 0));
   return {
     variants,
     selectedVariant,

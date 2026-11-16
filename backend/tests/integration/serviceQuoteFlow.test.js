@@ -144,6 +144,34 @@ describe('labor-only service quote flow', () => {
     expect(jobs.body.jobs.filter((job) => String(job._id) === String(request._id))).toHaveLength(1);
   });
 
+  it('notifies a mechanic when an admin assigns a regular service booking', async () => {
+    const created = await api.post('/api/services/bookings')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ bookings: [{
+        serviceId: String(fixtures.service._id),
+        partsSource: 'shop',
+        date: nextOpenDate(),
+        startTime: '10:00',
+        vehicle: 'Integration motorcycle'
+      }] });
+    const requestId = created.body.results[0].serviceRequest._id;
+
+    const assigned = await api.put('/api/service-requests/assign')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ requestId, mechanicId: String(fixtures.mechanic._id) });
+
+    expect(assigned.status).toBe(200);
+    const notification = await Notification.findOne({
+      audience: 'mechanic',
+      mechanicId: fixtures.mechanic._id,
+      type: 'service_booking_assigned',
+      recordId: requestId
+    }).lean();
+    expect(notification.message).toContain(fixtures.service.name);
+    expect(notification.message).toContain('10:00');
+    expect(notification.message).toContain(`${fixtures.customer.firstName} ${fixtures.customer.lastName}`);
+  });
+
   it('closes the request when the customer rejects a quote', async () => {
     const request = await createQuoteRequest();
     expect((await submitQuote(request._id)).status).toBe(200);

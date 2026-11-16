@@ -183,6 +183,7 @@ function buildTemplateCardInsights(analysisData = {}) {
 }
 
 async function generateRevenueInsights(question, revenueData, dependencies = {}) {
+  const deadline = Date.now() + 40000;
   const client = dependencies.client || gemini;
   const modelNames = dependencies.modelNames || getModelNames();
   const systemInstruction = `
@@ -201,8 +202,11 @@ Do not use tables or horizontal rules. Never invent products, dates, risk labels
 
   for (const modelName of modelNames) {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
+      if (Date.now() >= deadline) break;
       try {
-        const model = client.getGenerativeModel({ model: modelName, systemInstruction });
+        const model = client.getGenerativeModel({ model: modelName, systemInstruction }, {
+          timeout: Math.min(20000, deadline - Date.now())
+        });
 
         const result = await model.generateContent(`Revenue Data:\n${JSON.stringify(revenueData, null, 2)}\n\nUser Question: ${question}`);
         return result.response.text().trim();
@@ -235,7 +239,7 @@ Never return labels, numbers, values, datasets, or any other text.
   let lastError;
   for (const modelName of modelNames) {
     try {
-      const model = client.getGenerativeModel({ model: modelName, systemInstruction });
+      const model = client.getGenerativeModel({ model: modelName, systemInstruction }, { timeout: 5000 });
       const result = await model.generateContent(`Question: ${question}`);
       const selectedType = result.response.text().trim().toLowerCase();
       return REVENUE_AI_CHART_TYPES.includes(selectedType) ? selectedType : null;
@@ -270,7 +274,7 @@ Output JSON only, with no Markdown fences or extra properties.
         model: modelName,
         systemInstruction,
         generationConfig: { responseMimeType: 'application/json' }
-      });
+      }, { timeout: 20000 });
       const result = await model.generateContent(prompt);
       const insights = JSON.parse(result.response.text());
       if (isValidCardInsights(insights)) return { insights, source: 'ai' };

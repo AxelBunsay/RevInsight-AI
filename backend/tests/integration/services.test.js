@@ -8,7 +8,9 @@ const {
   BusinessRecord,
   Product,
   Reservation,
+  Notification,
   ServiceRequest,
+  ServiceSlotLock,
   mongoose,
   startReplicaSet,
   stopReplicaSet,
@@ -25,6 +27,7 @@ const Mechanic = require('../../models/mechanic');
 const ReservationSettings = require('../../models/reservationSettings');
 const revenueUtils = require('../../utils/revenue');
 const { getServicePaymentSummary } = require('../../utils/servicePayment');
+const { ensureSlotLocks } = require('../../utils/serviceSlotCapacity');
 
 const api = supertest(app);
 const png = Buffer.from(
@@ -60,6 +63,7 @@ function booking(serviceId, { date = serviceDate, startTime = '10:00', ...overri
     date,
     startTime,
     vehicle: 'Integration motorcycle',
+    partsSource: 'shop',
     notes: 'Integration booking',
     cartKey: `${date}-${startTime}`,
     ...overrides
@@ -100,13 +104,10 @@ async function setServiceDownPaymentPercent(percent) {
 describe('service booking business flow integration', () => {
   beforeAll(async () => {
     await startReplicaSet();
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(`${dateOffset(0)}T20:00:00+08:00`));
   });
 
   afterAll(async () => {
     await stopReplicaSet();
-    vi.useRealTimers();
   });
 
   beforeEach(async () => {
@@ -198,7 +199,8 @@ describe('service booking business flow integration', () => {
       amountPaid: 500
     });
     expect(response.body.paymentSubmittedCount).toBe(1);
-    expect(response.body.totalAmount).toBe(800);
+    // This summary counts completed revenue; these fixtures are still pending.
+    expect(response.body.totalAmount).toBe(0);
   });
 
   it('uses the configured service price and mechanic fee instead of client-supplied values', async () => {
@@ -435,11 +437,10 @@ describe('service booking business flow integration', () => {
     });
   });
 
-  it('rejects labor-only booking when the service has no labor-only price', async () => {
-    const response = await createBookings(customerToken, [booking(fixtures.service._id, { partsSource: 'customer' })]);
+  it('requests a quote when the service has no fixed labor-only price', async () => {
+    const response = await createBookings(customerToken, [booking(fixtures.service._id, { partsSource: 'customer', customerPartsNote: 'Test brake pads' })]);
     expect(response.status).toBe(200);
-    expect(response.body.results[0]).toMatchObject({ ok: false, status: 400 });
-    expect(response.body.results[0].message).toContain('not available as labor only');
+    expect(response.body.results[0]).toMatchObject({ ok: true, serviceRequest: { quoteStatus: 'quote_requested' } });
   });
 
   it('filters active service requests by parts source and treats legacy requests as shop parts', async () => {
@@ -518,7 +519,7 @@ describe('service booking business flow integration', () => {
       paymentInstructions: { methodName: 'GCash', accountName: 'Shop', accountNumber: '09171234567' },
       pickupAddress: '',
       pickupHours: '',
-      contactNumber: ''
+      contactNumber: '09171234567'
     };
     const valid = await api.put('/api/admin/reservations/settings')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -787,15 +788,91 @@ describe('service booking business flow integration', () => {
     });
   });
 
+  it('creates a single booking on a free slot', async () => {
+    const response = await createBookings(customerToken, [booking(fixtures.service._id)]);
+
+    expect(response.status).toBe(200);
+    expect(response.body.results).toHaveLength(1);
+    expect(response.body.results[0]).toMatchObject({ ok: true });
+    expect(await ServiceRequest.countDocuments({
+      user: fixtures.customer._id,
+      serviceId: fixtures.service._id,
+      startTime: '10:00'
+    })).toBe(1);
+  });
+
+  it('allows an availability read to run alongside a booking', async () => {
+    const [availability, response] = await Promise.all([
+      api.get(`/api/services/${fixtures.service._id}/slots?date=${serviceDate}`),
+      createBookings(customerToken, [booking(fixtures.service._id)])
+    ]);
+
+    expect(availability.status).toBe(200);
+    expect(availability.body.slots.some((slot) => slot.startTime === '10:00')).toBe(true);
+    expect(response.status).toBe(200);
+    expect(response.body.results[0]).toMatchObject({ ok: true });
+  });
+
+  it('does not update an existing lock timestamp while ensuring locks', async () => {
+    const lock = await ServiceSlotLock.create({
+      dateKey: serviceDate,
+      startTime: '10:00',
+      bookingVersion: 4
+    });
+
+    await ensureSlotLocks(serviceDate, '10:00', '11:00');
+
+    const unchanged = await ServiceSlotLock.findById(lock._id).lean();
+    expect(unchanged.updatedAt).toEqual(lock.updatedAt);
+    expect(unchanged.bookingVersion).toBe(4);
+  });
+
+  it.each([
+    { partsSource: 'shop', label: 'shop-parts', laborOnly: 'No' },
+    { partsSource: 'customer', label: 'labor-only', laborOnly: 'Yes' }
+  ])('notifies a selected mechanic when a $label booking is created', async ({ partsSource, laborOnly }) => {
+    await Service.updateOne({ _id: fixtures.service._id }, { $set: { laborOnlyPrice: 200 } });
+    const response = await createBookings(customerToken, [booking(fixtures.service._id, {
+      partsSource,
+      mechanicId: String(fixtures.mechanic._id)
+    })]);
+
+    expect(response.body.results[0].ok).toBe(true);
+    const notification = await Notification.findOne({
+      audience: 'mechanic',
+      mechanicId: fixtures.mechanic._id,
+      type: 'service_booking_requested',
+      recordId: response.body.results[0].serviceRequest._id
+    }).lean();
+    expect(notification.message).toContain(fixtures.service.name);
+    expect(notification.message).toContain(serviceDate);
+    expect(notification.message).toContain('10:00 AM');
+    expect(notification.message).toContain(`${fixtures.customer.firstName} ${fixtures.customer.lastName}`);
+    expect(notification.message).toContain(`Labor-only: ${laborOnly}`);
+  });
+
+  it('keeps a booking successful if its mechanic notification cannot be created', async () => {
+    const notificationCreate = vi.spyOn(Notification, 'create').mockRejectedValueOnce(new Error('notification unavailable'));
+    const response = await createBookings(customerToken, [booking(fixtures.service._id, {
+      mechanicId: String(fixtures.mechanic._id)
+    })]);
+    notificationCreate.mockRestore();
+
+    expect(response.body.results[0].ok).toBe(true);
+    expect(await ServiceRequest.exists({ _id: response.body.results[0].serviceRequest._id })).not.toBeNull();
+  });
+
   it('rejects a closed day and a time that has already passed', async () => {
     const closedDay = await createBookings(customerToken, [
       booking(fixtures.service._id, { date: nextSundayDate(), startTime: '10:00' })
     ]);
     const settings = await ReservationSettings.getDefaults();
     settings.openDays = [...settings.openDays, 'Sun'];
+    settings.openTime = '00:00';
+    settings.closeTime = '23:00';
     await settings.save();
     const pastTime = await createBookings(secondCustomerToken, [
-      booking(fixtures.service._id, { date: dateOffset(0), startTime: '09:00' })
+      booking(fixtures.service._id, { date: dateOffset(0), startTime: '00:00' })
     ]);
 
     expect(closedDay.body.results[0]).toMatchObject({ ok: false, status: 400 });
@@ -1023,5 +1100,25 @@ describe('service booking business flow integration', () => {
       paymentStatus: 'Payment Pending',
       status: { $in: ['pending', 'assigned', 'confirmed', 'accepted', 'in-progress'] }
     })).toBe(3);
+  });
+
+  it('separates available jobs from personal workload and earnings', async () => {
+    const otherMechanic = new mongoose.Types.ObjectId();
+    const base = { user: fixtures.customer._id, serviceType: 'Ownership fixture', description: 'Synthetic workload check' };
+    const [own, other, available, legacyOther] = await ServiceRequest.create([
+      { ...base, mechanic: fixtures.mechanic._id, mechanicId: fixtures.mechanic._id, status: 'completed', completedAt: new Date(), mechanicFeeTotal: 50 },
+      { ...base, mechanic: otherMechanic, mechanicId: otherMechanic, status: 'completed', completedAt: new Date(), mechanicFeeTotal: 9999 },
+      { ...base, mechanic: null, mechanicId: null, status: 'pending' },
+      { ...base, mechanic: null, mechanicId: otherMechanic, status: 'pending' }
+    ]);
+    const list = await api.get('/api/service-requests/mechanic').set('Authorization', `Bearer ${mechanicToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body.jobs.map(job => job._id)).toEqual([own.id]);
+    expect(list.body.availableJobs.map(job => job._id)).toEqual([available.id]);
+    expect(JSON.stringify(list.body)).not.toContain(other.id);
+    expect(JSON.stringify(list.body)).not.toContain(legacyOther.id);
+    const stats = await api.get(`/api/mechanic/${fixtures.mechanic.id}/stats`).set('Authorization', `Bearer ${mechanicToken}`);
+    expect(stats.status).toBe(200);
+    expect(stats.body).toMatchObject({ completedJobs: 1, totalEarnings: 50 });
   });
 });

@@ -1,12 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
 import ServiceBookingTimeSelect from './ServiceBookingTimeSelect';
+import { request } from '../../services/api';
 import {
   bookingTimeOptionLabel,
   canSubmitServiceBooking,
   getBookingTimeGroups,
-  getDateChangeState
+  getDateChangeState,
+  runWithBookingLock
 } from './serviceBookingTime';
 
 const slots = [
@@ -17,6 +20,69 @@ const slots = [
 ];
 
 describe('service booking time options', () => {
+  it('ignores a second submit while the first booking request is pending', async () => {
+    const lockRef = { current: false };
+    const setSending = vi.fn();
+    let finishRequest;
+    const submit = vi.fn(() => new Promise((resolve) => { finishRequest = resolve; }));
+    const firstClick = runWithBookingLock(lockRef, setSending, submit);
+    const secondClick = await runWithBookingLock(lockRef, setSending, submit);
+
+    expect(secondClick).toBe(false);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(setSending).toHaveBeenCalledWith(true);
+    finishRequest();
+    await firstClick;
+    expect(lockRef.current).toBe(false);
+    expect(setSending).toHaveBeenLastCalledWith(false);
+  });
+
+  it('resets the sending state when the booking request fails', async () => {
+    const lockRef = { current: false };
+    const setSending = vi.fn();
+
+    await expect(runWithBookingLock(lockRef, setSending, async () => {
+      throw new Error('Booking failed');
+    })).rejects.toThrow('Booking failed');
+
+    expect(lockRef.current).toBe(false);
+    expect(setSending).toHaveBeenLastCalledWith(false);
+  });
+
+  it('shows sending state and booking failures in the form', () => {
+    const formSource = readFileSync(new URL('./ServiceBookingForm.jsx', import.meta.url), 'utf8');
+
+    expect(formSource).toContain("isSendingBooking ? 'Sending...' : 'Send request'");
+    expect(formSource).toContain('disabled={isSendingBooking ||');
+    expect(formSource).toContain('setBookingError(error.message ||');
+    expect(formSource).toContain('{bookingError && <p className="customer-error" role="alert">{bookingError}</p>}');
+  });
+
+  it('uses a clear timeout message and preserves the server message for a full slot', async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    vi.stubGlobal('fetch', vi.fn((url, { signal }) => new Promise((resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    })));
+    const pending = request('/api/services/bookings', { tokenKey: null, timeout: 20_000 });
+    controller.abort();
+
+    await expect(pending).rejects.toThrow('The request took too long. Please check My Bookings before trying again.');
+    expect(timeout).toHaveBeenCalledWith(20_000);
+
+    vi.unstubAllGlobals();
+    timeout.mockRestore();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      headers: { get: () => 'application/json' },
+      json: async () => ({ message: 'That time was just booked. Please choose another.' }),
+      ok: false,
+      status: 409
+    }));
+    await expect(request('/api/services/bookings', { tokenKey: null, timeout: 20_000 }))
+      .rejects.toMatchObject({ status: 409, message: 'That time was just booked. Please choose another.' });
+    vi.unstubAllGlobals();
+  });
+
   it('groups options by time, formats remaining capacity, disables full times and omits passed times', () => {
     const groups = getBookingTimeGroups(slots);
 

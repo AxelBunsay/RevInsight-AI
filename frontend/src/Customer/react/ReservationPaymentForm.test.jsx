@@ -39,7 +39,7 @@ describe('service booking payment amount', () => {
     expect(markup).toContain('Down payment (50%)');
     const bodyStart = markup.indexOf('class="gcash-payment-body"');
     const bodyEnd = markup.indexOf('</div>', bodyStart);
-    const footer = markup.indexOf('class="gcash-payment-submit-row"');
+    const footer = markup.indexOf('class="gcash-payment-submit-row gcash-payment-footer"');
     expect(bodyEnd).toBeGreaterThan(bodyStart);
     expect(footer).toBeGreaterThan(bodyEnd);
     expect(paymentFormSource).toContain('useCustomerModalEffects(true, onClose)');

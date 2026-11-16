@@ -1,12 +1,15 @@
 const Service = require('../models/service');
 const ServiceRequest = require('../models/serviceRequest');
 const Mechanic = require('../models/mechanic');
+const Notification = require('../models/notification');
+const User = require('../models/user');
 const ReservationSettings = require('../models/reservationSettings');
 const mongoose = require('mongoose');
 const { calculateServicePayment } = require('../utils/servicePayment');
 const { normalizeServiceCategory } = require('../utils/serviceCategories');
 const {
   countActiveBookings,
+  ensureSlotLocks,
   readSlotCount,
   serializeSlotBooking
 } = require('../utils/serviceSlotCapacity');
@@ -225,7 +228,7 @@ const createServiceBookings = async (req, res) => {
         if (!booking || typeof booking !== 'object') {
           throw Object.assign(new Error('A booking must include service and schedule details.'), { status: 400 });
         }
-        const partsSource = booking.partsSource === undefined ? 'shop' : booking.partsSource;
+        const partsSource = booking.partsSource;
         const selectedMechanicId = booking.mechanicId || booking.mechanic || null;
         if (!['shop', 'customer'].includes(partsSource)) {
           throw Object.assign(new Error('Choose whether parts come from the shop or the customer.'), { status: 400 });
@@ -263,6 +266,7 @@ const createServiceBookings = async (req, res) => {
         if (selectedSlot.startTime <= (booking.date === todayInManila() ? minutesToTime(currentManilaMinutes()) : '')) {
           throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
         }
+        await ensureSlotLocks(booking.date, booking.startTime, selectedSlot.endTime);
         const dayRange = manilaDayRange(booking.date);
         const session = await mongoose.startSession();
         let serviceRequest;
@@ -368,20 +372,46 @@ const createServiceBookings = async (req, res) => {
               endTime,
               status: 'pending'
             }], { session }))[0];
-          });
+          }, { timeoutMS: 8_000 });
         } finally {
           await session.endSession();
+        }
+        if (selectedMechanicId) {
+          try {
+            const customer = await User.findById(req.user.userId).select('firstName lastName name').lean();
+            const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || customer?.name || 'Customer';
+            await Notification.create({
+              audience: 'mechanic',
+              mechanicId: selectedMechanicId,
+              type: 'service_booking_requested',
+              message: `New service booking: ${serviceRequest.serviceType}. Date: ${booking.date}, time: ${slotLabel(booking.startTime)}. Customer: ${customerName}. Labor-only: ${partsSource === 'customer' ? 'Yes' : 'No'}.`,
+              link: '/mechanic/jobs',
+              recordId: serviceRequest._id,
+              recordType: 'service'
+            });
+          } catch (notificationError) {
+            console.error('[createServiceBookings] mechanic notification failed', notificationError);
+          }
         }
         results.push({ cartKey, ok: true, serviceRequest });
       } catch (error) {
         if (error.status !== 409 && error.status !== 400) {
           console.error('[createServiceBookings] booking failed', error);
         }
+        const transactionUnavailable = error.name === 'MongoOperationTimeoutError'
+          || error.name === 'MongoTimeoutError'
+          || error.code === 112
+          || error.codeName === 'WriteConflict'
+          || error.hasErrorLabel?.('TransientTransactionError');
         results.push({
           cartKey,
           ok: false,
-          status: error.status || 500,
-          message: error.status ? error.message : 'This booking could not be submitted. Please try again.',
+          status: error.status || (transactionUnavailable ? 503 : 500),
+          message: error.status
+            ? error.message
+            : transactionUnavailable
+              ? 'Booking is temporarily busy. Please try again.'
+              : 'This booking could not be submitted. Please try again.',
           serviceId: booking?.serviceId,
           date: booking?.date,
           startTime: booking?.startTime

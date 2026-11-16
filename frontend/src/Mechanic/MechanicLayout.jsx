@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { getMechanicNotifications, logoutMechanic, markMechanicNotificationsRead } from './mechanicService';
+import {
+  clearMechanicNotifications,
+  getMechanicNotifications,
+  logoutMechanic,
+  openMechanicNotification,
+  markMechanicNotificationsRead
+} from './mechanicService';
 import { getAuthSessionLoginPath, getAuthUser } from '../auth/authSession';
 import NotificationContent from '../components/NotificationContent';
 import RouteContentTransition from '../components/RouteContentTransition';
@@ -31,22 +37,34 @@ export default function MechanicLayout() {
         : currentTitle;
   useDocumentTitle(`${pageName} | Mechanic | Manoy's`);
   const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
   const [profile, setProfile] = useState({});
+  const [notificationError, setNotificationError] = useState('');
 
   useEffect(() => {
     let active = true;
-    getMechanicNotifications().then((items) => {
+    getMechanicNotifications().then(({ notifications: items, unreadCount: count }) => {
       if (active) {
         setNotifications(items);
+        setUnreadCount(count);
         setProfile(getAuthUser('mechanic') || {});
       }
-    });
+    }).catch((error) => { if (active) setNotificationError(error.message || 'Notifications could not be loaded.'); });
     return () => { active = false; };
   }, [location.pathname]);
 
-  const unreadCount = notifications.filter((item) => !item.read).length;
+  const openNotification = async (item) => {
+    try {
+      const updated = await openMechanicNotification(item, navigate);
+      setNotifications((current) => current.map((notification) => notification.id === item.id ? updated : notification));
+      if (!item.read) setUnreadCount((count) => Math.max(0, count - 1));
+    } catch (error) {
+      setNotificationError(error.message || 'Notification could not be opened.');
+    }
+  };
+
   const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || 'Mechanic';
   const date = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date());
 
@@ -73,11 +91,28 @@ export default function MechanicLayout() {
                 <header className="mechanic-notification-popover-header">
                   <strong>Notifications</strong>
                   <div className="mechanic-notification-actions">
-                    {!!unreadCount && <button type="button" onClick={async () => setNotifications(await markMechanicNotificationsRead())}>Mark all as read</button>}
-                    {!!notifications.length && <button type="button" onClick={() => setNotifications([])}>Clear all</button>}
+                    {!!unreadCount && <button type="button" onClick={async () => {
+                      try {
+                        setNotifications(await markMechanicNotificationsRead(notifications));
+                        setUnreadCount(0);
+                        setNotificationError('');
+                      } catch (error) {
+                        setNotificationError(error.message || 'Notifications could not be updated.');
+                      }
+                    }}>Mark all as read</button>}
+                    {!!notifications.length && <button type="button" onClick={async () => {
+                      try {
+                        setNotifications(await clearMechanicNotifications());
+                        setUnreadCount(0);
+                        setNotificationError('');
+                      } catch (error) {
+                        setNotificationError(error.message || 'Notifications could not be cleared.');
+                      }
+                    }}>Clear all</button>}
                   </div>
                 </header>
-                <div className="mechanic-notification-list">{notifications.length ? notifications.map((item) => <article className={`mechanic-notification${item.read ? '' : ' unread'}`} key={item.id}><NotificationContent message={item.text} timestamp={item.time} /></article>) : <p className="mechanic-notification-empty">No notifications yet.</p>}</div>
+                {notificationError && <p className="mechanic-alert" role="alert">{notificationError}</p>}
+                <div className="mechanic-notification-list">{notifications.length ? notifications.map((item) => <article className={`mechanic-notification${item.read ? '' : ' unread'}`} key={item.id}><button className="mechanic-notification-open" type="button" onClick={() => openNotification(item)}><NotificationContent message={item.text} timestamp={item.time} /></button></article>) : <p className="mechanic-notification-empty">No notifications yet.</p>}</div>
               </section>}
             </div>
             <Link className="mechanic-user-link" to="/mechanic/profile" aria-label={`Profile: ${name}`}><span>{name.charAt(0).toUpperCase()}</span></Link>

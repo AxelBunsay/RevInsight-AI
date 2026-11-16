@@ -45,7 +45,10 @@ const archiveOrDeleteProduct = async (product) => {
 
 const archiveOrDeleteService = async (service) => {
   const [serviceRequest, businessRecord] = await Promise.all([
-    ServiceRequest.exists({ serviceType: new RegExp(`^\\s*${escapeRegex(service.name)}\\s*$`, 'i') }),
+    ServiceRequest.exists({ $or: [
+      { serviceId: service._id },
+      { serviceType: new RegExp(`^\\s*${escapeRegex(service.name)}\\s*$`, 'i') }
+    ] }),
     BusinessRecord.exists({
       recordType: 'service',
       $or: [

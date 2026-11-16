@@ -13,6 +13,9 @@ frontend/dist/
 # Runtime files
 backend/uploads/
 *.log
+perf-tests/.acceptance-*
+perf-tests/output/
+perf-tests/__pycache__/
 
 # Editor files
 .vscode/

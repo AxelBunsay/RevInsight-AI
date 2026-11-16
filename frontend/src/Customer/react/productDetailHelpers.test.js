@@ -44,7 +44,7 @@ describe('product detail selection and modal URL helpers', () => {
     };
 
     expect(getProductDetailSelection(product, '')).toMatchObject({
-      selectedVariant: product.variants[0],
+      selectedVariant: undefined,
       availableStock: 0,
       isOutOfStock: true
     });

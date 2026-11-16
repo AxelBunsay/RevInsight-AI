@@ -49,8 +49,7 @@ export default function ProductDetailContent({
         quantity: Math.max(0, Number(item.quantity || 0) - Number(item.reservedQty || 0))
       });
       onProductLoaded?.(item);
-      const availableVariant = (item.variants || []).find((variant) => getVariantAvailability(variant) > 0);
-      setSelectedVariantId(availableVariant ? String(availableVariant._id) : String(item.variants?.[0]?._id || ''));
+      setSelectedVariantId('');
     }).catch((requestError) => {
       if (active) setError(requestError.message || 'This item could not be loaded.');
     });
@@ -142,6 +141,10 @@ export default function ProductDetailContent({
     : null;
 
   const addProduct = (goToCart = false) => {
+    if (variants.length && !selectedVariant) {
+      setActionNotice(`Choose a variant for ${product.name}.`);
+      return;
+    }
     if (!product || availableStock <= 0) return;
     const customerToken = getAuthToken('customer');
     if (!customerToken || customerToken === 'prototype-guest') {
@@ -221,6 +224,7 @@ export default function ProductDetailContent({
               setQuantity((current) => Math.min(current, Math.max(1, getVariantAvailability(nextVariant))));
             }}
           >
+            <option value="" disabled>Choose a variant</option>
             {variants.map((variant) => (
               <option key={variant._id} value={String(variant._id)} disabled={getVariantAvailability(variant) === 0}>
                 {variantDisplayLabel(variant)}

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { JobDialog, JobTable } from './MechanicJobTable';
+import { getJobActions } from './mechanicService';
 
 const exampleJob = {
   _id: '6ae25d269de2b06335b2fe68',
@@ -86,5 +87,44 @@ describe('mechanic job completion balance prompt', () => {
     expect(markup).toContain('Collect balance of ₱166.50 at the shop.');
     expect(markup).toContain('SRV-B2FE68');
     expect(markup).not.toContain('6ae25d269de2b06335b2fe68');
+  });
+
+  it('shows a quote request and a price field with server-matching bounds', () => {
+    const quoteJob = {
+      ...exampleJob,
+      status: 'quote_requested',
+      quoteStatus: 'quote_requested',
+      paymentStatus: 'Payment Pending'
+    };
+    const markup = renderToStaticMarkup(
+      <JobDialog job={quoteJob} onClose={() => {}} actions={getJobActions(quoteJob)} onAction={() => {}} busy={false} />
+    );
+
+    expect(getJobActions(quoteJob)).toEqual(['quote', 'decline-quote']);
+    expect(markup).toContain('Awaiting quote');
+    expect(markup).toContain('Quote price (PHP)');
+    expect(markup).toContain('type="number" required="" max="999999.99" step="any"');
+    expect(markup).toContain('name="quoteNote" required="" maxLength="1000"');
+    expect(markup).toContain('Send quote');
+  });
+
+  it('hides Accept until payment is confirmed and shows the reason in the View dialog', () => {
+    const unpaidJob = {
+      ...exampleJob,
+      status: 'pending',
+      mechanic: null,
+      mechanicId: null,
+      paymentStatus: 'Payment Pending'
+    };
+    const actions = getJobActions(unpaidJob);
+    const markup = renderToStaticMarkup(
+      <JobDialog job={unpaidJob} onClose={() => {}} actions={actions} onAction={() => {}} busy={false} error="Payment is not confirmed yet." />
+    );
+
+    expect(actions).not.toContain('accept');
+    expect(markup).toContain('Waiting for payment confirmation.');
+    expect(markup).not.toContain('Accept job');
+    expect(markup).toContain('role="alert">Payment is not confirmed yet.</p>');
+    expect(getJobActions({ ...unpaidJob, paymentStatus: 'Confirmed' })).toContain('accept');
   });
 });

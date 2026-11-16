@@ -16,16 +16,17 @@ const countActiveBookings = (startTime, endTime, dayStart, nextDayStart, session
   return session ? query.session(session) : query;
 };
 
-const ensureSlotLock = async (dateKey, startTime) => {
+const ensureSlotLocks = async (dateKey, startTime, endTime) => {
   await ServiceSlotLock.init();
-  try {
-    await ServiceSlotLock.updateOne(
-      { dateKey, startTime },
-      { $setOnInsert: { dateKey, startTime, bookingVersion: 0 } },
-      { upsert: true }
-    );
-  } catch (error) {
-    if (error.code !== 11000) throw error;
+  const start = timeToMinutes(startTime);
+  const end = timeToMinutes(endTime);
+  for (let minute = start; minute < end; minute += 30) {
+    const lockTime = minutesToTime(minute);
+    try {
+      await ServiceSlotLock.create({ dateKey, startTime: lockTime, bookingVersion: 0 });
+    } catch (error) {
+      if (error.code !== 11000) throw error;
+    }
   }
 };
 
@@ -46,18 +47,21 @@ const serializeSlotBooking = async ({ dateKey, startTime, endTime, session }) =>
   let finalLock;
   for (let minute = start; minute < end; minute += 30) {
     const lockTime = minutesToTime(minute);
-    await ensureSlotLock(dateKey, lockTime);
     finalLock = await ServiceSlotLock.findOneAndUpdate(
       { dateKey, startTime: lockTime },
       { $inc: { bookingVersion: 1 } },
       { new: true, session }
     ).select('_id');
+    if (!finalLock) {
+      throw Object.assign(new Error('Booking time is temporarily unavailable. Please try again.'), { status: 503 });
+    }
   }
   return finalLock;
 };
 
 module.exports = {
   countActiveBookings,
+  ensureSlotLocks,
   serializeSlotBooking,
   readSlotCount
 };

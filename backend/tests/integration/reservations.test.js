@@ -601,8 +601,6 @@ describe('reservation business flow integration', () => {
   });
 
   it('releases the selected variant hold when its reservation expires', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-26T09:00:00+08:00'));
     const product = await createVariantProduct([
       { size: '1 L', price: 90, stock: 5 },
       { color: 'Black', price: 300, stock: 2 }
@@ -610,7 +608,7 @@ describe('reservation business flow integration', () => {
     const [variantA] = product.variants;
     const reservation = await createConfirmedVariantReservation(product, variantA);
 
-    vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000 + 1);
+    await Reservation.updateOne({ _id: reservation._id }, { $set: { reservedUntil: new Date(Date.now() - 1) } });
     const response = await customerGet('/api/reservations');
 
     expect(response.status).toBe(200);
@@ -620,7 +618,7 @@ describe('reservation business flow integration', () => {
     expect(savedProduct.variants.id(variantA._id).stock).toBe(5);
   });
 
-  it('does not hold variant stock when a submitted payment is rejected', async () => {
+  it('keeps the checkout hold while a rejected payment awaits resubmission', async () => {
     const product = await createVariantProduct([
       { color: 'Red', price: 100, stock: 2 }
     ]);
@@ -635,7 +633,7 @@ describe('reservation business flow integration', () => {
       .send({ reason: 'Receipt details are not legible.' });
 
     expect(response.status).toBe(200);
-    expect((await Product.findById(product._id)).variants[0].reservedQty).toBe(0);
+    expect((await Product.findById(product._id)).variants[0].reservedQty).toBe(1);
   });
 
   it('prevents a second customer from reserving more than remaining stock', async () => {
@@ -729,11 +727,9 @@ describe('reservation business flow integration', () => {
   });
 
   it('expires an unpaid reservation after its payment deadline', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-26T09:00:00+08:00'));
     const created = await makeReservation(customerToken, fixtures.product._id);
 
-    vi.advanceTimersByTime(60 * 60 * 1000 + 1);
+    await Reservation.updateOne({ _id: created.body.reservation._id }, { $set: { paymentDueAt: new Date(Date.now() - 1) } });
     const response = await api
       .get('/api/reservations')
       .set('Authorization', `Bearer ${customerToken}`);
@@ -745,12 +741,10 @@ describe('reservation business flow integration', () => {
   });
 
   it('expires a Reserved reservation after hold days and releases its stock', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-10-26T09:00:00+08:00'));
     const submitted = await createSubmittedReservation(customerToken, 2);
     expect((await confirmReservation(submitted._id)).status).toBe(200);
 
-    vi.advanceTimersByTime(3 * 24 * 60 * 60 * 1000 + 1);
+    await Reservation.updateOne({ _id: submitted._id }, { $set: { reservedUntil: new Date(Date.now() - 1) } });
     const response = await api
       .get('/api/reservations')
       .set('Authorization', `Bearer ${customerToken}`);
