@@ -1,5 +1,6 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { REVENUE_AI_CHART_TYPES } = require('../utils/revenue');
+const { logRevenueAIFailure, revenueAIError, newRevenueAIRequestId } = require('../utils/revenueAIError');
 
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const CARD_INSIGHT_KEYS = ['trend', 'risk', 'concentration', 'service', 'forecast'];
@@ -184,11 +185,12 @@ function buildTemplateCardInsights(analysisData = {}) {
 
 async function generateRevenueInsights(question, revenueData, dependencies = {}) {
   const deadline = Date.now() + 40000;
+  const requestId = dependencies.requestId || newRevenueAIRequestId();
   const client = dependencies.client || gemini;
   const modelNames = dependencies.modelNames || getModelNames();
   const systemInstruction = `
 You are a revenue analyst for a motorcycle parts shop.
-Answer using only supplied revenue data. Never invent or infer a number that is not present in the data.
+Answer using only supplied revenue data. Respect analysisScopes: selectedQuarter contains only that quarter; revenueConcentration and overallRisk describe all recorded revenue. Never present global shares as selected-quarter shares. Never invent or infer a number that is not present in the data.
 Always format monetary amounts as Philippine pesos with thousands separators (for example ₱25,390); never use $ or USD.
 Keep the answer concise and use only the supplied Normal, Moderate, and High risk labels and their supplied thresholds.
 Start with an opening paragraph of one to three sentences and no heading, describing what the supplied numbers show now.
@@ -203,6 +205,7 @@ Do not use tables or horizontal rules. Never invent products, dates, risk labels
   for (const modelName of modelNames) {
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       if (Date.now() >= deadline) break;
+      const startedAt = Date.now();
       try {
         const model = client.getGenerativeModel({ model: modelName, systemInstruction }, {
           timeout: Math.min(20000, deadline - Date.now())
@@ -211,7 +214,7 @@ Do not use tables or horizontal rules. Never invent products, dates, risk labels
         const result = await model.generateContent(`Revenue Data:\n${JSON.stringify(revenueData, null, 2)}\n\nUser Question: ${question}`);
         return result.response.text().trim();
       } catch (error) {
-        lastError = error;
+        lastError = logRevenueAIFailure(error, { requestId, operation: 'ask', model: modelName, startedAt });
 
         if (error.status !== 503 || attempt === 2) {
           break;
@@ -222,7 +225,7 @@ Do not use tables or horizontal rules. Never invent products, dates, risk labels
     }
   }
 
-  throw lastError;
+  throw revenueAIError(lastError || { code: 'AI_PROVIDER_UNAVAILABLE', statusCode: 503, message: 'AI service is currently unavailable. Please try again later.' }, requestId);
 }
 
 async function generateRevenueChartType(question, dependencies = {}) {
@@ -255,9 +258,10 @@ async function generateCardInsights(analysisData, dependencies = {}) {
   const client = dependencies.client || gemini;
   const modelNames = dependencies.modelNames || getModelNames();
   const fallback = buildTemplateCardInsights(analysisData);
+  const requestId = dependencies.requestId || newRevenueAIRequestId();
   const systemInstruction = `
 You write concise revenue-card insights for a motorcycle shop owner.
-Use only the supplied computed numbers, risk labels, and thresholds. Never invent figures, products, or dates.
+Use only the supplied computed numbers, risk labels, and thresholds. Respect analysisScopes: concentration and risk cards describe all recorded revenue, while selectedQuarter is separate quarter-specific context. Never invent figures, products, or dates.
 Return a JSON object with exactly these card keys: ${CARD_INSIGHT_KEYS.join(', ')}.
 Each card value must contain exactly four string properties: summary, recommendation, ifFollowed, and ifIgnored.
 Each property must be one short sentence of no more than 25 words, with no line breaks. Summary describes the supplied numbers now. Recommendation is a specific action the shop owner can take, not generic tracking advice.
@@ -269,6 +273,7 @@ Output JSON only, with no Markdown fences or extra properties.
 
   let lastFailure = null;
   for (const modelName of modelNames) {
+    const startedAt = Date.now();
     try {
       const model = client.getGenerativeModel({
         model: modelName,
@@ -278,26 +283,21 @@ Output JSON only, with no Markdown fences or extra properties.
       const result = await model.generateContent(prompt);
       const insights = JSON.parse(result.response.text());
       if (isValidCardInsights(insights)) return { insights, source: 'ai' };
-      lastFailure = {
-        modelName,
-        message: 'Gemini response did not match the card insight schema.'
-      };
+      const invalid = Object.assign(new Error('Gemini response did not match the card insight schema.'), { code: 'AI_INVALID_RESPONSE' });
+      lastFailure = { ...logRevenueAIFailure(invalid, { requestId, operation: 'cards', model: modelName, startedAt }), modelName, diagnosticReason: invalid.message };
     } catch (error) {
-      lastFailure = {
-        modelName,
-        message: error?.message || 'Gemini card insight generation failed.'
-      };
+      lastFailure = { ...logRevenueAIFailure(error, { requestId, operation: 'cards', model: modelName, startedAt }), modelName };
       if (dependencies.onError) dependencies.onError(error, modelName);
     }
   }
 
   const failedModel = lastFailure?.modelName || 'no configured model';
-  let failureMessage = lastFailure?.message || 'No model returned valid card insights.';
+  let failureMessage = lastFailure?.diagnosticReason || lastFailure?.message || 'No model returned valid card insights.';
   if (process.env.GEMINI_API_KEY) {
     failureMessage = failureMessage.split(process.env.GEMINI_API_KEY).join('[redacted]');
   }
   console.warn(`[generateCardInsights] Template fallback used; model ${failedModel} failed: ${failureMessage}`);
-  return { insights: fallback, source: 'template' };
+  return { insights: fallback, source: 'template', availability: { code: lastFailure?.code || 'AI_PROVIDER_UNAVAILABLE', message: lastFailure?.message || 'AI service is currently unavailable.' } };
 }
 
 module.exports = {

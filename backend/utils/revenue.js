@@ -477,7 +477,7 @@ function calculateRevenueRisk(entries, quarterlyRows, now = new Date()) {
   }));
   const topContributor = rankedContributors[0] || null;
   const hhi = categorizedRevenue
-    ? Number(rankedContributors.reduce((sum, item) => sum + ((item.share / 100) ** 2), 0).toFixed(4))
+    ? Number(contributors.reduce((sum, item) => sum + ((item.revenue / categorizedRevenue) ** 2), 0).toFixed(4))
     : null;
   const uncategorizedShare = totalRevenue ? Number((uncategorizedRevenue / totalRevenue * 100).toFixed(2)) : 0;
   const completedQuarters = getCompletedQuarterRows(quarterlyRows, now);

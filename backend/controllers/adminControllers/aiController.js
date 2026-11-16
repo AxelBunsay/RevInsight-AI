@@ -8,11 +8,13 @@ const {
   isValidCardInsights
 } = require('../../services/aiService');
 const dashboardController = require('./dashboardController');
+const { newRevenueAIRequestId } = require('../../utils/revenueAIError');
 const {
   REVENUE_TIMEZONE,
   REVENUE_RISK_THRESHOLDS,
   calculateDashboardForecast,
-  buildRevenueChartData
+  buildRevenueChartData,
+  groupRevenueContributors
 } = require('../../utils/revenue');
 
 const CARD_INSIGHT_CACHE_TTL_MS = 15 * 60 * 1000;
@@ -85,7 +87,33 @@ async function getControllerResult(controller, req) {
   return result;
 }
 
+
+function selectedRevenueQuarter(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || !/^[1-9]\d{3}-Q[1-4]$/.test(value)) {
+    throw Object.assign(new Error('Choose a valid revenue quarter (YYYY-Q1 to YYYY-Q4).'), { statusCode: 400 });
+  }
+  return { key: value, year: Number(value.slice(0, 4)), quarter: Number(value.slice(-1)) };
+}
+
+function quarterRevenueContext(entries, period) {
+  if (!period) return null;
+  const rows = entries.filter(row => row.year === period.year && row.quarter === period.quarter);
+  const totalRevenue = rows.reduce((sum, row) => sum + row.revenue, 0);
+  const contributors = groupRevenueContributors(rows).filter(row => row.contributorType !== 'Uncategorized' && row.revenue > 0);
+  const analyzedRevenue = contributors.reduce((sum, row) => sum + row.revenue, 0);
+  const fraction = value => analyzedRevenue ? value / analyzedRevenue : 0;
+  return {
+    ...period, totalRevenue, analyzedRevenue,
+    contributors: contributors.map(row => ({ ...row, share: Number((fraction(row.revenue) * 100).toFixed(2)) })),
+    topOneShare: Number((fraction(contributors[0]?.revenue || 0) * 100).toFixed(2)),
+    topThreeShare: Number((fraction(contributors.slice(0, 3).reduce((sum, row) => sum + row.revenue, 0)) * 100).toFixed(2)),
+    hhi: analyzedRevenue ? Number(contributors.reduce((sum, row) => sum + fraction(row.revenue) ** 2, 0).toFixed(4)) : null
+  };
+}
+
 async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntries = false } = {}) {
+  const period = selectedRevenueQuarter(req.body?.selectedQuarter);
   const mockReq = { ...req, query: {} };
   const [statsRes, quarterlyRes, riskRes, concentrationRes, monthlyRes, chartEntriesRes] = await Promise.all([
     getControllerResult(dashboard.getDashboardStats, mockReq),
@@ -93,7 +121,7 @@ async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntr
     getControllerResult(dashboard.getRevenueRisk, mockReq),
     getControllerResult(dashboard.getRevenueConcentration, mockReq),
     getControllerResult(dashboard.getRevenueData, mockReq),
-    includeChartEntries && dashboard.getRevenueChartEntries
+    (includeChartEntries || period) && dashboard.getRevenueChartEntries
       ? getControllerResult(dashboard.getRevenueChartEntries, mockReq)
       : Promise.resolve({ data: [] })
   ]);
@@ -103,6 +131,8 @@ async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntr
     // Keep volatile timestamps and unrelated account/inventory counts out of the
     // AI payload so identical revenue data has a stable 15-minute cache key.
     stats: { totalRevenue, totalTransactions, collected, outstanding },
+    analysisScopes: { concentration: 'all_recorded_revenue', overallRisk: 'all_recorded_revenue_and_latest_completed_trend', selectedQuarter: period?.key || null },
+    selectedQuarter: quarterRevenueContext(chartEntriesRes.data, period),
     quarterly: quarterlyRes.data,
     ...(includeChartEntries ? { chartEntries: chartEntriesRes.data } : {}),
     revenueRisk: riskRes.data,
@@ -132,10 +162,11 @@ async function askRevenueAI(req, res, dependencies = {}) {
     return res.status(400).json({ success: false, message: 'Question must be 500 characters or fewer.' });
   }
 
+  const requestId = newRevenueAIRequestId();
   try {
     const revenueData = await gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntries: true });
     const { chartEntries, ...aiRevenueData } = revenueData;
-    const generated = await revenueInsights(question, aiRevenueData);
+    const generated = await revenueInsights(question, aiRevenueData, { requestId });
     const answer = formatRevenueAnswer(generated);
     if (!answer.trim()) throw new Error('Revenue AI returned an empty answer.');
     let chart = null;
@@ -166,8 +197,10 @@ async function askRevenueAI(req, res, dependencies = {}) {
       timestamp: now.toISOString()
     });
   } catch (error) {
-    console.error('[askRevenueAI] error', error);
-    res.status(500).json({ success: false, message: 'Failed to generate AI insights' });
+    if (error.statusCode === 400) return res.status(400).json({ success: false, message: error.message });
+    if (error.revenueAI) return res.status(error.statusCode).json({ success: false, message: error.message, code: error.code, requestId });
+    console.error('[askRevenueAI] request failed', { requestId, code: 'INTERNAL_ERROR' });
+    res.status(500).json({ success: false, message: 'Failed to generate AI insights', requestId });
   }
 }
 
@@ -178,6 +211,10 @@ async function getRevenueCardInsights(req, res, dependencies = {}) {
   const cache = dependencies.cache || cardInsightCache;
   const refreshes = dependencies.refreshes || cardInsightRefreshes;
   const requests = dependencies.requests || cardInsightRequests;
+  try { selectedRevenueQuarter(req.body?.selectedQuarter); } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+  const requestId = newRevenueAIRequestId();
   const refresh = req.query?.refresh === 'true' || req.query?.refresh === '1';
   const adminId = String(req.admin?.id || req.ip || 'admin');
 
@@ -207,7 +244,7 @@ async function getRevenueCardInsights(req, res, dependencies = {}) {
 
     let generation = !refresh ? requests.get(cacheKey) : null;
     if (!generation) {
-      generation = Promise.resolve(insightGenerator(analysisData)).then((generated) => {
+      generation = Promise.resolve(insightGenerator(analysisData, { requestId })).then((generated) => {
         if (!isValidCardInsights(generated?.insights)) {
           throw new Error('Card insight generator returned an invalid response schema.');
         }
@@ -218,7 +255,9 @@ async function getRevenueCardInsights(req, res, dependencies = {}) {
         return {
           insights,
           source: generated.source === 'ai' ? 'ai' : 'template',
-          generatedAt: now.toISOString()
+          generatedAt: now.toISOString(),
+          ...(generated.availability ? { availability: generated.availability } : {}),
+          requestId
         };
       });
       requests.set(cacheKey, generation);
@@ -226,7 +265,7 @@ async function getRevenueCardInsights(req, res, dependencies = {}) {
 
     try {
       const result = await generation;
-      cache.set(cacheKey, { result, expiresAt: now.getTime() + CARD_INSIGHT_CACHE_TTL_MS });
+      if (result.source === 'ai') cache.set(cacheKey, { result, expiresAt: now.getTime() + CARD_INSIGHT_CACHE_TTL_MS });
       return res.json(result);
     } finally {
       if (requests.get(cacheKey) === generation) requests.delete(cacheKey);
@@ -251,5 +290,7 @@ module.exports = {
   getRecentMonthlyRevenue,
   getRevenueCardInsights,
   gatherRevenueAnalysisData,
+  selectedRevenueQuarter,
+  quarterRevenueContext,
   hashAnalysisData
 };

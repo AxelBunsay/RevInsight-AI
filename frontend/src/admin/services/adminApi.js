@@ -217,13 +217,13 @@ export const adminApi = {
   getQuarterlySales: () => request('/api/dashboard/dashboard/quarterly'),
   getRevenueConcentration: () => request('/api/dashboard/analytics/revenue-concentration'),
   getRevenueRisk: () => request('/api/dashboard/analytics/revenue-risk'),
-  askRevenueAI: (question) => request('/api/admin/revenue/ask-ai', {
+  askRevenueAI: (question, selectedQuarter) => request('/api/admin/revenue/ask-ai', {
     method: 'POST',
-    body: JSON.stringify({ question })
+    body: JSON.stringify({ question, ...(selectedQuarter ? { selectedQuarter } : {}) })
   }),
-  getRevenueCardInsights: (refresh = false) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
+  getRevenueCardInsights: (refresh = false, selectedQuarter) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
     method: 'POST',
-    body: JSON.stringify({})
+    body: JSON.stringify(selectedQuarter ? { selectedQuarter } : {})
   }).then(mapRevenueCardInsights),
   getRevenueAnalysisData: async () => {
     const [quarterly, risk, concentration] = await Promise.all([

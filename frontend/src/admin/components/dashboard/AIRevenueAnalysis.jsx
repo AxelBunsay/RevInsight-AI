@@ -365,7 +365,7 @@ function currentQuarterProgress(today = new Date()) {
   };
 }
 
-function AskRevenueAIPanel({ onActivityChange }) {
+function AskRevenueAIPanel({ onActivityChange, selectedQuarter }) {
   const suggestions = [
     'Why did revenue change last quarter?',
     'What are the biggest revenue risks?',
@@ -380,18 +380,24 @@ function AskRevenueAIPanel({ onActivityChange }) {
   const [copyMessage, setCopyMessage] = useState('');
   const inFlightRef = useRef(false);
   const lastQuestionRef = useRef('');
+  const activeRef = useRef(true);
+  useEffect(() => {
+    activeRef.current = true;
+    return () => { activeRef.current = false; onActivityChange?.(false); };
+  }, [onActivityChange]);
   const questionFocusedRef = useRef(false);
-  const updateActivity = () => onActivityChange?.(questionFocusedRef.current || inFlightRef.current);
+  const updateActivity = () => { if (activeRef.current) onActivityChange?.(questionFocusedRef.current || inFlightRef.current); };
 
   const submitQuestion = async (value = question) => {
     const trimmedQuestion = value.trim();
     if (!trimmedQuestion || inFlightRef.current) return;
     lastQuestionRef.current = trimmedQuestion;
     setCopyMessage('');
+    const requestedQuarter = selectedQuarter;
     const request = askRevenueQuestion({
       question: trimmedQuestion,
       inFlightRef,
-      request: adminApi.askRevenueAI,
+      request: question => adminApi.askRevenueAI(question, requestedQuarter),
       setIsLoading,
       setAnswer,
       setChart: setAnswerChart,
@@ -420,7 +426,7 @@ function AskRevenueAIPanel({ onActivityChange }) {
   return <section className="ai-revenue-modal ai-revenue-ai-panel" aria-labelledby="ai-revenue-ai-title">
     <p className="ai-revenue-modal__eyebrow">Revenue analysis</p>
     <h2 id="ai-revenue-ai-title">Ask AI</h2>
-    <p className="ai-revenue-modal__detail">Ask a question about your revenue data.</p>
+    <p className="ai-revenue-modal__detail">Ask about {selectedQuarter?.replace('-', ' ')} or all recorded revenue. Concentration cards cover all recorded revenue.</p>
     <div className="ai-revenue-ai-suggestions" aria-label="Suggested questions">
       {suggestions.map((suggestion) => <button
         type="button"
@@ -508,6 +514,7 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [cardInsightGeneratedAt, setCardInsightGeneratedAt] = useState('');
   const [cardInsightsLoading, setCardInsightsLoading] = useState(true);
   const [cardInsightsError, setCardInsightsError] = useState('');
+  const [cardInsightsNotice, setCardInsightsNotice] = useState('');
   const [cardInsightRequestInFlight, setCardInsightRequestInFlight] = useState(false);
   const [refreshRemainingSeconds, setRefreshRemainingSeconds] = useState(0);
   const [selectedQuarterKey, setSelectedQuarterKey] = useState(null);
@@ -520,7 +527,10 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportCardPage, setReportCardPage] = useState(1);
   const cardInsightRequestInFlightRef = useRef(false);
+  const cardInsightRequestScopeRef = useRef(null);
+  const cardInsightRequestIdRef = useRef(0);
   const askAIActiveRef = useRef(false);
+  const onAskActivityChange = useCallback(isActive => { askAIActiveRef.current = isActive; }, []);
   const latestFiguresFingerprintRef = useRef('');
   const lastAIRequestFingerprintRef = useRef('');
   const lastAIRequestAtRef = useRef(0);
@@ -539,7 +549,10 @@ function AIRevenueAnalysis({ dashboardData }) {
   useAdminModalEffects(Boolean(modalId), () => setModalId(null));
 
   const requestCardInsights = useCallback(async ({ fingerprint, forceRefresh = false, showLoading = false } = {}) => {
-    if (cardInsightRequestInFlightRef.current) return false;
+    const scope = selectedQuarterKey || currentQuarterProgress().key;
+    if (cardInsightRequestInFlightRef.current && cardInsightRequestScopeRef.current === scope) return false;
+    const requestId = ++cardInsightRequestIdRef.current;
+    cardInsightRequestScopeRef.current = scope;
     cardInsightRequestInFlightRef.current = true;
     setCardInsightRequestInFlight(true);
     lastAIRequestAtRef.current = Date.now();
@@ -549,14 +562,18 @@ function AIRevenueAnalysis({ dashboardData }) {
       setCardInsightsError('');
     }
     try {
-      const result = await adminApi.getRevenueCardInsights(forceRefresh);
+      const result = await adminApi.getRevenueCardInsights(forceRefresh, scope);
+      if (requestId !== cardInsightRequestIdRef.current) return false;
       setCardInsights(result.insights || {});
       setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
       setCardInsightGeneratedAt(result.generatedAt || '');
+      setCardInsightsNotice(result.source === 'ai' ? '' : result.availability?.message || 'AI is unavailable; showing data-based summaries.');
       setCardInsightsError('');
       if (forceRefresh) setRefreshRemainingSeconds(30);
       return true;
     } catch (error) {
+      if (requestId !== cardInsightRequestIdRef.current) return false;
+      setCardInsightsNotice('');
       setCardInsights({});
       setCardInsightSource('template');
       setCardInsightGeneratedAt('');
@@ -564,11 +581,13 @@ function AIRevenueAnalysis({ dashboardData }) {
       if (forceRefresh) setRefreshRemainingSeconds(Number(error.details?.retryAfterSeconds || 0));
       return false;
     } finally {
-      cardInsightRequestInFlightRef.current = false;
-      setCardInsightRequestInFlight(false);
-      if (showLoading) setCardInsightsLoading(false);
+      if (requestId === cardInsightRequestIdRef.current) {
+        cardInsightRequestInFlightRef.current = false;
+        setCardInsightRequestInFlight(false);
+        if (showLoading) setCardInsightsLoading(false);
+      }
     }
-  }, []);
+  }, [selectedQuarterKey]);
 
   useEffect(() => {
     if (!refreshRemainingSeconds) return undefined;
@@ -760,10 +779,10 @@ function AIRevenueAnalysis({ dashboardData }) {
     ? [0, 1, 2].map((offset) => new Date(reportYear, (reportQuarterNumber - 1) * 3 + offset, 1).toLocaleString('en-PH', { month: 'short' }))
     : [];
   const selectedAnalysis = modalId === 'risk'
-    ? { title: 'Revenue risk by category', items: categoryItems }
+    ? { title: 'Revenue risk by category · all recorded revenue', items: categoryItems }
     : modalId === 'concentration'
-      ? { title: 'Revenue concentration', items: contributorItems }
-      : { title: 'Service type concentration', items: serviceItems };
+      ? { title: 'Revenue concentration · all recorded revenue', items: contributorItems }
+      : { title: 'Service type concentration · all recorded revenue', items: serviceItems };
   const indicators = analysis.risk?.indicators || {};
   const overallRisk = analysis.risk?.overallRisk || {
     level: 'Not enough data',
@@ -793,7 +812,7 @@ function AIRevenueAnalysis({ dashboardData }) {
   const cardDetails = [
     {
       id: 'risk',
-      title: 'Revenue risk by category',
+      title: 'Revenue risk by category · all recorded revenue',
       icon: '✣',
       items: categoryItems,
       riskLevel: overallRisk.level,
@@ -804,18 +823,18 @@ function AIRevenueAnalysis({ dashboardData }) {
     },
     {
       id: 'concentration',
-      title: 'Revenue concentration',
+      title: 'Revenue concentration · all recorded revenue',
       icon: '●',
       items: contributorItems,
       riskLevel: indicators.concentrationHhi?.level || 'Not enough data',
       why: getRiskWhy('concentrationHhi'),
       description: analysis.concentration?.indicators
-        ? `HHI ${Number(analysis.concentration.indicators.hhi || 0).toFixed(3)} · ${Number(analysis.concentration.indicators.topOneShare || 0).toFixed(1)}% top contributor`
+        ? `HHI ${Number(analysis.concentration.indicators.hhi || 0).toFixed(3)} · ${Number(analysis.concentration.indicators.topOneShare || 0).toFixed(1)}% top contributor · ${Number(analysis.concentration.indicators.topThreeShare || 0).toFixed(2)}% top three`
         : 'No contributor data is available'
     },
     ...(serviceItems.length ? [{
       id: 'service',
-      title: 'Service type concentration',
+      title: 'Service type concentration · all recorded revenue',
       icon: '⌁',
       items: serviceItems,
       riskLevel: topContributorIndicator?.level || 'Not enough data',
@@ -862,7 +881,7 @@ function AIRevenueAnalysis({ dashboardData }) {
   return <>
   <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
     <div className="ai-revenue-analysis__header">
-      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue, risk, and concentration from business data</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
+      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue totals; concentration covers all recorded revenue</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
       <div className="ai-revenue-toolbar">
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>ⓘ Risk thresholds</button>
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportMonth(null); setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
@@ -870,7 +889,7 @@ function AIRevenueAnalysis({ dashboardData }) {
     </div>
     <div className="ai-revenue-overall-risk">
       <div className="ai-revenue-overall-risk__title">
-        <strong>Overall risk</strong>
+        <strong>Overall risk — all recorded revenue</strong>
         <button
           type="button"
           className="ai-revenue-overall-risk__info"
@@ -893,8 +912,6 @@ function AIRevenueAnalysis({ dashboardData }) {
               {quarters.map((row, index) => {
                 const key = `${row.year}-Q${row.quarter}`;
                 return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => {
-                  setCardInsightsLoading(true);
-                  setCardInsightsError('');
                   setSelectedQuarterKey(key);
                 }}>{quarterLabel(row.year, row.quarter)}</button>;
               })}
@@ -931,6 +948,7 @@ function AIRevenueAnalysis({ dashboardData }) {
             <div className="ai-revenue-insights-toolbar">
               <span role="status">
                 {cardInsightSource === 'ai' ? 'AI-generated from your data' : 'Auto-generated summary'}
+                {cardInsightsNotice && (' · ' + cardInsightsNotice)}
                 {cardInsightsError ? ' · AI unavailable; showing data-based summaries.' : ''}
                 {cardInsightGeneratedAt && ` · Updated ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(cardInsightGeneratedAt))}`}
               </span>
@@ -1073,7 +1091,7 @@ function AIRevenueAnalysis({ dashboardData }) {
       </section>
     </div></AdminModalPortal>}
   </section>
-  <AskRevenueAIPanel onActivityChange={(isActive) => { askAIActiveRef.current = isActive; }} />
+  <AskRevenueAIPanel key={current ? current.year + '-Q' + current.quarter : 'all'} selectedQuarter={current ? current.year + '-Q' + current.quarter : null} onActivityChange={onAskActivityChange} />
   </>;
 }
 

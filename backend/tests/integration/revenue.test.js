@@ -93,6 +93,20 @@ describe('revenue integration', () => {
     return { order, reservation, service };
   }
 
+  it('rounds top-three share once from revenue totals rather than summing rounded contributor shares', async () => {
+    const amounts = [30000, 20500, 13000, 6500];
+    await Order.create({
+      customerName: 'Synthetic revenue fixture', customerPhone: '09000000000',
+      items: amounts.map((amount, i) => ({ productId: fixtures.product._id, productName: 'Concentration part ' + i, category: 'Brakes', price: amount, quantity: 1 })),
+      totalPrice: 70000, status: 'completed', createdAt: new Date('2026-07-15T12:00:00+08:00')
+    });
+    const result = await api.get('/api/dashboard/analytics/revenue-concentration').set('Authorization', 'Bearer ' + adminToken);
+    expect(result.status).toBe(200);
+    expect(result.body.data.totalRevenue).toBe(70000);
+    expect(result.body.data.indicators).toMatchObject({ topOneShare: 42.86, topThreeShare: 90.71, hhi: 0.3126 });
+  });
+
+
   it('keeps dashboard, quarterly, sales report, and concentration totals consistent', async () => {
     await createSalesFixtures();
 

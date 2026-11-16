@@ -69,7 +69,9 @@ const getRevenueConcentration = async (req, res) => {
     ]);
     const data = calculateRevenueRisk(entries, quarters);
     const topOneShare = data.indicators.topContributorShare.value || 0;
-    const topThreeShare = data.contributors.slice(0, 3).reduce((sum, item) => sum + item.share, 0);
+    const analyzedRevenue = data.totalRevenue - data.uncategorized.revenue;
+    const topThreeShare = analyzedRevenue
+      ? Number((data.contributors.slice(0, 3).reduce((sum, item) => sum + item.revenue, 0) / analyzedRevenue * 100).toFixed(2)) : 0;
     const hhi = data.indicators.concentrationHhi.value || 0;
     const concentrationLevel = data.completedQuarterCount < REVENUE_RISK_THRESHOLDS.minimumCompletedQuarters
       ? 'Not enough data'
