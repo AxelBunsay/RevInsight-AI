@@ -1,3 +1,4 @@
+const { buildScopedRevenue } = require('../../utils/revenueScope');
 const Order = require('../../models/orderingModels/order');
 const mongoose = require('mongoose');
 const Product = require('../../models/product');
@@ -58,6 +59,15 @@ const getRevenueChartEntries = async (_req, res) => {
   } catch (error) {
     console.error('[getRevenueChartEntries] error', error);
     return res.status(500).json({ success: false, message: 'Failed to load revenue chart data.' });
+  }
+};
+
+const getScopedRevenue = async (req, res) => {
+  try {
+    const data = buildScopedRevenue(await loadRevenueEntries(), req.query);
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.statusCode === 400 ? error.message : 'Failed to load scoped revenue.' });
   }
 };
 
@@ -1050,6 +1060,7 @@ module.exports = {
   getDailyData,
   getRevenueRisk,
   getRevenueConcentration,
+  getScopedRevenue,
   getProjectedRevenue,
   getBusinessRecords,
   getAllTransactions,

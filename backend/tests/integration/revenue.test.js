@@ -345,4 +345,28 @@ describe('revenue integration', () => {
     expect(response.body.data.categories).toHaveLength(5);
     expect(response.body.data.categories.every((category) => category.revenue === 0 && category.jobs === 0)).toBe(true);
   });
+  it('uses the same completed records for scoped concentration and export, including Manila boundaries', async () => {
+    for (const [quarter, amounts] of [[2,[4000,3000,2000,1000]],[3,[6000,2500,1000,500]]]) {
+      await Order.create({customerName:'Synthetic scope fixture',customerPhone:'09000000000',
+        status:'completed',totalPrice:10000,createdAt:new Date(quarter===2?'2026-06-30T23:59:59+08:00':'2026-07-01T00:00:00+08:00'),
+        items:amounts.map((price,i)=>({productName:['Pads','Battery','Cable','Labor'][i],category:'Parts',price,quantity:1}))});
+    }
+    await Order.create({customerName:'Synthetic pending',customerPhone:'09000000000',status:'pending',totalPrice:90000,
+      createdAt:new Date('2026-07-10T12:00:00+08:00'),items:[]});
+    for(const [scope,selectedQuarter,topOneShare,topThreeShare,hhi,total]of[
+      ['selectedQuarter','2026-Q2',40,90,.3,10000],['selectedQuarter','2026-Q3',60,95,.435,10000],['allRecords','2026-Q3',50,92.5,.3538,20000]
+    ]){
+      const response=await api.get('/api/dashboard/analytics/scoped-revenue').query({scope,selectedQuarter}).set('Authorization','Bearer '+adminToken);
+      expect(response.status).toBe(200);
+      const data=response.body.data;
+      expect(data.concentration.totalRevenue).toBe(total);
+      expect(data.concentration.indicators).toMatchObject({topOneShare,topThreeShare,hhi,concentrationLevel:'High'});
+      expect(data.reportRecords.reduce((sum,row)=>sum+row.amount,0)).toBe(total);
+      expect(JSON.stringify(data)).not.toContain('Synthetic scope fixture');
+      expect(JSON.stringify(data)).not.toContain('09000000000');
+    }
+    expect((await api.get('/api/dashboard/analytics/scoped-revenue')).status).toBe(401);
+    expect((await api.get('/api/dashboard/analytics/scoped-revenue?scope=selectedQuarter').set('Authorization','Bearer '+adminToken)).status).toBe(400);
+  });
+
 });

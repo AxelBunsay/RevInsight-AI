@@ -27,3 +27,12 @@ describe('revenue AI selected-quarter requests', () => {
     expect(mapRevenueCardInsights({ source: 'template', availability, insights: {} })).toMatchObject({ source: 'template', availability });
   });
 });
+  it('carries the explicit scope to figures, Ask AI and cards', async () => {
+    request.mockResolvedValue({ data: { quarters: [], risk: {}, concentration: {} }, insights: {} });
+    await adminApi.getRevenueAnalysisData('2026-Q2', 'selectedQuarter');
+    expect(request.mock.calls[0][0]).toBe('/api/dashboard/analytics/scoped-revenue?scope=selectedQuarter&selectedQuarter=2026-Q2');
+    await adminApi.askRevenueAI('Explain the mix.', '2026-Q3', 'allRecords');
+    expect(JSON.parse(request.mock.calls[1][1].body).scope).toBe('allRecords');
+    await adminApi.getRevenueCardInsights(false, '2026-Q3', 'selectedQuarter');
+    expect(JSON.parse(request.mock.calls[2][1].body)).toEqual({selectedQuarter:'2026-Q3',scope:'selectedQuarter'});
+  });

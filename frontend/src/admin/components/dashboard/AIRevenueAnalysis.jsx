@@ -322,16 +322,6 @@ function HorizontalBars({ items }) {
   ))}</div>;
 }
 
-function getQuarterDateRange(year, quarter, monthOffset = null) {
-  const startMonth = (quarter - 1) * 3;
-  const start = new Date(year, startMonth + (monthOffset ?? 0), 1);
-  const end = monthOffset === null
-    ? new Date(year, startMonth + 3, 0)
-    : new Date(year, startMonth + monthOffset + 1, 0);
-  const dateOnly = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  return { startDate: dateOnly(start), endDate: dateOnly(end) };
-}
-
 function formatRecordDate(record) {
   const date = new Date(record.completedAt || record.createdAt);
   return Number.isNaN(date.getTime())
@@ -365,7 +355,7 @@ function currentQuarterProgress(today = new Date()) {
   };
 }
 
-function AskRevenueAIPanel({ onActivityChange, selectedQuarter }) {
+function AskRevenueAIPanel({ onActivityChange, selectedQuarter, revenueScope }) {
   const suggestions = [
     'Why did revenue change last quarter?',
     'What are the biggest revenue risks?',
@@ -397,7 +387,7 @@ function AskRevenueAIPanel({ onActivityChange, selectedQuarter }) {
     const request = askRevenueQuestion({
       question: trimmedQuestion,
       inFlightRef,
-      request: question => adminApi.askRevenueAI(question, requestedQuarter),
+      request: question => adminApi.askRevenueAI(question, requestedQuarter, revenueScope),
       setIsLoading,
       setAnswer,
       setChart: setAnswerChart,
@@ -426,7 +416,7 @@ function AskRevenueAIPanel({ onActivityChange, selectedQuarter }) {
   return <section className="ai-revenue-modal ai-revenue-ai-panel" aria-labelledby="ai-revenue-ai-title">
     <p className="ai-revenue-modal__eyebrow">Revenue analysis</p>
     <h2 id="ai-revenue-ai-title">Ask AI</h2>
-    <p className="ai-revenue-modal__detail">Ask about {selectedQuarter?.replace('-', ' ')} or all recorded revenue. Concentration cards cover all recorded revenue.</p>
+    <p className="ai-revenue-modal__detail">Concentration scope: {revenueScope === 'selectedQuarter' ? selectedQuarter?.replace('-', ' ') : 'All records'}. Trend and forecast use all-records history.</p>
     <div className="ai-revenue-ai-suggestions" aria-label="Suggested questions">
       {suggestions.map((suggestion) => <button
         type="button"
@@ -517,11 +507,26 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [cardInsightsNotice, setCardInsightsNotice] = useState('');
   const [cardInsightRequestInFlight, setCardInsightRequestInFlight] = useState(false);
   const [refreshRemainingSeconds, setRefreshRemainingSeconds] = useState(0);
-  const [selectedQuarterKey, setSelectedQuarterKey] = useState(null);
+  const [selectedQuarterKey, setSelectedQuarterKey] = useState(currentQuarterProgress().key);
+  const [revenueScope, setRevenueScope] = useState('selectedQuarter');
+  const scopeLabel = revenueScope === 'allRecords' ? 'All records' : 'Selected quarter · ' + selectedQuarterKey.replace('-', ' ');
+  const changeRevenueScope = (quarter, mode = revenueScope) => {
+    if (quarter === selectedQuarterKey && mode === revenueScope) return;
+    ++cardInsightRequestIdRef.current;
+    setCardInsights({});
+    setCardInsightsNotice('');
+    setCardInsightGeneratedAt('');
+    setCardInsightsError('');
+    setAnalysis(previous => ({ ...previous, risk: null, concentration: null }));
+    setIsLoading(true);
+    setModalId(null);
+    setSelectedQuarterKey(quarter);
+    setRevenueScope(mode);
+  };
   const [modalId, setModalId] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportMonth, setReportMonth] = useState(null);
+
   const [reportRows, setReportRows] = useState([]);
   const [reportError, setReportError] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
@@ -549,7 +554,8 @@ function AIRevenueAnalysis({ dashboardData }) {
   useAdminModalEffects(Boolean(modalId), () => setModalId(null));
 
   const requestCardInsights = useCallback(async ({ fingerprint, forceRefresh = false, showLoading = false } = {}) => {
-    const scope = selectedQuarterKey || currentQuarterProgress().key;
+    const quarter = selectedQuarterKey || currentQuarterProgress().key;
+    const scope = revenueScope + ':' + quarter;
     if (cardInsightRequestInFlightRef.current && cardInsightRequestScopeRef.current === scope) return false;
     const requestId = ++cardInsightRequestIdRef.current;
     cardInsightRequestScopeRef.current = scope;
@@ -562,7 +568,7 @@ function AIRevenueAnalysis({ dashboardData }) {
       setCardInsightsError('');
     }
     try {
-      const result = await adminApi.getRevenueCardInsights(forceRefresh, scope);
+      const result = await adminApi.getRevenueCardInsights(forceRefresh, quarter, revenueScope);
       if (requestId !== cardInsightRequestIdRef.current) return false;
       setCardInsights(result.insights || {});
       setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
@@ -587,7 +593,7 @@ function AIRevenueAnalysis({ dashboardData }) {
         if (showLoading) setCardInsightsLoading(false);
       }
     }
-  }, [selectedQuarterKey]);
+  }, [selectedQuarterKey, revenueScope]);
 
   useEffect(() => {
     if (!refreshRemainingSeconds) return undefined;
@@ -612,7 +618,7 @@ function AIRevenueAnalysis({ dashboardData }) {
 
       try {
         const [result, statsResponse] = await Promise.all([
-          adminApi.getRevenueAnalysisData(),
+          adminApi.getRevenueAnalysisData(selectedQuarterKey, revenueScope),
           adminApi.getDashboardStats()
         ]);
         if (!active) return;
@@ -701,7 +707,7 @@ function AIRevenueAnalysis({ dashboardData }) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onWindowFocus);
     };
-  }, [requestCardInsights]);
+  }, [requestCardInsights, revenueScope, selectedQuarterKey]);
 
   const todayQuarter = currentQuarterProgress();
   const quarters = useMemo(
@@ -749,15 +755,8 @@ function AIRevenueAnalysis({ dashboardData }) {
       setReportError('');
       setReportRows([]);
       try {
-        const range = getQuarterDateRange(reportYear, reportQuarterNumber, reportMonth);
-        const firstPage = await adminApi.getBusinessRecords({ ...range, page: 1, limit: 100 });
-        const records = Array.isArray(firstPage.data) ? [...firstPage.data] : [];
-        const totalPages = Math.max(1, Number(firstPage.pagination?.totalPages || 1));
-        for (let page = 2; page <= totalPages; page += 1) {
-          const response = await adminApi.getBusinessRecords({ ...range, page, limit: 100 });
-          records.push(...(Array.isArray(response.data) ? response.data : []));
-        }
-        if (active) setReportRows(records.map(mapBusinessRecord));
+        const response = await adminApi.getScopedRevenue(selectedQuarterKey, revenueScope);
+        if (active) setReportRows((response.data?.reportRecords || []).map(mapBusinessRecord));
       } catch (error) {
         if (active) setReportError(error.message || 'Business records could not be loaded.');
       } finally {
@@ -766,7 +765,7 @@ function AIRevenueAnalysis({ dashboardData }) {
     };
     loadRecords();
     return () => { active = false; };
-  }, [reportMonth, reportOpen, reportQuarterNumber, reportYear]);
+  }, [reportOpen, reportQuarterNumber, reportYear, selectedQuarterKey, revenueScope]);
 
   const reportTotal = reportRows.reduce((sum, row) => sum + row.amount, 0);
   const reportCardPageSize = 20;
@@ -775,14 +774,11 @@ function AIRevenueAnalysis({ dashboardData }) {
   const reportPaid = reportRows.filter((row) => ['paid', 'completed'].includes(row.status.toLowerCase()))
     .reduce((sum, row) => sum + row.amount, 0);
   const reportOutstanding = reportTotal - reportPaid;
-  const monthNames = reportYear && reportQuarterNumber
-    ? [0, 1, 2].map((offset) => new Date(reportYear, (reportQuarterNumber - 1) * 3 + offset, 1).toLocaleString('en-PH', { month: 'short' }))
-    : [];
   const selectedAnalysis = modalId === 'risk'
-    ? { title: 'Revenue risk by category · all recorded revenue', items: categoryItems }
+    ? { title: 'Revenue risk by category · ' + scopeLabel, items: categoryItems }
     : modalId === 'concentration'
-      ? { title: 'Revenue concentration · all recorded revenue', items: contributorItems }
-      : { title: 'Service type concentration · all recorded revenue', items: serviceItems };
+      ? { title: 'Revenue concentration · ' + scopeLabel, items: contributorItems }
+      : { title: 'Service type concentration · ' + scopeLabel, items: serviceItems };
   const indicators = analysis.risk?.indicators || {};
   const overallRisk = analysis.risk?.overallRisk || {
     level: 'Not enough data',
@@ -812,7 +808,7 @@ function AIRevenueAnalysis({ dashboardData }) {
   const cardDetails = [
     {
       id: 'risk',
-      title: 'Revenue risk by category · all recorded revenue',
+      title: 'Revenue risk by category · ' + scopeLabel,
       icon: '✣',
       items: categoryItems,
       riskLevel: overallRisk.level,
@@ -823,7 +819,7 @@ function AIRevenueAnalysis({ dashboardData }) {
     },
     {
       id: 'concentration',
-      title: 'Revenue concentration · all recorded revenue',
+      title: 'Revenue concentration · ' + scopeLabel,
       icon: '●',
       items: contributorItems,
       riskLevel: indicators.concentrationHhi?.level || 'Not enough data',
@@ -834,7 +830,7 @@ function AIRevenueAnalysis({ dashboardData }) {
     },
     ...(serviceItems.length ? [{
       id: 'service',
-      title: 'Service type concentration · all recorded revenue',
+      title: 'Service type concentration · ' + scopeLabel,
       icon: '⌁',
       items: serviceItems,
       riskLevel: topContributorIndicator?.level || 'Not enough data',
@@ -881,15 +877,19 @@ function AIRevenueAnalysis({ dashboardData }) {
   return <>
   <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
     <div className="ai-revenue-analysis__header">
-      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue totals; concentration covers all recorded revenue</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
+      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Concentration: {scopeLabel}; trend and forecast: all-records history</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
       <div className="ai-revenue-toolbar">
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>ⓘ Risk thresholds</button>
-        <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportMonth(null); setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
+        <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
       </div>
+    </div>
+    <div role="group" aria-label="Revenue concentration scope">
+      <button type="button" aria-pressed={revenueScope === 'selectedQuarter'} onClick={() => changeRevenueScope(selectedQuarterKey, 'selectedQuarter')}>Selected quarter</button>
+      <button type="button" aria-pressed={revenueScope === 'allRecords'} onClick={() => changeRevenueScope(selectedQuarterKey, 'allRecords')}>All records</button>
     </div>
     <div className="ai-revenue-overall-risk">
       <div className="ai-revenue-overall-risk__title">
-        <strong>Overall risk — all recorded revenue</strong>
+        <strong>Concentration risk — {scopeLabel}</strong>
         <button
           type="button"
           className="ai-revenue-overall-risk__info"
@@ -912,7 +912,7 @@ function AIRevenueAnalysis({ dashboardData }) {
               {quarters.map((row, index) => {
                 const key = `${row.year}-Q${row.quarter}`;
                 return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => {
-                  setSelectedQuarterKey(key);
+                  changeRevenueScope(key);
                 }}>{quarterLabel(row.year, row.quarter)}</button>;
               })}
             </div>
@@ -941,8 +941,8 @@ function AIRevenueAnalysis({ dashboardData }) {
               </div>
             </div>
             <div className="ai-revenue-collected-row">
-              <div><span>Collected</span><strong>{peso.format(collectedAmount)}</strong></div>
-              <div><span>Outstanding</span><strong>{peso.format(outstandingAmount)}</strong></div>
+              <div><span>Collected · all records</span><strong>{peso.format(collectedAmount)}</strong></div>
+              <div><span>Outstanding · all records</span><strong>{peso.format(outstandingAmount)}</strong></div>
               <div><span>Collection</span><strong>{collectedAmount + outstandingAmount ? Math.round(collectedAmount / (collectedAmount + outstandingAmount) * 100) : 0}%</strong></div>
             </div>
             <div className="ai-revenue-insights-toolbar">
@@ -959,7 +959,7 @@ function AIRevenueAnalysis({ dashboardData }) {
               {refreshRemainingSeconds > 0 && <p role="status">Please wait before refreshing revenue insights again.</p>}
               <div className="ai-revenue-cards">
               <div className="ai-revenue-card" role="button" tabIndex={0} onClick={() => openAnalysis('trend')} onKeyDown={(event) => handleCardKeyDown(event, 'trend')}>
-                <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">↗</span><strong className="ai-revenue-card__title">Revenue trend &amp; growth</strong></span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
+                <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">↗</span><strong className="ai-revenue-card__title">Revenue trend &amp; growth · all-records history</strong></span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
                 <b>{peso.format(current.revenue)}</b>
                 <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
                 <a className="ai-revenue-card__view" href="#trend-analysis" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAnalysis('trend'); }}>View analysis <span aria-hidden="true">›</span></a>
@@ -1007,18 +1007,15 @@ function AIRevenueAnalysis({ dashboardData }) {
     {reportOpen && reportYear && reportQuarterNumber && <AdminModalPortal><div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReportOpen(false); }}>
       <section className="ai-revenue-modal ai-revenue-report" role="dialog" aria-modal="true" aria-labelledby="ai-report-title">
         <header className="ai-revenue-modal__header">
-          <div><p className="ai-revenue-modal__eyebrow">Export</p><h2 id="ai-report-title">Sales / Transactions — {quarterName(reportYear, reportQuarterNumber)}</h2></div>
+          <div><p className="ai-revenue-modal__eyebrow">Export</p><h2 id="ai-report-title">Recorded revenue — {scopeLabel}</h2></div>
           <button type="button" className="ai-revenue-modal__close" aria-label="Close report" onClick={() => setReportOpen(false)}>×</button>
         </header>
         <div className="ai-revenue-modal__body">
         <div className="ai-revenue-report__summary">
-          <strong>{reportMonth === null ? quarterName(reportYear, reportQuarterNumber) : `${monthNames[reportMonth]} ${reportYear}`} Business Records</strong>
+          <strong>{scopeLabel} · same records as concentration</strong>
+          <span>Leading contributor: {contributorItems[0]?.name || 'None'} · Top one {analysis.concentration?.indicators?.topOneShare ?? '—'}% · Top three {analysis.concentration?.indicators?.topThreeShare ?? '—'}% · HHI {analysis.concentration?.indicators?.hhi ?? '—'} · {analysis.concentration?.indicators?.concentrationLevel || 'Not enough data'}</span>
           <span>Generated {new Date().toLocaleDateString('en-PH', { day: 'numeric', month: 'long', year: 'numeric' })} · Total: {peso.format(reportTotal)} ({peso.format(reportPaid)} paid, {peso.format(reportOutstanding)} outstanding)</span>
           {reportError && <span className="ai-revenue-report__error" role="alert">{reportError}</span>}
-        </div>
-        <div className="ai-revenue-report__month-tabs" role="group" aria-label="Filter report by month">
-          <button type="button" className={reportMonth === null ? 'is-active' : ''} aria-pressed={reportMonth === null} onClick={() => setReportMonth(null)}>Full quarter</button>
-          {monthNames.map((name, index) => <button type="button" className={reportMonth === index ? 'is-active' : ''} aria-pressed={reportMonth === index} key={name} onClick={() => { setReportCardPage(1); setReportMonth(index); }}>{name}</button>)}
         </div>
         <div className="ai-revenue-report-card-list" aria-label="Business record cards">
           {isReportLoading
@@ -1091,7 +1088,7 @@ function AIRevenueAnalysis({ dashboardData }) {
       </section>
     </div></AdminModalPortal>}
   </section>
-  <AskRevenueAIPanel key={current ? current.year + '-Q' + current.quarter : 'all'} selectedQuarter={current ? current.year + '-Q' + current.quarter : null} onActivityChange={onAskActivityChange} />
+  <AskRevenueAIPanel key={revenueScope + ':' + selectedQuarterKey} selectedQuarter={current ? current.year + '-Q' + current.quarter : null} revenueScope={revenueScope} onActivityChange={onAskActivityChange} />
   </>;
 }
 

@@ -384,7 +384,15 @@ function getCompletedQuarterRows(quarterlyRows, now = new Date()) {
       || Number(left._id.quarter) - Number(right._id.quarter));
 }
 
-function buildRevenueChartData(type, entries, quarterlyRows, now = new Date()) {
+function buildRevenueChartData(type, entries, quarterlyRows, now = new Date(), scope = null) {
+  if (scope && ['category_share', 'top_contributors'].includes(type)) {
+    const rows = type === 'category_share' ? groupRevenueByCategory(entries) : groupRevenueContributors(entries).filter(row => row.contributorType !== 'Uncategorized').slice(0, 5);
+    const total = rows.reduce((sum, row) => sum + row.revenue, 0);
+    if (!total) return null;
+    return { type, title: (type === 'category_share' ? 'Category share · ' : 'Top contributors · ') + scope.label,
+      labels: rows.map(row => row.name || row._id),
+      datasets: [{ label: type === 'category_share' ? 'Revenue share' : 'Revenue', data: rows.map(row => type === 'category_share' ? Number((row.revenue / total * 100).toFixed(2)) : row.revenue) }] };
+  }
   if (!REVENUE_AI_CHART_TYPES.includes(type)) return null;
   const completedQuarters = getCompletedQuarterRows(quarterlyRows, now);
   const latest = completedQuarters.at(-1);

@@ -1,3 +1,4 @@
+const { resolveRevenueScope } = require('../../utils/revenueScope');
 const { createHash } = require('crypto');
 const {
   CARD_INSIGHT_FIELDS,
@@ -114,6 +115,7 @@ function quarterRevenueContext(entries, period) {
 
 async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntries = false } = {}) {
   const period = selectedRevenueQuarter(req.body?.selectedQuarter);
+  if (req.body?.scope) resolveRevenueScope(req.body);
   const mockReq = { ...req, query: {} };
   const [statsRes, quarterlyRes, riskRes, concentrationRes, monthlyRes, chartEntriesRes] = await Promise.all([
     getControllerResult(dashboard.getDashboardStats, mockReq),
@@ -126,6 +128,22 @@ async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntr
       : Promise.resolve({ data: [] })
   ]);
 
+  if (req.body?.scope) {
+    const scope = resolveRevenueScope(req.body);
+    const scoped = (await getControllerResult(dashboard.getScopedRevenue, { ...req, query: req.body })).data;
+    return {
+      stats: { totalRevenue: scoped.concentration.totalRevenue, totalTransactions: scoped.reportRecords.length },
+      analysisScopes: { concentration: scope.label, overallRisk: scope.label, trend: 'All recorded completed quarters', forecast: 'All recorded completed quarters', selectedQuarter: period?.key || null },
+      selectedQuarter: quarterRevenueContext(chartEntriesRes.data, period),
+      quarterly: quarterlyRes.data,
+      ...(includeChartEntries ? { chartEntries: scoped.entries } : {}),
+      revenueRisk: scoped.risk, revenueConcentration: scoped.concentration,
+      monthly: getRecentMonthlyRevenue(monthlyRes.data, now),
+      officialForecast: riskRes.data.officialForecast || calculateDashboardForecast(quarterlyRes.data, now),
+      riskLevels: scoped.risk.indicators, overallRisk: scoped.risk.overallRisk,
+      thresholds: REVENUE_RISK_THRESHOLDS, uncategorizedShare: scoped.concentration.uncategorized
+    };
+  }
   const { totalRevenue, totalTransactions, collected, outstanding } = statsRes.data;
   return {
     // Keep volatile timestamps and unrelated account/inventory counts out of the
@@ -183,7 +201,7 @@ async function askRevenueAI(req, res, dependencies = {}) {
     }
     if (chartType) {
       try {
-        chart = buildRevenueChartData(chartType, chartEntries, revenueData.quarterly, now);
+        chart = buildRevenueChartData(chartType, chartEntries, revenueData.quarterly, now, revenueData.revenueConcentration.scope);
       } catch (chartError) {
         console.error('[askRevenueAI] chart data error', chartError);
       }

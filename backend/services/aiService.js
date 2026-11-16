@@ -190,7 +190,7 @@ async function generateRevenueInsights(question, revenueData, dependencies = {})
   const modelNames = dependencies.modelNames || getModelNames();
   const systemInstruction = `
 You are a revenue analyst for a motorcycle parts shop.
-Answer using only supplied revenue data. Respect analysisScopes: selectedQuarter contains only that quarter; revenueConcentration and overallRisk describe all recorded revenue. Never present global shares as selected-quarter shares. Never invent or infer a number that is not present in the data.
+Answer using only supplied revenue data. Respect analysisScopes and revenueConcentration.scope: concentration and overallRisk use the explicitly selected scope, either Selected quarter or All records. selectedQuarter is separate quarter context. Trend and officialForecast use all recorded completed-quarter history and must be labeled separately. Never present all-records shares as selected-quarter shares. Never invent or infer a number that is not present in the data.
 Always format monetary amounts as Philippine pesos with thousands separators (for example ₱25,390); never use $ or USD.
 Keep the answer concise and use only the supplied Normal, Moderate, and High risk labels and their supplied thresholds.
 Start with an opening paragraph of one to three sentences and no heading, describing what the supplied numbers show now.
@@ -247,7 +247,7 @@ async function generateCardInsights(analysisData, dependencies = {}) {
   const requestId = dependencies.requestId || newRevenueAIRequestId();
   const systemInstruction = `
 You write concise revenue-card insights for a motorcycle shop owner.
-Use only the supplied computed numbers, risk labels, and thresholds. Respect analysisScopes: concentration and risk cards describe all recorded revenue, while selectedQuarter is separate quarter-specific context. Never invent figures, products, or dates.
+Use only the supplied computed numbers, risk labels, and thresholds. Respect analysisScopes and revenueConcentration.scope: concentration, service and risk cards use the selected scope, either Selected quarter or All records. Trend and forecast use all-records completed-quarter history and must be labeled separately. selectedQuarter is separate context. Never invent figures, products, or dates.
 Return a JSON object with exactly these card keys: ${CARD_INSIGHT_KEYS.join(', ')}.
 Each card value must contain exactly four string properties: summary, recommendation, ifFollowed, and ifIgnored.
 Each property must be one short sentence of no more than 25 words, with no line breaks. Summary describes the supplied numbers now. Recommendation is a specific action the shop owner can take, not generic tracking advice.

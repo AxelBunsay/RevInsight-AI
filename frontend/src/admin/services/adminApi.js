@@ -217,15 +217,20 @@ export const adminApi = {
   getQuarterlySales: () => request('/api/dashboard/dashboard/quarterly'),
   getRevenueConcentration: () => request('/api/dashboard/analytics/revenue-concentration'),
   getRevenueRisk: () => request('/api/dashboard/analytics/revenue-risk'),
-  askRevenueAI: (question, selectedQuarter) => request('/api/admin/revenue/ask-ai', {
+  askRevenueAI: (question, selectedQuarter, scope) => request('/api/admin/revenue/ask-ai', {
     method: 'POST',
-    body: JSON.stringify({ question, ...(selectedQuarter ? { selectedQuarter } : {}) })
+    body: JSON.stringify({ question, ...(selectedQuarter ? { selectedQuarter } : {}), ...(scope ? { scope } : {}) })
   }),
-  getRevenueCardInsights: (refresh = false, selectedQuarter) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
+  getRevenueCardInsights: (refresh = false, selectedQuarter, scope) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
     method: 'POST',
-    body: JSON.stringify(selectedQuarter ? { selectedQuarter } : {})
+    body: JSON.stringify({ ...(selectedQuarter ? { selectedQuarter } : {}), ...(scope ? { scope } : {}) })
   }).then(mapRevenueCardInsights),
-  getRevenueAnalysisData: async () => {
+  getScopedRevenue: (selectedQuarter, scope = 'allRecords') => request('/api/dashboard/analytics/scoped-revenue?' + new URLSearchParams({ scope, ...(selectedQuarter ? { selectedQuarter } : {}) })),
+  getRevenueAnalysisData: async (selectedQuarter, scope) => {
+    if (scope) {
+      const response = await adminApi.getScopedRevenue(selectedQuarter, scope);
+      return { quarterly: { data: response.data.quarters }, risk: { data: response.data.risk }, concentration: { data: response.data.concentration } };
+    }
     const [quarterly, risk, concentration] = await Promise.all([
       adminApi.getQuarterlySales(),
       adminApi.getRevenueRisk(),
