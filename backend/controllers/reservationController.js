@@ -1,3 +1,4 @@
+const { auditSnapshot, recordAuditChange } = require('../utils/adminAudit');
 const mongoose = require('mongoose');
 const Product = require('../models/product');
 const User = require('../models/user');
@@ -467,6 +468,8 @@ const cancelCustomerReservation = async (req, res) => {
         { new: true, runValidators: true, session }
       );
       if (reservation) {
+        const before = { ...auditSnapshot(reservation), status: 'Pending Down Payment' };
+        await recordAuditChange({ req, session, recordType: 'reservation', before, after: reservation, action: 'reservation_cancelled', reason });
         if (reservation.stockHeld) {
           await releaseReservedStock(reservation, session, changedProductIds);
           await reservation.save({ session });
@@ -589,6 +592,7 @@ const confirmReservation = async (req, res) => {
     await session.withTransaction(async () => {
       const reservation = await Reservation.findOne({ _id: req.params.id, code: { $exists: true } }).session(session);
       if (!reservation) throw Object.assign(new Error('Reservation not found.'), { status: 404 });
+      const before = auditSnapshot(reservation);
       if (!canTransitionReservationStatus(reservation.status, 'Reserved')) {
         throw Object.assign(new Error('Only submitted payments can be confirmed.'), { status: 409 });
       }
@@ -609,6 +613,7 @@ const confirmReservation = async (req, res) => {
         latestSubmission.reviewedBy = req.admin.id;
       }
       result = await reservation.save({ session });
+      await recordAuditChange({ req, session, recordType: 'reservation', before, after: result, action: 'payment_approved', reason: '' });
       await createPaymentDecisionNotification({
         customerId: reservation.customerId,
         recordId: reservation._id,
@@ -641,6 +646,7 @@ const rejectReservation = async (req, res) => {
     await session.withTransaction(async () => {
       reservation = await Reservation.findOne({ _id: req.params.id, code: { $exists: true } }).session(session);
       if (!reservation) throw Object.assign(new Error('Reservation not found.'), { status: 404 });
+      const before = auditSnapshot(reservation);
       if (!canTransitionReservationStatus(reservation.status, 'Pending Down Payment')) {
         throw Object.assign(new Error('Only submitted payments can be rejected.'), { status: 409 });
       }
@@ -657,6 +663,7 @@ const rejectReservation = async (req, res) => {
         latestSubmission.reviewedBy = req.admin.id;
       }
       reservation = await reservation.save({ session });
+      await recordAuditChange({ req, session, recordType: 'reservation', before, after: reservation, action: 'payment_rejected', reason: reason });
       await createPaymentDecisionNotification({
         customerId: reservation.customerId,
         recordId: reservation._id,
@@ -772,6 +779,7 @@ async function cancelReservation(req, res, isRefundDecisionOnly = false) {
     await session.withTransaction(async () => {
       const reservation = await Reservation.findOne({ _id: req.params.id, code: { $exists: true } }).session(session);
       if (!reservation) throw Object.assign(new Error('Reservation not found.'), { status: 404 });
+      const before = auditSnapshot(reservation);
       if (isRefundDecisionOnly) {
         if (reservation.status !== 'Expired' || reservation.amountPaid <= 0 || reservation.refundDecision) {
           throw Object.assign(new Error('A refund decision is only required for expired reservations with a confirmed down payment.'), { status: 409 });
@@ -799,6 +807,7 @@ async function cancelReservation(req, res, isRefundDecisionOnly = false) {
         reservation.refundDecisionAt = new Date();
       }
       result = await reservation.save({ session });
+      await recordAuditChange({ req, session, recordType: 'reservation', before, after: result, action: isRefundDecisionOnly ? 'refund_decision_recorded' : 'reservation_cancelled', reason: reason });
     });
     for (const productId of changedProductIds) await evaluateLowStockAlert(productId);
     res.json({ success: true, reservation: result });

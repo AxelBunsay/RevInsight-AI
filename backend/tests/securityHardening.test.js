@@ -50,20 +50,11 @@ describe('security hardening', () => {
     expect(res.json).toHaveBeenCalledWith({ success: false, message: 'Invalid credentials' });
   });
 
-  it('updates only a valid transaction status and ignores revenue fields', async () => {
-    vi.spyOn(Order, 'findOneAndUpdate').mockResolvedValue({ _id: 'order-id', status: 'completed' });
+  it('rejects an invalid transaction status before any database writes', async () => {
+    const write = vi.spyOn(Order, 'findOneAndUpdate');
     const res = makeResponse();
-
-    await updateTransaction({
-      params: { id: 'order-id' },
-      body: { status: 'completed', totalPrice: 999999, items: [{ quantity: 999 }] }
-    }, res);
-
-    expect(Order.findOneAndUpdate).toHaveBeenCalledWith(
-      { _id: 'order-id', code: { $exists: false } },
-      { $set: { status: 'completed' } },
-      { new: true, runValidators: true }
-    );
-    expect(res.status).not.toHaveBeenCalledWith(500);
+    await updateTransaction({params:{id:'order-id'},body:{status:{$ne:'pending'},totalPrice:999999}},res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(write).not.toHaveBeenCalled();
   });
 });

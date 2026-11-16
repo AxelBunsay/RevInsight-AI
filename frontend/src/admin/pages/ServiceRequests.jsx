@@ -1,3 +1,4 @@
+import AdminAuditHistory from "../components/AdminAuditHistory";
 import { useEffect, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
@@ -8,6 +9,7 @@ function ServiceRequests() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState("");
+  const [historyRequestId, setHistoryRequestId] = useState(null);
   const [transitionDraft, setTransitionDraft] = useState(null);
   const [transitionReason, setTransitionReason] = useState("");
   const [transitionRefund, setTransitionRefund] = useState("");
@@ -135,6 +137,7 @@ function ServiceRequests() {
                     {request.status.replaceAll("-", " ")}
                   </span>
                 </div>
+                <button type="button" className="btn-small" onClick={() => setHistoryRequestId(request._id)}>View change history</button>
                 <div className="mechanic-actions">
                   <select
                     aria-label={`Assign mechanic for ${request.serviceType}`}
@@ -189,6 +192,9 @@ function ServiceRequests() {
           )}
         </div>
       </section>
+      {historyRequestId && <AdminDialog title="Service change history" onClose={() => setHistoryRequestId(null)}>
+        <AdminAuditHistory key={historyRequestId} recordType="service" recordId={historyRequestId} />
+      </AdminDialog>}
       {transitionDraft && (
         <AdminDialog
           title={transitionDraft.status === "declined" ? "Decline service booking" : "Cancel service booking"}

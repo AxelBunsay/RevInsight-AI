@@ -17,6 +17,7 @@ router.get('/analytics/projected-revenue', protect, dashboardController.getProje
 router.get('/analytics/revenue-concentration', protect, dashboardController.getRevenueConcentration);
 
 // Business records and transactions routes
+router.get('/audit/:recordType/:id', protect, require('../../controllers/adminControllers/auditController').getAuditHistory);
 router.get('/business-records', protect, dashboardController.getBusinessRecords);
 router.get('/transactions', protect, dashboardController.getAllTransactions);
 router.get('/transactions/:id', protect, dashboardController.getTransactionById);

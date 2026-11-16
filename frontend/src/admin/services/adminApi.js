@@ -255,6 +255,7 @@ export const adminApi = {
   createInventory: (item) => request('/api/dashboard/inventory', { method: 'POST', body: item }),
   updateInventory: (id, item) => request(`/api/dashboard/inventory/${id}`, { method: 'PUT', body: item }),
   deleteInventory: (id) => request(`/api/dashboard/inventory/${id}`, { method: 'DELETE' }),
+  getAuditHistory: (recordType, recordId, page = 1) => request('/api/dashboard/audit/' + encodeURIComponent(recordType) + '/' + encodeURIComponent(recordId) + '?page=' + page),
   getBusinessRecords: (query = {}) => {
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => {

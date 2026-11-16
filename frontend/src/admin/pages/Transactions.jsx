@@ -1,3 +1,5 @@
+import AdminAuditHistory from "../components/AdminAuditHistory";
+import { auditRecordReference } from "../components/auditRecord";
 import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { adminApi as api } from "../services/adminApi";
@@ -1281,7 +1283,8 @@ function Transactions() {
             </>}
           </div>}
         >
-          <form id="reservation-action-form" className="admin-dialog-form reservation-transaction-action" onSubmit={(event) => performReservationAction(event, rejectingPayment ? "reject" : undefined)}>
+          <AdminAuditHistory key={reservationAction.transaction._id} {...auditRecordReference(reservationAction.transaction)} revision={refreshKey} />
+          <form id="reservation-action-form"  className="admin-dialog-form reservation-transaction-action" onSubmit={(event) => performReservationAction(event, rejectingPayment ? "reject" : undefined)}>
             {reservationActionError && <p className="admin-dialog-error" role="alert">{reservationActionError}</p>}
             <p><strong>Customer:</strong> {reservationAction.transaction.customer}</p>
             <p><strong>{reservationAction.transaction.isServiceRequest ? "Booking" : "Reservation"}:</strong> {reservationAction.transaction.code || reservationAction.transaction.id}</p>
@@ -1383,6 +1386,7 @@ function Transactions() {
           onClose={() => setSelectedTransaction(null)}
         >
           <div className="transaction-details">
+            <AdminAuditHistory key={selectedTransaction._id || selectedTransaction.sourceId} {...auditRecordReference(selectedTransaction)} revision={refreshKey} />
             <p>
               <strong>Record ID:</strong>{" "}
               {selectedTransaction._id || selectedTransaction.id}

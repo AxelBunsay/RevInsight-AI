@@ -1,3 +1,4 @@
+const { auditSnapshot, recordAuditChange } = require('../utils/adminAudit');
 const ServiceRequest = require("../models/serviceRequest");
 const Mechanic = require("../models/mechanic");
 const BusinessRecord = require("../models/businessRecord");
@@ -458,6 +459,7 @@ const reviewServicePayment = async (req, res) => {
       if (serviceRequest.paymentStatus !== "Payment Submitted") {
         throw Object.assign(new Error("Only submitted payments can be reviewed."), { status: 409 });
       }
+      const before = auditSnapshot(serviceRequest);
       const reviewedAt = new Date();
       const latestSubmission = serviceRequest.paymentSubmissions[serviceRequest.paymentSubmissions.length - 1];
       if (confirmed) {
@@ -484,6 +486,7 @@ const reviewServicePayment = async (req, res) => {
         latestSubmission.reviewedBy = req.admin.id;
       }
       serviceRequest = await serviceRequest.save({ session });
+      await recordAuditChange({ req, session, recordType: 'service', before, after: serviceRequest, action: confirmed ? 'payment_approved' : 'payment_rejected', reason });
       await createPaymentDecisionNotification({
         customerId: serviceRequest.customerId || serviceRequest.user,
         recordId: serviceRequest._id,
@@ -551,6 +554,7 @@ const markServicePaidAtShop = async (req, res) => {
 
 // Admin assigns a mechanic to a job
 const assignMechanic = async (req, res) => {
+  let session;
   try {
     const { requestId, mechanicId } = req.body;
     if (!mongoose.Types.ObjectId.isValid(requestId) || !mongoose.Types.ObjectId.isValid(mechanicId)) {
@@ -563,17 +567,28 @@ const assignMechanic = async (req, res) => {
     });
     if (!mechanic)
       return res.status(400).json({ message: "Mechanic is not available" });
-    const serviceRequest = await ServiceRequest.findById(requestId);
-    if (!serviceRequest)
-      return res.status(404).json({ message: "Service request not found" });
-
-    if (serviceRequest.status !== "pending") {
-      return res.status(400).json({ message: "This service request can no longer be assigned." });
-    }
-    serviceRequest.mechanic = mechanicId;
-    serviceRequest.mechanicId = mechanicId;
-    serviceRequest.status = "assigned";
-    await serviceRequest.save();
+    session = await mongoose.startSession();
+    let serviceRequest;
+    let changed = false;
+    await session.withTransaction(async () => {
+      changed = false;
+      serviceRequest = await ServiceRequest.findById(requestId).session(session);
+      if (!serviceRequest) throw Object.assign(new Error('Service request not found'), { status: 404 });
+      if (serviceRequest.status !== 'pending') {
+        // A repeated successful assignment is an idempotent no-op.
+        if (serviceRequest.status === 'assigned' && String(serviceRequest.mechanic || serviceRequest.mechanicId) === String(mechanicId)) return;
+        throw Object.assign(new Error('This service request can no longer be assigned.'), { status: 400 });
+      }
+      const before = auditSnapshot(serviceRequest);
+      serviceRequest.mechanic = mechanicId;
+      serviceRequest.mechanicId = mechanicId;
+      serviceRequest.status = 'assigned';
+      await serviceRequest.save({ session });
+      changed = true;
+      await recordAuditChange({ req, session, recordType: 'service', before, after: serviceRequest,
+        action: (before.mechanic || before.mechanicId) && (before.mechanic || before.mechanicId) !== String(mechanicId) ? 'mechanic_reassigned' : 'mechanic_assigned' });
+    });
+    if (!changed) return res.status(200).json({ message: "Mechanic assigned", serviceRequest });
     try {
       const customer = await User.findById(serviceRequest.customerId || serviceRequest.user).select('firstName lastName name').lean();
       const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || customer?.name || 'Customer';
@@ -613,7 +628,9 @@ const assignMechanic = async (req, res) => {
       serviceRequest,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error.status || 500).json({ message: error.status ? error.message : "Mechanic assignment could not be saved." });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
@@ -820,6 +837,7 @@ const updateBookingStatus = async (req, res) => {
         && (cancelReason.length < 3 || cancelReason.length > 300)) {
         throw Object.assign(new Error("Provide a cancellation reason between 3 and 300 characters."), { status: 400 });
       }
+      const before = auditSnapshot(serviceRequest);
       const hasPaymentToResolve = hasServicePaymentToResolve(serviceRequest);
       if (["cancelled", "declined"].includes(status)
         && PAID_SERVICE_STATUSES.includes(serviceRequest.paymentStatus) && hasPaymentToResolve) {
@@ -836,6 +854,7 @@ const updateBookingStatus = async (req, res) => {
       serviceRequest.status = status;
       if (cancelReason) serviceRequest.cancelReason = cancelReason;
       await serviceRequest.save({ session });
+      await recordAuditChange({ req, session, recordType: 'service', before, after: serviceRequest, action: ['cancelled', 'declined'].includes(status) ? 'service_cancelled' : 'service_status_changed', reason: cancelReason });
       if (["cancelled", "declined"].includes(status)) {
         await BusinessRecord.deleteOne({ recordType: "service", sourceId: serviceRequest._id }, { session });
       }

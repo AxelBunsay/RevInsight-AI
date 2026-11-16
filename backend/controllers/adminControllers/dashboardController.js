@@ -1,3 +1,4 @@
+const { auditSnapshot, recordAuditChange } = require('../../utils/adminAudit');
 const { buildScopedRevenue } = require('../../utils/revenueScope');
 const Order = require('../../models/orderingModels/order');
 const mongoose = require('mongoose');
@@ -662,49 +663,52 @@ const getTransactionById = async (req, res) => {
 
 // Update Transaction
 const updateTransaction = async (req, res) => {
+  let session;
   try {
     const allowedStatuses = ['pending', 'completed', 'cancelled', 'Paid'];
     const status = req.body?.status;
     if (typeof status !== 'string' || !allowedStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'A valid transaction status is required.' });
     }
-    const transaction = await Order.findOneAndUpdate(
-      { _id: req.params.id, code: { $exists: false } },
-      { $set: { status } },
-      { new: true, runValidators: true }
-    );
-
-    if (!transaction) {
-      return res.status(404).json({ success: false, message: 'Transaction not found' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Transaction updated successfully',
-      data: transaction
+    session = await mongoose.startSession();
+    let transaction;
+    await session.withTransaction(async () => {
+      transaction = await Order.findOne({ _id: req.params.id, code: { $exists: false } }).session(session);
+      if (!transaction) throw Object.assign(new Error('Transaction not found'), { status: 404 });
+      if (transaction.status === status) return;
+      const before = auditSnapshot(transaction);
+      transaction.status = status;
+      await transaction.save({ session });
+      await recordAuditChange({ req, session, recordType: 'order', before, after: transaction,
+        action: ['completed', 'Paid'].includes(before.status) ? 'completed_sale_corrected' : status === 'cancelled' ? 'sale_cancelled' : 'sale_status_changed' });
     });
+    res.json({ success: true, message: 'Transaction updated successfully', data: transaction });
   } catch (error) {
-    console.error('[updateTransaction] error', error);
-    res.status(500).json({ success: false, message: 'Failed to update transaction. Please try again.' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to update transaction. Please try again.' });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
 // Delete Transaction
 const deleteTransaction = async (req, res) => {
+  let session;
   try {
-    const transaction = await Order.findOneAndDelete({ _id: req.params.id, code: { $exists: false } });
-
-    if (!transaction) {
-      return res.status(404).json({ success: false, message: 'Transaction not found' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Transaction deleted successfully'
+    session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      const transaction = await Order.findOne({ _id: req.params.id, code: { $exists: false } }).session(session);
+      if (!transaction) throw Object.assign(new Error('Transaction not found'), { status: 404 });
+      const before = auditSnapshot(transaction);
+      await Order.deleteOne({ _id: transaction._id, code: { $exists: false } }, { session });
+      await recordAuditChange({ req, session, recordType: 'order', before,
+        after: { ...before, _id: transaction._id, status: 'deleted' },
+        action: ['completed', 'Paid'].includes(before.status) ? 'completed_sale_deleted' : 'sale_deleted' });
     });
+    res.json({ success: true, message: 'Transaction deleted successfully' });
   } catch (error) {
-    console.error('[deleteTransaction] error', error);
-    res.status(500).json({ success: false, message: 'Failed to delete transaction. Please try again.' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to delete transaction. Please try again.' });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
