@@ -144,17 +144,19 @@ describe('AI revenue insight generation', () => {
     expect(answer).toContain('**Possible outcome**');
   });
 
-  it('accepts only whitelisted chart types and maps none or invalid output to no chart', async () => {
-    const trend = createFakeClient(['quarterly_trend']);
-    const invalid = createFakeClient(['category_share with 100 values']);
-    const none = createFakeClient(['none']);
-    const options = { modelNames: ['primary-test'] };
-
-    await expect(generateRevenueChartType('Show a trend.', { ...options, client: trend.client }))
-      .resolves.toBe('quarterly_trend');
-    await expect(generateRevenueChartType('Explain a risk.', { ...options, client: invalid.client }))
-      .resolves.toBeNull();
-    await expect(generateRevenueChartType('Explain a risk.', { ...options, client: none.client }))
-      .resolves.toBeNull();
+  it('selects optional charts locally without spending provider calls', async () => {
+    const fake = createFakeClient(['must not be called']);
+    const options = { client: fake.client, modelNames: ['primary-test'] };
+    for (const [question, expected] of [
+      ['Show a trend.', 'quarterly_trend'],
+      ['Compare quarters.', 'quarter_comparison'],
+      ['Show category shares.', 'category_share'],
+      ['Rank contributors.', 'top_contributors'],
+      ['Explain concentration risks and recommendations.', null],
+      ['Show something unspecified.', null]
+    ]) {
+      await expect(generateRevenueChartType(question, options)).resolves.toBe(expected);
+    }
+    expect(fake.configurations).toHaveLength(0);
   });
 });

@@ -228,30 +228,16 @@ Do not use tables or horizontal rules. Never invent products, dates, risk labels
   throw revenueAIError(lastError || { code: 'AI_PROVIDER_UNAVAILABLE', statusCode: 503, message: 'AI service is currently unavailable. Please try again later.' }, requestId);
 }
 
-async function generateRevenueChartType(question, dependencies = {}) {
-  const client = dependencies.client || gemini;
-  const modelNames = dependencies.modelNames || getModelNames();
-  const systemInstruction = `
-Choose a chart type for a revenue question. Return exactly one value from this list:
-${REVENUE_AI_CHART_TYPES.join(', ')}, none.
-Choose a chart only for comparison, trend, ranking, or share questions.
-For explanations, risks, or recommendations return none.
-Never return labels, numbers, values, datasets, or any other text.
-  `.trim();
-
-  let lastError;
-  for (const modelName of modelNames) {
-    try {
-      const model = client.getGenerativeModel({ model: modelName, systemInstruction }, { timeout: 5000 });
-      const result = await model.generateContent(`Question: ${question}`);
-      const selectedType = result.response.text().trim().toLowerCase();
-      return REVENUE_AI_CHART_TYPES.includes(selectedType) ? selectedType : null;
-    } catch (error) {
-      lastError = error;
-      if (dependencies.onError) dependencies.onError(error, modelName);
-    }
-  }
-  throw lastError || new Error('No AI model is configured for chart selection.');
+// Charts use server-computed data; choosing an optional presentation does not
+// require another provider request after the genuine Gemini text answer.
+async function generateRevenueChartType(question) {
+  const text = String(question || '').toLowerCase();
+  if (!/\b(show|chart|plot|graph|compare|comparison|trend|ranking|rank)\b/.test(text)) return null;
+  if (/\b(category|categories)\b/.test(text)) return 'category_share';
+  if (/\b(contributor|contributors|ranking|rank)\b/.test(text)) return 'top_contributors';
+  if (/\b(compare|comparison)\b/.test(text)) return 'quarter_comparison';
+  if (/\b(trend|quarterly)\b/.test(text)) return 'quarterly_trend';
+  return null;
 }
 
 async function generateCardInsights(analysisData, dependencies = {}) {
