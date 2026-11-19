@@ -10,7 +10,7 @@ const REVENUE_AI_CHART_TYPES = [
 ];
 const REVENUE_RISK_THRESHOLDS = require('../../shared/revenueRiskConfig.json');
 
-const dateExpression = (field) => ({ $toDate: `$${field}` });
+const dateExpression = (field) => ({ $convert: { input: '$' + field, to: 'date', onError: null, onNull: null } });
 const datePart = (operator, field) => ({
   [operator]: { date: dateExpression(field), timezone: REVENUE_TIMEZONE }
 });

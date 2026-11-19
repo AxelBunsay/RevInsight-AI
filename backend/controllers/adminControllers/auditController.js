@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const AdminAudit = require('../../models/adminAudit');
-const recordTypes = new Set(['reservation', 'service', 'order']);
+const recordTypes = new Set(['reservation', 'service', 'order', 'revenue_month']);
 async function getAuditHistory(req, res) {
   const { recordType, id } = req.params;
   if (!recordTypes.has(recordType) || !mongoose.Types.ObjectId.isValid(id)) {

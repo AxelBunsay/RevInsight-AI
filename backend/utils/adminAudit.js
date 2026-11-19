@@ -1,6 +1,7 @@
+const { getManilaDateParts } = require('./revenue');
 const { randomUUID } = require('crypto');
 const AdminAudit = require('../models/adminAudit');
-const fields = ['status', 'paymentStatus', 'mechanic', 'mechanicId', 'amountPaid', 'balanceDue', 'totalPrice', 'refundDecision', 'completedAt'];
+const fields = ['status', 'paymentStatus', 'mechanic', 'mechanicId', 'amountPaid', 'balanceDue', 'totalPrice', 'refundDecision', 'completedAt', 'reviewVersion', 'confirmedZeroSales', 'createdAt'];
 function auditSnapshot(record) {
   return Object.fromEntries(fields.map(key => {
     const value = record?.[key];
@@ -16,6 +17,16 @@ function redactAuditReason(reason) {
     .replace(/(?:\+?\d[\d ()-]{8,}\d)/g, '[number redacted]')
     .trim().slice(0, 300);
 }
+function affectedRevenueMonths(recordType, before, after) {
+  const eligible = { order: ['completed','Paid'], reservation: ['Completed'], service: ['completed'] }[recordType];
+  if (!eligible) return [];
+  const dateField = recordType === 'order' ? 'createdAt' : 'completedAt';
+  return [...new Set([before,after].flatMap(record => {
+    if (!eligible.includes(record?.status) || !record[dateField]) return [];
+    const date = getManilaDateParts(record[dateField]);
+    return date ? [date.dateLabel.slice(0,7)] : [];
+  }))].sort();
+}
 async function recordAuditChange({ req, session, recordType, before, after, action, reason = '' }) {
   if (!session?.inTransaction()) throw new Error('Audit writes require the action transaction.');
   const current = auditSnapshot(after);
@@ -25,7 +36,7 @@ async function recordAuditChange({ req, session, recordType, before, after, acti
   const actorRole = req.admin ? 'admin' : req.user?.role;
   await AdminAudit.create([{
     eventId: randomUUID(), actorId, actorRole, timestamp: new Date(),
-    recordType, recordId: after._id, action, changes, reason: redactAuditReason(reason)
+    recordType, recordId: after._id, action, changes, revenueMonths: affectedRevenueMonths(recordType, before, after), reason: redactAuditReason(reason)
   }], { session });
 }
 module.exports = { auditSnapshot, recordAuditChange, redactAuditReason };

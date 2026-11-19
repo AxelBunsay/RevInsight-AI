@@ -28,7 +28,9 @@ const ServiceSlotLock = require('../../../models/serviceSlotLock');
 const User = require('../../../models/user');
 
 const AdminAudit = require('../../../models/adminAudit');
+const RevenueMonthReview = require('../../../models/revenueMonthReview');
 const models = [
+  RevenueMonthReview,
   AdminAudit,
   Admin,
   BusinessRecord,

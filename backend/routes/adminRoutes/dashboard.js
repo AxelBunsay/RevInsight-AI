@@ -11,6 +11,8 @@ router.get('/dashboard/quarterly', protect, dashboardController.getQuarterlyData
 router.get('/dashboard/daily', protect, dashboardController.getDailyData);
 
 // Analytics Routes
+router.get('/analytics/quarter-review', protect, require('../../controllers/adminControllers/revenueReviewController').getQuarterCompleteness);
+router.post('/analytics/month-review', protect, require('../../controllers/adminControllers/revenueReviewController').reviewMonth);
 router.get('/analytics/scoped-revenue', protect, dashboardController.getScopedRevenue);
 router.get('/analytics/revenue-risk', protect, dashboardController.getRevenueRisk);
 router.get('/analytics/projected-revenue', protect, dashboardController.getProjectedRevenue);

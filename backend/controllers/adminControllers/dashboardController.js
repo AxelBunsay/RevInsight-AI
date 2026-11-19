@@ -1,3 +1,5 @@
+const { getQuarterReview } = require('../../services/revenueReviewService');
+const { applyQuarterReviewCoverage } = require('../../utils/revenueReviewCoverage');
 const { auditSnapshot, recordAuditChange } = require('../../utils/adminAudit');
 const { buildScopedRevenue } = require('../../utils/revenueScope');
 const Order = require('../../models/orderingModels/order');
@@ -67,6 +69,9 @@ const getRevenueChartEntries = async (_req, res) => {
 const getScopedRevenue = async (req, res) => {
   try {
     const data = buildScopedRevenue(await loadRevenueEntries(), req.query);
+    if (data.scope.mode === 'selectedQuarter') {
+      applyQuarterReviewCoverage(data, await getQuarterReview(req.query.selectedQuarter));
+    }
     return res.json({ success: true, data });
   } catch (error) {
     return res.status(error.statusCode || 500).json({ success: false, message: error.statusCode === 400 ? error.message : 'Failed to load scoped revenue.' });
