@@ -6,6 +6,7 @@ const paymentUpload = require('../middleware/paymentUpload');
 
 // User gets their own service requests
 router.get('/my', authorizeRoles('customer'), serviceRequestController.getUserServiceRequests);
+router.post('/:id/quote/checkout', authorizeRoles('customer'), serviceRequestController.checkoutQuote);
 router.post('/:id/quote/accept', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
 router.post('/:id/quote/reject', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
 router.post('/:id/quote/cancel', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);

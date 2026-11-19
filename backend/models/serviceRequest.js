@@ -44,6 +44,7 @@ const serviceRequestSchema = new mongoose.Schema({
     enum: ['', 'quote_requested', 'quoted', 'accepted', 'rejected', 'declined', 'cancelled'],
     default: ''
   },
+  quoteCheckout: { type: String, enum: ['awaiting', 'pay-at-shop', 'gcash'] },
   quotedPrice: { type: Number, min: 0, default: null },
   quoteNote: { type: String, trim: true, maxlength: 1000, default: '' },
   quotedAt: { type: Date, default: null },

@@ -296,7 +296,7 @@ const createServiceBookings = async (req, res) => {
             }
             const hasLaborPriceRange = configuredService.laborPriceMin != null || configuredService.laborPriceMax != null;
             const quoteRequired = partsSource === 'customer'
-              && (hasLaborPriceRange || configuredService.laborOnlyPrice == null);
+              && (booking.requestQuote === true || hasLaborPriceRange || configuredService.laborOnlyPrice == null);
             const customerPartsNote = [booking.customerPartsNote, booking.notes]
               .find((value) => typeof value === 'string' && value.trim())?.trim().slice(0, 1000) || '';
             if (quoteRequired && !customerPartsNote) {
@@ -330,6 +330,24 @@ const createServiceBookings = async (req, res) => {
             if (activeCount >= schedule.slotCapacity) {
               throw Object.assign(new Error('That time was just booked. Please choose another.'), { status: 409 });
             }
+            let owner = selectedMechanicId;
+            if (quoteRequired) {
+              const duplicate = await ServiceRequest.exists({user:req.user.userId, serviceId:booking.serviceId,
+                scheduledDate:dayRange.start,startTime:booking.startTime,partsSource:'customer',
+                status:{$nin:['declined','cancelled']}}).session(session);
+              if (duplicate) throw Object.assign(new Error('This quote request already exists in My Purchases.'), {status:409});
+              const overlapping = await ServiceRequest.find({
+                scheduledDate: dayRange.start, startTime: { $lt: endTime }, endTime: { $gt: booking.startTime },
+                status: { $nin: ['declined', 'cancelled'] }
+              }).select('mechanicId mechanic').session(session).lean();
+              const occupied = overlapping.flatMap((request) => [request.mechanicId, request.mechanic]).filter(Boolean);
+              const mechanic = await Mechanic.findOne({
+                _id: owner ? { $eq: owner, $nin: occupied } : { $nin: occupied },
+                isActive: { $ne: false }, availabilityStatus: { $nin: ['busy', 'on-leave'] }
+              }).sort({ _id: 1 }).session(session);
+              if (!mechanic) throw Object.assign(new Error('No available mechanic for this time.'), { status: 409 });
+              owner = mechanic._id;
+            }
             const createdAt = new Date();
             serviceRequest = (await ServiceRequest.create([{
               user: req.user.userId,
@@ -347,8 +365,8 @@ const createServiceBookings = async (req, res) => {
                 : `Customer booking for ${configuredService.name}`,
               notes: typeof booking.notes === 'string' ? booking.notes.trim() : '',
               vehicle: booking.vehicle.trim(),
-              mechanic: selectedMechanicId,
-              mechanicId: selectedMechanicId,
+              mechanic: owner,
+              mechanicId: owner,
               units,
               pricePerUnit: configuredService.pricePerUnit === true,
               unitLabel: configuredService.pricePerUnit ? configuredService.unitLabel : '',
@@ -370,13 +388,18 @@ const createServiceBookings = async (req, res) => {
               scheduledDate: dayRange.start,
               startTime: booking.startTime,
               endTime,
-              status: 'pending'
+              status: quoteRequired ? 'assigned' : 'pending'
             }], { session }))[0];
+            if (quoteRequired) await Notification.create([{
+              audience:'mechanic', mechanicId:owner, type:'service_quote_requested',
+              message:'Quote requested for ' + configuredService.name, link:'/mechanic/jobs',
+              recordId:serviceRequest._id, recordType:'service'
+            }], { session });
           }, { timeoutMS: 8_000 });
         } finally {
           await session.endSession();
         }
-        if (selectedMechanicId) {
+        if (selectedMechanicId && !serviceRequest.quoteStatus) {
           try {
             const customer = await User.findById(req.user.userId).select('firstName lastName name').lean();
             const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || customer?.name || 'Customer';

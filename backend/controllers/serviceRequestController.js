@@ -16,6 +16,7 @@ const {
 } = require("../utils/paymentReceipt");
 const { createPaymentDecisionNotification } = require("../utils/paymentNotifications");
 const { calculateServicePayment, getServicePaymentSummary } = require("../utils/servicePayment");
+const { serializeSlotBooking } = require('../utils/serviceSlotCapacity');
 const EXPIRY_BATCH_SIZE = 200;
 const MAX_EXPIRY_ROUNDS = 20;
 const PAID_SERVICE_STATUSES = ["Confirmed", "Paid at shop"];
@@ -74,7 +75,7 @@ const mechanicAcceptJob = async (req, res) => {
 
 const syncCompletedServiceBusinessRecord = async (serviceRequest, session = null) => {
   if (!serviceRequest || serviceRequest.status !== "completed"
-    || !PAID_SERVICE_STATUSES.includes(serviceRequest.paymentStatus)) return null;
+    || (serviceRequest.quoteCheckout !== 'pay-at-shop' && !PAID_SERVICE_STATUSES.includes(serviceRequest.paymentStatus))) return null;
 
   const userQuery = User.findById(serviceRequest.user);
   const mechanicQuery = Mechanic.findById(
@@ -180,11 +181,15 @@ const transitionServiceRequestStatus = async ({
       if (!isUnassignedClaim && String(request.mechanic || request.mechanicId) !== String(mechanicId)) {
         throw Object.assign(new Error("You can only update your assigned jobs"), { status: 403 });
       }
+      const checkedOutQuote = request.quoteStatus === 'accepted' && ['gcash','pay-at-shop'].includes(request.quoteCheckout);
+      if (request.quoteCheckout === 'awaiting' || ['quoted','quote_requested'].includes(request.quoteStatus)) {
+        throw Object.assign(new Error('Quote checkout is required.'), { status: 409 });
+      }
       if ((requirePayment || (status !== "declined" && ["assigned", "accepted", "in-progress", "completed"].includes(status)))
-        && !PAID_SERVICE_STATUSES.includes(request.paymentStatus)) {
+        && request.quoteCheckout !== 'pay-at-shop' && !PAID_SERVICE_STATUSES.includes(request.paymentStatus)) {
         throw Object.assign(new Error("Payment is not confirmed yet."), { status: 409 });
       }
-      if (!serviceStatusTransitions[request.status]?.includes(status)) {
+      if (!(checkedOutQuote && request.status === "confirmed" && status === "in-progress") && !serviceStatusTransitions[request.status]?.includes(status)) {
         throw Object.assign(new Error(`Cannot change status from ${request.status} to ${status}`), { status: 400 });
       }
       if (status === "declined" && PAID_SERVICE_STATUSES.includes(request.paymentStatus)
@@ -271,6 +276,7 @@ const expireServiceBookings = async () => {
       candidates = await ServiceRequest.find({
         status: { $in: UNPAID_BOOKING_EXPIRY_STATUSES },
         paymentStatus: "Payment Pending",
+        quoteCheckout: { $nin: ["awaiting", "pay-at-shop"] },
         quoteStatus: { $nin: ['quote_requested', 'quoted'] },
         $or: [
           { paymentDueAt: { $lte: now } },
@@ -295,6 +301,7 @@ const expireServiceBookings = async () => {
             _id: candidate._id,
             status: { $in: UNPAID_BOOKING_EXPIRY_STATUSES },
             paymentStatus: "Payment Pending",
+            quoteCheckout: { $nin: ["awaiting", "pay-at-shop"] },
             quoteStatus: { $nin: ['quote_requested', 'quoted'] }
           }).session(session);
           if (!booking) return;
@@ -360,6 +367,7 @@ const submitServicePayment = async (req, res) => {
     if (getServicePaymentSummary(request).downPaymentAmount <= 0) {
       return res.status(409).json({ message: "No upfront payment is required for this booking." });
     }
+    if (['awaiting','pay-at-shop'].includes(request.quoteCheckout)) return res.status(409).json({ message:'GCash checkout is required before submitting payment.' });
     const submissionTime = new Date();
     const paymentDeadline = request.paymentDueAt
       || new Date(new Date(request.createdAt || submissionTime).getTime() + settings.pendingPaymentHours * 60 * 60 * 1000);
@@ -519,8 +527,10 @@ const markServicePaidAtShop = async (req, res) => {
       serviceRequest = await ServiceRequest.findOne(
         {
           _id: req.params.id,
+          quoteCheckout: { $ne: "awaiting" },
+          $or: [{status:{$ne:"completed"}},{quoteCheckout:"pay-at-shop"}],
           paymentStatus: { $in: ["Payment Pending", "Confirmed"] },
-          status: { $nin: ["completed", "declined", "cancelled"] }
+          status: { $nin: ["declined", "cancelled"] }
         }
       ).session(session);
       if (!serviceRequest) {
@@ -529,9 +539,11 @@ const markServicePaidAtShop = async (req, res) => {
       serviceRequest.paymentStatus = "Paid at shop";
       serviceRequest.paymentMethod = "Paid at shop";
       serviceRequest.amountPaid = getServicePaymentSummary(serviceRequest).totalAmount;
+      serviceRequest.balanceDue = 0;
       serviceRequest.paymentConfirmedAt = new Date();
       serviceRequest.paymentConfirmedBy = req.admin.id;
       await serviceRequest.save({ session });
+      if (serviceRequest.status === "completed") await syncCompletedServiceBusinessRecord(serviceRequest, session);
       await createPaymentDecisionNotification({
         customerId: serviceRequest.customerId || serviceRequest.user,
         recordId: serviceRequest._id,
@@ -886,7 +898,7 @@ const getMechanicQuoteRequests = async (req, res) => {
 const submitMechanicQuote = async (req, res) => {
   const price = Number(req.body?.price);
   const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
-  if (!Number.isFinite(price) || price <= 0 || price > 999999.99) {
+  if (typeof req.body?.price === "boolean" || Number(price.toFixed(2)) !== price || !Number.isFinite(price) || price <= 0 || price > 999999.99) {
     return res.status(400).json({ message: 'Quote price must be greater than zero.' });
   }
   if (!note || note.length > 1000) {
@@ -929,6 +941,51 @@ const submitMechanicQuote = async (req, res) => {
   } finally {
     await session.endSession();
   }
+};
+
+const checkoutQuote = async (req, res) => {
+  const { method, amount } = req.body;
+  if (!['GCash','Cash at pickup','Card on pickup'].includes(method)) return res.status(400).json({ message:'Choose a payment method.' });
+  const session = await mongoose.startSession();
+  try {
+    let booking;
+    await session.withTransaction(async () => {
+      booking = await ServiceRequest.findOne({ _id:req.params.id, user:req.user.userId }).session(session);
+      if (!booking) throw Object.assign(new Error('Booking not found.'), { status:404 });
+      if (booking.quoteStatus !== 'accepted' || amount !== booking.quotedPrice || amount !== booking.totalAmount ||
+          !(amount > 0) || ['cancelled','declined'].includes(booking.status)) {
+        throw Object.assign(new Error('The accepted quote is no longer available at this price.'), { status:409 });
+      }
+      if (booking.quoteCheckout !== 'awaiting') {
+        if (['gcash','pay-at-shop'].includes(booking.quoteCheckout) && booking.paymentMethod === method) return;
+        throw Object.assign(new Error('Checkout is no longer pending.'), { status:409 });
+      }
+      const dateKey = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Manila'}).format(booking.scheduledDate);
+      if (new Date(dateKey + 'T' + booking.startTime + ':00+08:00') <= new Date()) throw Object.assign(new Error('The scheduled time has passed.'), {status:409});
+      await serializeSlotBooking({ dateKey,startTime:booking.startTime,endTime:booking.endTime,session });
+      const owner = await Mechanic.findOne({_id:booking.mechanicId, isActive:{$ne:false}, availabilityStatus:{$nin:['busy','on-leave']}}).session(session);
+      const conflict = await ServiceRequest.exists({_id:{$ne:booking._id}, $or:[{mechanic:booking.mechanicId},{mechanicId:booking.mechanicId}],
+        scheduledDate:booking.scheduledDate,startTime:{$lt:booking.endTime},endTime:{$gt:booking.startTime},status:{$nin:['cancelled','declined']}}).session(session);
+      if (!owner || conflict) throw Object.assign(new Error('The assigned mechanic is unavailable for this time.'), {status:409});
+      booking.quoteCheckout = method === 'GCash' ? 'gcash' : 'pay-at-shop';
+      if (booking.quoteCheckout === 'pay-at-shop') {
+        booking.downPaymentAmount = 0;
+        booking.downPaymentPercent = 0;
+        booking.balanceDue = amount;
+        booking.paymentStatus = 'Payment Pending';
+      }
+      booking.paymentMethod = method;
+      booking.status = 'confirmed';
+      const settings = await ReservationSettings.getDefaults();
+      booking.paymentDueAt = method === 'GCash' && booking.downPaymentAmount > 0 ? new Date(Date.now()+settings.pendingPaymentHours*3600000) : null;
+      booking.statusHistory.push({status:'confirmed',timestamp:new Date(),note:'Customer completed quote checkout.'});
+      await booking.save({session});
+      await Notification.create([{audience:'admin',type:'service_quote_checkout',recordType:'service',recordId:booking._id,
+        link:'/admin/transactions?type=services',message:[booking.serviceType,owner.firstName+' '+owner.lastName,'PHP '+amount.toFixed(2),dateKey,booking.startTime,method,booking.paymentStatus].join(' | ')}],{session});
+    });
+    res.json({serviceRequest:customerServiceRequestPayload(booking)});
+  } catch (error) { res.status(error.status || 500).json({message:error.status ? error.message : 'Checkout could not be completed. Please retry.'}); }
+  finally { await session.endSession(); }
 };
 
 const declineMechanicQuoteRequest = async (req, res) => {
@@ -1006,6 +1063,7 @@ const respondToServiceQuote = async (req, res) => {
           settings.serviceDownPaymentPercent ?? settings.downPaymentPercent
         ));
         request.quoteStatus = 'accepted';
+        request.quoteCheckout = 'awaiting';
         request.totalAmount = payment.totalAmount;
         request.estimatedPrice = payment.totalAmount;
         request.servicePriceTotal = 0;
@@ -1224,6 +1282,7 @@ module.exports = {
   submitMechanicQuote,
   declineMechanicQuoteRequest,
   respondToServiceQuote,
+  checkoutQuote,
   mechanicAcceptJob,
   updateBookingStatus,
   syncCompletedServiceBusinessRecord,
