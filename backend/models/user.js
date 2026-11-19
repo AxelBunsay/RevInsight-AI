@@ -5,7 +5,8 @@ const loginChallengeSchema = new mongoose.Schema({
   expiresAt: { type: Date, required: true },
   attempts: { type: Number, default: 0, min: 0 },
   lastSentAt: { type: Date, required: true },
-  rememberMe: { type: Boolean, default: false }
+  rememberMe: { type: Boolean, default: false },
+  sessionVersion: { type: Number, default: 0 }
 }, { _id: false });
 
 const userSchema = new mongoose.Schema({
@@ -32,6 +33,14 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Password is required'],
     minlength: 6,
     select: false // Don't return password by default
+  },
+  sessionVersion: { type: Number, default: 0 },
+  passwordRecovery: {
+    type: new mongoose.Schema({
+      digest: String, expiresAt: Date, attempts: Number, lastSentAt: Date
+    }, { _id: false }),
+    select: false,
+    default: undefined
   },
   twoFactorEnabled: {
     type: Boolean,

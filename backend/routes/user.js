@@ -10,6 +10,10 @@ const {
   validateUpdateProfile
 } = require('../middleware/validate');
 
+const recovery = require('../controllers/userControllers/passwordRecovery');
+router.post('/password-recovery/request', createLoginRateLimit(), recovery.requestCode);
+router.post('/password-recovery/reset', createLoginRateLimit(), recovery.resetPassword);
+
 // OTP Registration Flow
 router.post('/register-request', validateRegister, userController.registerRequest);
 router.post('/verify-otp', userController.verifyOtp);

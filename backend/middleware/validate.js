@@ -1,3 +1,4 @@
+const { validCustomerPassword } = require('../utils/customerPassword');
 const User = require('../models/user');
 const Mechanic = require('../models/mechanic');
 
@@ -27,7 +28,7 @@ const validateRegister = async (req, res, next) => {
   req.body.username = normalizeCustomerUsername(username);
   req.body.usernameLower = req.body.username.toLowerCase();
 
-  if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+  if (!validCustomerPassword(password)) {
     return res.status(400).json({ message: 'Password must be at least 8 characters and include a letter and a number.' });
   }
 

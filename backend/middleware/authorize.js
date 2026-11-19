@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { isDeletedCustomer, isInactiveCustomer, isInactiveMechanic } = require('./auth');
+const { customerSessionError, isInactiveMechanic } = require('./auth');
 
 const authorizeRoles = (...roles) => async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
@@ -18,12 +18,8 @@ const authorizeRoles = (...roles) => async (req, res, next) => {
 
   if (decoded.role === 'customer') {
     try {
-      if (await isDeletedCustomer(decoded.userId)) {
-        return res.status(401).json({ message: 'This customer account has been deleted.' });
-      }
-      if (await isInactiveCustomer(decoded.userId)) {
-        return res.status(401).json({ message: 'Customer account is inactive.' });
-      }
+      const message = await customerSessionError(decoded);
+      if (message) return res.status(401).json({ message });
     } catch (error) {
       console.error('[authorizeRoles] customer status check failed', error);
       return res.status(500).json({ message: 'Authentication could not be verified.' });

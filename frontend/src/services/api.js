@@ -81,6 +81,12 @@ export async function request(path, options = {}) {
 }
 
 export const api = {
+  requestCustomerReset: (email) => request('/api/users/password-recovery/request', {
+    method: 'POST', body: JSON.stringify({ email })
+  }),
+  resetCustomerPassword: (values) => request('/api/users/password-recovery/reset', {
+    method: 'POST', body: JSON.stringify(values)
+  }),
   loginCustomer: (credentials) => request('/api/users/login', {
     method: 'POST',
     body: JSON.stringify(credentials),
