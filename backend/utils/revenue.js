@@ -1,4 +1,5 @@
 const { revenueCoverage } = require('./revenueCoverage');
+const { confirmedManualOrders, inManualSalesPeriod, productName } = require('./historicalMerchandise');
 const REVENUE_TIMEZONE = 'Asia/Manila';
 const ORDER_STATUSES = ['completed', 'Paid'];
 const REVENUE_AI_CHART_TYPES = [
@@ -64,6 +65,8 @@ function buildRevenuePipelines({ startDate, endDate } = {}) {
           revenue: { $ifNull: ['$totalPrice', '$totalAmount'] },
           ...dateFields('createdAt'),
           items: 1,
+          isSampleData: 1,
+          orNumber: 1,
           source: { $literal: 'order' }
         }
       }
@@ -129,7 +132,18 @@ function getManilaDateParts(value) {
   };
 }
 
-function normalizeRevenueSources({ orders = [], reservations = [], services = [], productCategories = {} }) {
+function knownCategory(value) {
+  const category = typeof value === 'string' ? value.trim() : '';
+  return category && category.toLowerCase() !== 'uncategorized' ? category : null;
+}
+
+function serviceLine(item) {
+  if (item?.recordType === 'product') return false;
+  return item?.recordType === 'service' || Boolean(item?.serviceId || item?.serviceType)
+    || ['services', 'labor service'].includes(String(item?.category || '').trim().toLowerCase());
+}
+
+function normalizeRevenueSources({ orders = [], reservations = [], services = [], productCategories = {}, productNames = {}, manualOrders = new Set() }) {
   const sourceRows = [
     ...orders.map((row) => ({ ...row, source: 'order' })),
     ...reservations.map((row) => ({ ...row, source: 'reservation' })),
@@ -153,10 +167,11 @@ function normalizeRevenueSources({ orders = [], reservations = [], services = []
       return [{
         ...parts,
         source: row.source,
+        revenueType: 'service',
         recordId: String(row._id || `${row.source}:${row.dateLabel}:${row.serviceType || ''}`),
         revenue,
-        name: row.serviceType || 'Service',
-        contributorType: 'Labor service',
+        name: row.serviceType?.trim() || 'Service',
+        contributorType: row.serviceType?.trim() ? 'Labor service' : 'Uncategorized',
         category: null,
         serviceCategory: row.serviceCategory,
         quoteStatus: row.quoteStatus,
@@ -165,18 +180,27 @@ function normalizeRevenueSources({ orders = [], reservations = [], services = []
     }
 
     const items = Array.isArray(row.items) ? row.items : [];
-    const lineValues = items.map((item) => Number(
-      row.source === 'reservation'
-        ? item.lineTotal ?? (Number(item.unitPrice || 0) * Number(item.qty || 0))
-        : Number(item.price || 0) * Number(item.quantity || 0)
-    ));
-    const lineTotal = lineValues.reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
-    if (!items.length || lineTotal <= 0) {
+    const manualMerchandise = row.source === 'order' && inManualSalesPeriod(parts.dateLabel)
+      && manualOrders.has(String(row._id)) && !items.some(item => serviceLine(item) || item?.recordType === 'mixed');
+    const lineValues = items.map(item => {
+      if (!item) return NaN;
+      const reservation = row.source === 'reservation';
+      if (reservation && item.lineTotal != null && item.lineTotal !== '') return Number(item.lineTotal);
+      const price = reservation ? item.unitPrice : item.price;
+      const quantity = reservation ? item.qty : item.quantity;
+      return price != null && price !== '' && Number(quantity) > 0 ? Number(price) * Number(quantity) : NaN;
+    });
+    const lineTotal = lineValues.reduce((sum, value) => sum + value, 0);
+    // Without all line weights, allocating the whole sale across the remaining
+    // items would silently attribute unknown revenue to those contributors.
+    if (!Number.isFinite(lineTotal) || lineTotal <= 0 || lineValues.some(value => value < 0)) {
       return [{
         ...parts,
         source: row.source,
         recordId: String(row._id || `${row.source}:${row.dateLabel}`),
         revenue,
+        revenueType: manualMerchandise ? 'item' : 'unknown',
+        manualMerchandise,
         name: row.source === 'order' ? 'Product sales' : 'Reserved products',
         contributorType: 'Uncategorized',
         category: 'Uncategorized'
@@ -184,20 +208,31 @@ function normalizeRevenueSources({ orders = [], reservations = [], services = []
     }
 
     return items.map((item, index) => {
-      const productCategory = productCategories[String(item.productId)];
-      const fallbackCategory = (item.category || productCategory) || 'Uncategorized';
-      const amount = Number.isFinite(lineValues[index]) && lineValues[index] > 0
-        ? revenue * lineValues[index] / lineTotal
-        : 0;
-      return {
+      const reference = String(item.productId || '');
+      const productId = /^[0-9a-f]{24}$/i.test(reference) || Object.hasOwn(productNames, reference) || Object.hasOwn(productCategories, reference)
+        ? reference : null;
+      const category = knownCategory(item.category) || knownCategory(productCategories[productId]) || 'Uncategorized';
+      const snapshotName = row.source === 'order' ? item.productName || item.name : item.name || item.productName;
+      const name = productName(snapshotName) || productName(productNames[productId]);
+      const entry = {
         ...parts,
         source: row.source,
         recordId: String(row._id || `${row.source}:${row.dateLabel}`),
-        revenue: amount,
-        name: row.source === 'order' ? item.productName || item.name : item.name || item.productName,
-        contributorType: fallbackCategory,
-        category: fallbackCategory
+        revenue: revenue * lineValues[index] / lineTotal,
+        name: name || snapshotName,
+        manualMerchandise
       };
+      if (item.recordType === 'mixed') return {
+        ...entry, revenueType:'mixed', category:'Uncategorized', contributorType:'Uncategorized'
+      };
+      if (serviceLine(item)) return {
+        ...entry, revenueType:'service', category:'Services', name:item.serviceType || snapshotName,
+        contributorType:item.serviceType || name ? 'Labor service' : 'Uncategorized'
+      };
+      const itemSale = manualMerchandise || row.source === 'reservation' || item.recordType === 'product'
+        || name || productId || category !== 'Uncategorized' && category.toLowerCase() !== 'unknown';
+      return { ...entry, category, contributorType:name ? category : 'Uncategorized',
+        revenueType:itemSale ? 'item' : 'unknown', productId, productName:name };
     });
   });
 }
@@ -250,7 +285,7 @@ function groupRevenueByCategory(entries) {
 function groupRevenueContributors(entries) {
   const groups = new Map();
   entries.forEach((entry) => {
-    const type = entry.source === 'service' ? 'Labor service' : entry.contributorType || 'Uncategorized';
+    const type = entry.contributorType || (entry.source === 'service' ? 'Labor service' : 'Uncategorized');
     const name = entry.name || (entry.source === 'service' ? 'Service' : 'Product sales');
     const key = `${type}:${name}`;
     const group = groups.get(key) || { name, revenue: 0, contributorType: type };
@@ -385,7 +420,13 @@ function getCompletedQuarterRows(quarterlyRows, now = new Date()) {
       || Number(left._id.quarter) - Number(right._id.quarter));
 }
 
-function buildRevenueChartData(type, entries, quarterlyRows, now = new Date(), scope = null) {
+function buildRevenueChartData(type, entries, quarterlyRows, now = new Date(), scope = null, salesMix = null) {
+  if (type === 'top_products') {
+    const products = salesMix?.products.slice(0, 5);
+    if (!products?.length) return null;
+    return { type: 'top_contributors', title: 'Identified products · ' + (scope?.label || 'All records'),
+      labels: products.map(row => row.name), datasets: [{ label: 'Product revenue', data: products.map(row => row.revenue) }] };
+  }
   if (scope && ['category_share', 'top_contributors'].includes(type)) {
     const rows = type === 'category_share' ? groupRevenueByCategory(entries) : groupRevenueContributors(entries).filter(row => row.contributorType !== 'Uncategorized').slice(0, 5);
     const total = rows.reduce((sum, row) => sum + row.revenue, 0);
@@ -600,12 +641,13 @@ async function getRevenueEntries({ Order, Reservation, ServiceRequest, Product, 
     Reservation.aggregate(pipelines.reservations),
     ServiceRequest.aggregate(pipelines.services)
   ]);
-  const productIds = [...orders, ...reservations].flatMap((record) => (record.items || [])
-    .map((item) => item.productId)
-    .filter(Boolean));
+  const productIds = [...orders, ...reservations].flatMap((record) => (Array.isArray(record.items) ? record.items : [])
+    .map((item) => item?.productId)
+    .filter(id => /^[0-9a-f]{24}$/i.test(String(id))));
   const products = productIds.length
-    ? await Product.find({ _id: { $in: productIds } }).select('_id category').lean()
+    ? await Product.find({ _id: { $in: productIds } }).select('_id name category').lean()
     : [];
+  const manualOrders = await confirmedManualOrders(orders);
   const productCategories = Object.fromEntries(products.map((product) => [
     String(product._id),
     product.category
@@ -614,7 +656,9 @@ async function getRevenueEntries({ Order, Reservation, ServiceRequest, Product, 
     orders: orders.map((row) => ({ ...row, source: 'order' })),
     reservations: reservations.map((row) => ({ ...row, source: 'reservation' })),
     services: services.map((row) => ({ ...row, source: 'service' })),
-    productCategories
+    productCategories,
+    manualOrders,
+    productNames: Object.fromEntries(products.map(product => [String(product._id), product.name]))
   });
 }
 

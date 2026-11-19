@@ -1,6 +1,7 @@
 const { revenueCoverage } = require('./revenueCoverage');
+const { summarizeSalesMix } = require('./historicalMerchandise');
 const {
-  groupRevenueContributors, groupRevenueByPeriod, calculateRevenueRisk,
+  groupRevenueByPeriod, calculateRevenueRisk,
   getRevenueRiskLevel, REVENUE_RISK_THRESHOLDS
 } = require('./revenue');
 
@@ -34,22 +35,32 @@ function buildScopedRevenue(allEntries, input = {}, now = new Date()) {
   const coverage = revenueCoverage(entries, scope, now);
   const quarters = groupRevenueByPeriod(allEntries, 'quarter');
   const risk = calculateRevenueRisk(entries, quarters, now);
-  const totalRevenue = entries.reduce((sum, row) => sum + row.revenue, 0);
-  const ranked = groupRevenueContributors(entries).filter(row => row.contributorType !== 'Uncategorized' && row.revenue > 0);
-  const analyzedRevenue = ranked.reduce((sum, row) => sum + row.revenue, 0);
-  const share = amount => analyzedRevenue ? amount / analyzedRevenue * 100 : null;
+  const { totalRevenue, contributors } = risk;
+  const salesMix = summarizeSalesMix(entries, totalRevenue);
+  const analyzedRevenue = contributors.reduce((sum, row) => sum + row.revenue, 0);
   const round = (number, digits) => number == null ? null : Number(number.toFixed(digits));
-  const contributors = ranked.map(row => ({ ...row, share: round(share(row.revenue), 2) }));
-  const topOneShare = round(share(ranked[0]?.revenue || 0), 2);
-  const topThreeShare = round(share(ranked.slice(0, 3).reduce((sum, row) => sum + row.revenue, 0)), 2);
-  const hhi = analyzedRevenue ? round(ranked.reduce((sum, row) => sum + (row.revenue / analyzedRevenue) ** 2, 0), 4) : null;
+  const classified = amount => ({ amount, percentOfEligible: totalRevenue > 0 ? round(100 * amount / totalRevenue, 2) : null });
+  const classification = {
+    contributors: classified(analyzedRevenue),
+    categories: classified(risk.riskByCategory.reduce((sum, row) => sum + row.revenue, 0))
+  };
+  const topOneShare = risk.indicators.topContributorShare.value;
+  const topThreeRevenue = contributors.slice(0, 3).reduce((sum, row) => sum + row.revenue, 0);
+  const topThreeShare = analyzedRevenue ? round(topThreeRevenue / analyzedRevenue * 100, 2) : null;
+  const hhi = risk.indicators.concentrationHhi.value;
   const levels = ['Normal', 'Moderate', 'High'];
   const concentrationLevel = analyzedRevenue ? [
     getRevenueRiskLevel('concentrationHhi', hhi),
     getRevenueRiskLevel('topContributorShare', topOneShare)
   ].sort((a, b) => levels.indexOf(b) - levels.indexOf(a))[0] : 'Not enough data';
+  let unavailableReason = null;
+  if (!analyzedRevenue) {
+    if (coverage.empty) unavailableReason = 'No eligible transactions were recorded in this scope.';
+    else if (totalRevenue === 0) unavailableReason = 'Eligible transactions in this scope total zero revenue.';
+    else unavailableReason = salesMix.productNotice || 'None of the eligible revenue can be attributed to a classified product or service.';
+  }
   const concentration = {
-    scope, coverage, totalRevenue, analyzedRevenue, uncategorized: risk.uncategorized, contributors,
+    scope, coverage, totalRevenue, analyzedRevenue, classification, salesMix, unavailableReason, uncategorized: risk.uncategorized, contributors,
     indicators: { topOneShare, topThreeShare, hhi, concentrationLevel, thresholds: REVENUE_RISK_THRESHOLDS },
     dependentOnLimitedContributors: ['Moderate', 'High'].includes(concentrationLevel)
   };
@@ -57,20 +68,27 @@ function buildScopedRevenue(allEntries, input = {}, now = new Date()) {
   // selected-scope concentration classification.
   risk.scope = scope;
   risk.coverage = coverage;
-  risk.contributors = contributors;
-  risk.indicators.concentrationHhi = { value: hhi, level: analyzedRevenue ? getRevenueRiskLevel('concentrationHhi', hhi) : 'Not enough data' };
-  risk.indicators.topContributorShare = { value: topOneShare, level: analyzedRevenue ? getRevenueRiskLevel('topContributorShare', topOneShare) : 'Not enough data' };
-  risk.overallRisk = { level: concentrationLevel, reason: 'concentration of recorded revenue in ' + scope.label };
+  for (const key of ['concentrationHhi', 'topContributorShare']) {
+    const indicator = risk.indicators[key];
+    indicator.level = analyzedRevenue ? getRevenueRiskLevel(key, indicator.value) : 'Not enough data';
+    indicator.reason = unavailableReason;
+  }
+  risk.overallRisk = { level: concentrationLevel, reason: unavailableReason || 'concentration of classified contributor revenue in ' + scope.label };
   const records = new Map();
   for (const row of entries) {
     const key = row.source + ':' + row.recordId;
     const record = records.get(key) || {
       _id: key, sourceId: row.recordId, recordType: row.source === 'service' ? 'service' : 'item',
-      completedAt: row.dateLabel + 'T00:00:00+08:00', itemNames: new Set(), amount: 0, status: 'completed'
+      completedAt: row.dateLabel + 'T00:00:00+08:00', itemNames: new Set(), types: new Set(), amount: 0, status: 'completed'
     };
-    record.itemNames.add(row.name);record.amount += row.revenue;records.set(key, record);
+    record.types.add(row.revenueType || record.recordType);
+    record.itemNames.add(row.manualMerchandise && !row.productName && !row.productId ? 'Product breakdown unavailable' : row.name);
+    record.amount += row.revenue;
+    records.set(key, record);
   }
-  const reportRecords = [...records.values()].map(({ itemNames, ...row }) => ({ ...row, itemName: [...itemNames].join(', ') }));
+  const reportRecords = [...records.values()].map(({ itemNames, types, ...row }) => ({
+    ...row, recordType: types.size === 1 ? [...types][0] : 'mixed', itemName: [...itemNames].join(', ')
+  }));
   return { scope, coverage, concentration, risk, quarters, entries, reportRecords };
 }
 

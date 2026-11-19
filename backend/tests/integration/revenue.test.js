@@ -5,6 +5,7 @@ import supertest from 'supertest';
 const require = createRequire(import.meta.url);
 const {
   app,
+  BusinessRecord,
   Order,
   Reservation,
   ServiceRequest,
@@ -367,6 +368,51 @@ describe('revenue integration', () => {
     }
     expect((await api.get('/api/dashboard/analytics/scoped-revenue')).status).toBe(401);
     expect((await api.get('/api/dashboard/analytics/scoped-revenue?scope=selectedQuarter').set('Authorization','Bearer '+adminToken)).status).toBe(400);
+  });
+
+  it('classifies only the linked manual source inside the Manila dates and counts each receipt once', async () => {
+    const generic = { productName:'Daily sales (historical record)', category:'Uncategorized', price:100, quantity:1 };
+    async function add(date, receipt, options = {}) {
+      const items = options.items || [generic];
+      const { insertedId } = await Order.collection.insertOne({
+        createdAt:new Date(date), status:'completed', orNumber:receipt, isSampleData:!!options.sample,
+        items, totalPrice:items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      });
+      const year = date.slice(0,4);
+      if (!options.unlinked) await BusinessRecord.collection.insertOne({
+        sourceId:insertedId, recordType:'product', laborFee:0, isSampleData:!!options.sample,
+        notes:options.note || `HISTORICAL RECORD ${year} - ORD ${receipt} / ${receipt + 1}`
+      });
+    }
+    await add('2021-12-31T23:59:59+08:00',1);
+    await add('2022-01-01T00:00:00+08:00',2);
+    await add('2026-03-31T23:59:59+08:00',3);
+    await add('2026-04-01T00:00:00+08:00',4);
+    await add('2026-03-21T12:00:00+08:00',5,{sample:true});
+    await add('2026-03-22T12:00:00+08:00',6,{unlinked:true});
+    await add('2026-03-23T12:00:00+08:00',7,{note:'HISTORICAL RECORD 2026 - ORD 999'});
+    await add('2026-03-24T12:00:00+08:00',8,{items:[
+      {productName:'Pads',price:60,quantity:1}, {serviceType:'Fitting',price:40,quantity:1}
+    ]});
+    await add('2026-03-25T12:00:00+08:00',9,{items:['Item sales','Unknown','Uncategorized'].map(productName =>
+      ({ productName, category:'Uncategorized', price:10, quantity:1 }))});
+    const fetchScope = async query => {
+      const response = await api.get('/api/dashboard/analytics/scoped-revenue').query(query).set('Authorization','Bearer '+adminToken);
+      expect(response.status).toBe(200);
+      return response.body.data;
+    };
+    const march = await fetchScope({scope:'selectedQuarter',selectedQuarter:'2026-Q1'});
+    expect(march.concentration.salesMix).toMatchObject({manualItemSales:130,itemSales:190,knownProductRevenue:60,serviceRevenue:40,
+      unclassifiedRevenue:300, products:[{name:'Pads',revenue:60}], topOneShare:100, hhi:1});
+    expect(march.reportRecords.find(row=>row.recordType==='mixed')).toMatchObject({amount:100,itemName:'Pads, Fitting'});
+    const april = await fetchScope({scope:'selectedQuarter',selectedQuarter:'2026-Q2'});
+    expect(april.concentration.salesMix).toMatchObject({manualItemSales:0,itemSales:0,unclassifiedRevenue:100,serviceNotice:null});
+    const all = await fetchScope({scope:'allRecords'});
+    expect(all.concentration.salesMix).toMatchObject({manualItemSales:230,knownProductRevenue:60,percentOfEligible:7.23,
+      itemSales:290,serviceRevenue:40,unclassifiedRevenue:500});
+    expect(all.concentration.totalRevenue).toBe(830);
+    expect(all.reportRecords).toHaveLength(9);
+    expect(all.reportRecords.reduce((sum,row)=>sum+row.amount,0)).toBe(830);
   });
 
 });

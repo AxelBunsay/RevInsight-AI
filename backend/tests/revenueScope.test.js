@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { buildScopedRevenue, resolveRevenueScope } = require('../utils/revenueScope');
-const { buildRevenueChartData } = require('../utils/revenue');
+const { buildRevenueChartData, normalizeRevenueSources } = require('../utils/revenue');
 const { gatherRevenueAnalysisData, getRevenueCardInsights, askRevenueAI } = require('../controllers/adminControllers/aiController');
 const entries = [[2, [4000,3000,2000,1000]], [3,[6000,2500,1000,500]]].flatMap(([quarter,amounts]) =>
   amounts.map((revenue,i) => ({ year:2026, quarter, month:quarter*3-1, dateLabel:'2026-'+(quarter===2?'05':'08')+'-15', source:'order', recordId:quarter+':'+i, name:['Pads','Battery','Cable','Labor'][i], contributorType:i===3?'Labor service':'Parts', revenue })));
@@ -13,6 +13,60 @@ const dashboard = { getDashboardStats:ok({}),getQuarterlyData:ok([]),getRevenueR
 const card = {summary:'Recorded figures.',recommendation:'Review the mix.',ifFollowed:'Risk may change.',ifIgnored:'Risk could persist.'};
 const insights=Object.fromEntries(['trend','risk','concentration','service','forecast'].map(k=>[k,card]));
 describe('one revenue scope for dashboard, export and AI',()=>{
+ it('preserves an unsplit mixed sale and keeps it out of a product ranking',async()=>{
+   const rows = normalizeRevenueSources({orders:[{_id:'mixed',createdAt:'2024-01-01',totalPrice:100,
+     items:[{recordType:'mixed',name:'Parts and installation',price:80,quantity:1},
+       {productName:'Pads',price:20,quantity:1}]}],manualOrders:new Set(['mixed'])});
+   const data = buildScopedRevenue(rows);
+   expect(data.concentration.salesMix).toMatchObject({itemSales:20,mixedRevenue:80,knownProductRevenue:20,manualItemSales:0});
+   expect(data.reportRecords).toMatchObject([{amount:100,recordType:'mixed',itemName:'Parts and installation, Pads'}]);
+   const chart = buildRevenueChartData('top_products',rows,data.quarters,new Date(),data.scope,data.concentration.salesMix);
+   expect(chart.labels).toEqual(['Pads']);
+   expect(chart.datasets[0].data).toEqual([20]);
+ });
+ it('explains daily totals, zero revenue and absent transactions separately',()=>{
+   const historical = { ...entries[0], name:'Daily sales (historical record)', contributorType:'Uncategorized', category:'Uncategorized' };
+   for (const [rows, reason, percent] of [
+     [[historical], 'classified product or service', 0],
+     [[{...historical, revenue:0}], 'total zero revenue', null],
+     [[], 'No eligible transactions', null]
+   ]) {
+     const {risk, concentration} = buildScopedRevenue(rows, {scope:'selectedQuarter', selectedQuarter:'2026-Q2'});
+     expect(concentration.unavailableReason).toContain(reason);
+     expect(risk.overallRisk.reason).toBe(concentration.unavailableReason);
+     expect(concentration.classification.contributors).toEqual({amount:0, percentOfEligible:percent});
+     expect(concentration.indicators).toMatchObject({hhi:null, topOneShare:null, topThreeShare:null});
+   }
+ });
+ it('keeps the sale total once and uses each metric’s classified denominator',()=>{
+   const rows = normalizeRevenueSources({orders:[{_id:'one', createdAt:'2024-10-01', totalPrice:80, items:[
+     {productId:'known', category:'Uncategorized', price:10, quantity:2},
+     {productName:'Oil', category:'Fluids', price:10, quantity:1},
+     {category:'Parts', price:30, quantity:1},
+     {productName:'Daily sales (historical record)', category:'Uncategorized', price:20, quantity:1}
+   ]}], productCategories:{known:'Parts'}, productNames:{known:'Pads'}});
+   const {risk, coverage, concentration} = buildScopedRevenue(rows,{scope:'selectedQuarter',selectedQuarter:'2024-Q4'});
+   expect(coverage.includedTransactions).toBe(1);
+   expect(concentration.totalRevenue).toBe(80);
+   expect(concentration.classification).toEqual({contributors:{amount:30,percentOfEligible:37.5},categories:{amount:60,percentOfEligible:75}});
+   expect(concentration.contributors[0].name).toBe('Pads');
+   expect(concentration.indicators).toMatchObject({topOneShare:66.67,topThreeShare:100,hhi:0.5556,concentrationLevel:'High'});
+   expect(risk.riskByCategory[0].percentage).toBeCloseTo(100*50/60);
+ });
+ it('keeps sales with incomplete line weights and unnamed labor out of contributor rankings',()=>{
+   const date = '2024-11-01';
+   const rows = normalizeRevenueSources({
+     orders:[{_id:'sale', createdAt:date, totalPrice:80, items:[
+       {productName:'Pads', category:'Parts', price:20, quantity:1}, {quantity:1}
+     ]}],
+     services:[{_id:'labor', completedAt:date, estimatedPrice:20}]
+   });
+   const {concentration, coverage} = buildScopedRevenue(rows);
+   expect(coverage.includedTransactions).toBe(2);
+   expect(concentration.totalRevenue).toBe(100);
+   expect(concentration.classification).toEqual({contributors:{amount:0,percentOfEligible:0},categories:{amount:20,percentOfEligible:20}});
+   expect(concentration.indicators.hhi).toBeNull();
+ });
  it('independently matches equal-total, different-mix quarters and all records',async()=>{
   for(const [scope,selectedQuarter,topOneShare,topThreeShare,hhi] of [
    ['selectedQuarter','2026-Q2',40,90,.3],['selectedQuarter','2026-Q3',60,95,.435],['allRecords','2026-Q3',50,92.5,.35375]

@@ -31,6 +31,7 @@ const {
   getManilaDateParts
 } = require('../../utils/revenue');
 const { buildServiceRevenueReport } = require('../../utils/serviceRevenue');
+const { summarizeSalesMix } = require('../../utils/historicalMerchandise');
 const { normalizeServiceCategory } = require('../../utils/serviceCategories');
 const { getAvailableStock, isLowStock } = require('../../utils/inventory');
 const { evaluateLowStockAlert } = require('../../utils/lowStockAlerts');
@@ -95,6 +96,7 @@ const getRevenueConcentration = async (req, res) => {
       success: true,
       data: {
         totalRevenue: data.totalRevenue,
+        salesMix: summarizeSalesMix(entries, data.totalRevenue),
         analyzedRevenue: data.totalRevenue - data.uncategorized.revenue,
         uncategorized: data.uncategorized,
         contributors: data.contributors,
