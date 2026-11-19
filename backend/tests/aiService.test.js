@@ -41,6 +41,29 @@ function createFakeClient(replies) {
 }
 
 describe('AI revenue insight generation', () => {
+  it('gives the recorded total and missing tracking context in historical fallback insights', () => {
+    const mix = { itemSales:13440, knownProductRevenue:0, productNotice:'Product breakdown unavailable',
+      serviceNotice:'Services were not tracked during this period.' };
+    const cards = buildTemplateCardInsights({revenueConcentration:{salesMix:mix}});
+    expect(cards.concentration.summary).toContain('₱13,440');
+    expect(cards.concentration.summary).toContain(mix.productNotice);
+    expect(cards.service.summary).toBe(mix.serviceNotice);
+    expect(isValidCardInsights(cards)).toBe(true);
+  });
+  it('supplies the same historical interpretation to question and card models', async () => {
+    const client = createFakeClient(['Recorded item sales.', JSON.stringify(validInsights())]);
+    const options = {client:client.client, modelNames:['test-model']};
+    const data = {revenueConcentration:{salesMix:{itemSales:13440, knownProductRevenue:0,
+      products:[], percentOfEligible:0, productNotice:'Product breakdown unavailable',
+      serviceNotice:'Services were not tracked during this period.'}}};
+    await generateRevenueInsights('What products contributed?', data, options);
+    await generateCardInsights(data, options);
+    for (const config of client.configurations) {
+      expect(config.systemInstruction).toContain('Rank only salesMix.products');
+      expect(config.systemInstruction).toContain('never infer zero service sales');
+    }
+    expect(await generateRevenueChartType('Rank products')).toBe('top_products');
+  });
   it('returns validated JSON insights for every revenue card', async () => {
     const fake = createFakeClient([JSON.stringify(validInsights())]);
 

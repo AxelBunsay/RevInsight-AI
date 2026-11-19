@@ -5,6 +5,7 @@ const { logRevenueAIFailure, revenueAIError, newRevenueAIRequestId } = require('
 const gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const CARD_INSIGHT_KEYS = ['trend', 'risk', 'concentration', 'service', 'forecast'];
 const CARD_INSIGHT_FIELDS = ['summary', 'recommendation', 'ifFollowed', 'ifIgnored'];
+const salesMixInstruction = 'Use salesMix in the requested scope for revenue types and product concentration. Item sales is a revenue type. Rank only salesMix.products and use its topOneShare, topThreeShare and hhi for products. State knownProductRevenue and percentOfEligible when explaining the product breakdown. When productNotice is present, give the recorded itemSales total with “Product breakdown unavailable”. Use serviceNotice to describe untracked services; never infer zero service sales from untracked records. For scopes spanning both sources, distinguish manualWithoutProductBreakdown from identifiable products and separately recorded services.';
 
 const wait = (milliseconds) =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -51,6 +52,7 @@ function buildTemplateCardInsights(analysisData = {}) {
   const indicators = analysisData.riskLevels || analysisData.revenueRisk?.indicators || {};
   const overallRisk = analysisData.overallRisk || analysisData.revenueRisk?.overallRisk || {};
   const contributors = analysisData.revenueConcentration?.contributors || [];
+  const mix = analysisData.revenueConcentration?.salesMix;
   const topService = contributors.find((item) => /service/i.test(item.contributorType));
   const forecast = analysisData.officialForecast || analysisData.revenueRisk?.officialForecast;
   const qoqValue = formatMetric(indicators.qoqChange?.value, '%');
@@ -74,19 +76,24 @@ function buildTemplateCardInsights(analysisData = {}) {
     trend: qoqValue
       ? `Completed-quarter revenue changed ${qoqValue}; the risk level is ${riskLevels.trend}.`
       : 'Not enough data yet to calculate completed-quarter revenue change.',
-    risk: overallRisk.level
+    risk: analysisData.revenueConcentration?.unavailableReason || (overallRisk.level
       ? `Overall revenue risk is ${overallRisk.level}${overallRisk.reason ? `, driven by ${briefLabel(overallRisk.reason)}.` : '.'}`
-      : 'Not enough data yet to calculate overall revenue risk.',
+      : 'Not enough data yet to calculate overall revenue risk.'),
     concentration: hhiValue && contributorShare
       ? `Revenue concentration HHI is ${hhiValue}, and the top contributor share is ${contributorShare} (${riskLevels.concentration} risk).`
       : 'Not enough data yet to describe revenue concentration.',
-    service: topService && topServiceShare
+    service: mix?.serviceNotice || (topService && topServiceShare
       ? `The leading service contributor is ${topServiceName}, representing ${topServiceShare} of categorized revenue.`
-      : 'Not enough data yet to describe service revenue contribution.',
+      : 'Not enough data yet to describe service revenue contribution.'),
     forecast: forecastChange && forecast?.targetLabel && forecastValue
       ? `The official forecast for ${briefLabel(forecast.targetLabel)} is ${forecastValue}, ${forecastChange} versus the four-quarter average (${riskLevels.forecast} risk).`
       : 'Not enough data yet to compare the official forecast with the four-quarter average.'
   };
+  if (mix?.productNotice) {
+    summaries.concentration = `Item sales · ₱${formatMetric(mix.itemSales)} · ${mix.productNotice}`;
+  } else if (mix?.knownProductRevenue > 0) {
+    summaries.concentration = `Identified products account for ₱${formatMetric(mix.knownProductRevenue)} (${mix.percentOfEligible}% of eligible revenue). Product HHI is ${mix.hhi}.`;
+  }
   const topics = {
     trend: 'quarter-over-quarter revenue momentum',
     risk: 'the overall revenue risk driver',
@@ -190,6 +197,7 @@ async function generateRevenueInsights(question, revenueData, dependencies = {})
   const modelNames = dependencies.modelNames || getModelNames();
   const systemInstruction = `
 You are a revenue analyst for a motorcycle parts shop.
+${salesMixInstruction}
 Answer using only supplied revenue data. Respect analysisScopes and revenueConcentration.scope: concentration and overallRisk use the explicitly selected scope, either Selected quarter or All records. selectedQuarter is separate quarter context. Trend and officialForecast use all recorded completed-quarter history and must be labeled separately. Never present all-records shares as selected-quarter shares. Never invent or infer a number that is not present in the data. Coverage is unverified: missing transactions do not establish zero sales or a complete quarter. Explain this limitation when comparing quarters, describing a decline or discussing projections.
 Always format monetary amounts as Philippine pesos with thousands separators (for example ₱25,390); never use $ or USD.
 Keep the answer concise and use only the supplied Normal, Moderate, and High risk labels and their supplied thresholds.
@@ -234,6 +242,7 @@ async function generateRevenueChartType(question) {
   const text = String(question || '').toLowerCase();
   if (!/\b(show|chart|plot|graph|compare|comparison|trend|ranking|rank)\b/.test(text)) return null;
   if (/\b(category|categories)\b/.test(text)) return 'category_share';
+  if (/\b(products?|items?)\b/.test(text) && /\b(rank|ranking|top|leading|concentration|breakdown)\b/.test(text)) return 'top_products';
   if (/\b(contributor|contributors|ranking|rank)\b/.test(text)) return 'top_contributors';
   if (/\b(compare|comparison)\b/.test(text)) return 'quarter_comparison';
   if (/\b(trend|quarterly)\b/.test(text)) return 'quarterly_trend';
@@ -247,6 +256,7 @@ async function generateCardInsights(analysisData, dependencies = {}) {
   const requestId = dependencies.requestId || newRevenueAIRequestId();
   const systemInstruction = `
 You write concise revenue-card insights for a motorcycle shop owner.
+${salesMixInstruction}
 Use only the supplied computed numbers, risk labels, and thresholds. Respect analysisScopes and revenueConcentration.scope: concentration, service and risk cards use the selected scope, either Selected quarter or All records. Trend and forecast use all-records completed-quarter history and must be labeled separately. selectedQuarter is separate context. Never invent figures, products, or dates.
 Coverage is unknown unless explicitly certified. In trend summaries, comparisons and decline warnings, say that coverage is unverified. No records does not prove zero sales.\nReturn a JSON object with exactly these card keys: ${CARD_INSIGHT_KEYS.join(', ')}.
 Each card value must contain exactly four string properties: summary, recommendation, ifFollowed, and ifIgnored.

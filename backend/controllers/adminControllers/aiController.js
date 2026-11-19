@@ -1,4 +1,5 @@
 const { resolveRevenueScope } = require('../../utils/revenueScope');
+const { summarizeSalesMix } = require('../../utils/historicalMerchandise');
 const { createHash } = require('crypto');
 const {
   CARD_INSIGHT_FIELDS,
@@ -105,10 +106,10 @@ function quarterRevenueContext(entries, period) {
   const analyzedRevenue = contributors.reduce((sum, row) => sum + row.revenue, 0);
   const fraction = value => analyzedRevenue ? value / analyzedRevenue : 0;
   return {
-    ...period, totalRevenue, analyzedRevenue,
+    ...period, totalRevenue, analyzedRevenue, salesMix: summarizeSalesMix(rows, totalRevenue),
     contributors: contributors.map(row => ({ ...row, share: Number((fraction(row.revenue) * 100).toFixed(2)) })),
-    topOneShare: Number((fraction(contributors[0]?.revenue || 0) * 100).toFixed(2)),
-    topThreeShare: Number((fraction(contributors.slice(0, 3).reduce((sum, row) => sum + row.revenue, 0)) * 100).toFixed(2)),
+    topOneShare: analyzedRevenue ? Number((fraction(contributors[0]?.revenue || 0) * 100).toFixed(2)) : null,
+    topThreeShare: analyzedRevenue ? Number((fraction(contributors.slice(0, 3).reduce((sum, row) => sum + row.revenue, 0)) * 100).toFixed(2)) : null,
     hhi: analyzedRevenue ? Number(contributors.reduce((sum, row) => sum + fraction(row.revenue) ** 2, 0).toFixed(4)) : null
   };
 }
@@ -202,7 +203,8 @@ async function askRevenueAI(req, res, dependencies = {}) {
     }
     if (chartType) {
       try {
-        chart = buildRevenueChartData(chartType, chartEntries, revenueData.quarterly, now, revenueData.revenueConcentration.scope);
+        const { scope, salesMix } = revenueData.revenueConcentration;
+        chart = buildRevenueChartData(chartType, chartEntries, revenueData.quarterly, now, scope, salesMix);
       } catch (chartError) {
         console.error('[askRevenueAI] chart data error', chartError);
       }
