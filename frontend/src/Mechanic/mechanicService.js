@@ -71,11 +71,14 @@ const paidStatuses = ['Confirmed', 'Paid at shop'];
 export function isWaitingForPaymentConfirmation(job) {
   const canAccept = (job.status === 'pending' && !job.mechanic && !job.mechanicId)
     || job.status === 'confirmed';
-  return canAccept && !paidStatuses.includes(job.paymentStatus);
+  return canAccept && job.quoteCheckout !== 'pay-at-shop' && !paidStatuses.includes(job.paymentStatus);
 }
 
 export function getJobActions(job) {
   if (job.quoteStatus === 'quote_requested' || job.status === 'quote_requested') return ['quote', 'decline-quote'];
+  if (job.quoteCheckout === 'awaiting' || job.quoteStatus === 'quoted') return [];
+  if (job.status === 'confirmed' && job.quoteCheckout) return job.quoteCheckout === 'pay-at-shop' || paidStatuses.includes(job.paymentStatus) ? ['start'] : [];
+  if ((job.walkInId || job.queueKey) && !paidStatuses.includes(job.paymentStatus)) return [];
   const actions = (job.status === 'pending' && !job.mechanic && !job.mechanicId)
     ? ['accept']
     : ({

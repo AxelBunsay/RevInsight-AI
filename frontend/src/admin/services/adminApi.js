@@ -291,6 +291,8 @@ export const adminApi = {
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return request(`/api/service-requests${suffix}`);
   },
+  getPosInventory: getInventoryItems,
+  walkIn: (suffix = '', body) => request('/api/dashboard/walk-ins' + suffix, body === undefined ? {} : { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body) }),
   getServices: () => request('/api/admin/services', { cache: 'no-store' }),
   getReservationSettings: () => request('/api/admin/reservations/settings'),
   updateReservationSettings: (settings) => request('/api/admin/reservations/settings', { method: 'PUT', body: JSON.stringify(settings) }),
@@ -320,7 +322,8 @@ export const adminApi = {
   },
   getReservationReceipts: (id) => request(`/api/admin/reservations/${encodeURIComponent(id)}/receipts`),
   getServiceRequestReceipts: (id) => request(`/api/service-requests/${encodeURIComponent(id)}/payment-receipts`),
-  confirmReservation: (id) => request(`/api/admin/reservations/${id}/confirm`, { method: 'POST' }),
+  collectServiceDeposit: id => request(`/api/admin/service-requests/${id}/cash-deposit`, { method: 'POST' }),
+  confirmReservation: (id, cashReceived = false) => request(`/api/admin/reservations/${id}/confirm`, { method: 'POST', body: JSON.stringify({ cashReceived }) }),
   rejectReservation: (id, reason) => request(`/api/admin/reservations/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   confirmServicePayment: (id) => request(`/api/admin/service-requests/${id}/confirm-payment`, { method: 'POST' }),
   rejectServicePayment: (id, reason) => request(`/api/admin/service-requests/${id}/reject-payment`, { method: 'POST', body: JSON.stringify({ reason }) }),

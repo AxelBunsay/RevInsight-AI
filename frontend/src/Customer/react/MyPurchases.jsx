@@ -65,7 +65,7 @@ export default function MyPurchases() {
 
   useEffect(() => {
     let isMounted = true;
-    Promise.allSettled([api.getCustomerReservations(), api.getCustomerServiceRequests(), api.getReservationSettings()])
+    const refresh = () => Promise.allSettled([api.getCustomerReservations(), api.getCustomerServiceRequests(), api.getReservationSettings()])
       .then(([itemsResult, servicesResult, settingsResult]) => {
         if (!isMounted) return;
         const loadErrors = [];
@@ -85,7 +85,10 @@ export default function MyPurchases() {
       .finally(() => {
         if (isMounted) setIsLoading(false);
       });
-    return () => { isMounted = false; };
+    refresh();
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    return () => { isMounted = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, []);
 
   const records = useMemo(() => {

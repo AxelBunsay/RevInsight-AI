@@ -139,7 +139,7 @@ export default function ReservationDetail() {
 
   if (serviceBooking) {
     const quotePending = ['quote_requested', 'quoted'].includes(serviceBooking.quoteStatus);
-    const paymentPending = !quotePending && (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending'
+    const paymentPending = serviceBooking.paymentMethod !== 'Cash' && !['awaiting','pay-at-shop'].includes(serviceBooking.quoteCheckout) && !quotePending && (serviceBooking.paymentStatus || 'Payment Pending') === 'Payment Pending'
       && !['cancelled', 'declined', 'completed'].includes(serviceBooking.status);
     const serviceStatus = getServiceBookingStatus(serviceBooking);
     return <CustomerPage title="Booking details" description="Review your service booking and payment status.">
@@ -148,17 +148,21 @@ export default function ReservationDetail() {
         {error && <p className="customer-error" role="alert">{error}</p>}
         {message && <p className="customer-success" role="status">{message}</p>}
         <section className="customer-reservation-detail-card">
-          <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{formatServiceName(serviceBooking.serviceType, serviceBooking.units, serviceBooking.unitLabel)}</h1><p>{serviceBooking.pricePerUnit ? `${serviceUnitSummary(serviceBooking.units || 1, serviceBooking.unitLabel)} · ` : ''}{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
+          <div className="customer-reservation-card-top"><div><p className="customer-eyebrow">SERVICE BOOKING · {serviceBooking.code || serviceBooking._id}</p><h1>{formatServiceName(serviceBooking.serviceType, serviceBooking.units, serviceBooking.unitLabel)}</h1><p>{serviceBooking.pricePerUnit ? `${serviceUnitSummary(serviceBooking.units || 1, serviceBooking.unitLabel)} · ` : ''}{serviceBooking.scheduledDate ? formatDate(serviceBooking.scheduledDate) : serviceBooking.queueKey ? 'Service queue' : 'Date to be confirmed'}{serviceBooking.startTime ? ` · ${serviceBooking.startTime} - ${serviceBooking.endTime}` : ''}{serviceBooking.vehicle ? ` · ${serviceBooking.vehicle}` : ''}</p></div><span className={`customer-status-pill ${statusClass(serviceStatus)}`}>{serviceStatus}</span></div>
           {serviceBooking.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}
-          <div className="customer-reservation-detail-meta"><div><span>Parts</span><strong>{serviceBooking.partsSource === 'customer' ? 'Customer brings own parts' : 'From the shop'}</strong></div>{!quotePending && <><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /></>}<div><span>Payment</span><strong>{serviceStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
+          <div className="customer-reservation-detail-meta"><div><span>Parts</span><strong>{serviceBooking.partsSource === 'customer' ? 'Customer brings own parts' : 'From the shop'}</strong></div>{!quotePending && <><ServicePriceBreakdown servicePriceTotal={serviceBooking.servicePriceTotal} mechanicFeeTotal={serviceBooking.mechanicFeeTotal} estimatedPrice={serviceBooking.estimatedPrice} /><ServicePaymentBreakdown booking={serviceBooking} /></>}<div><span>Mechanic</span><strong>{[serviceBooking.mechanic?.firstName,serviceBooking.mechanic?.lastName].filter(Boolean).join(' ') || 'Awaiting assignment'}</strong></div><div><span>Payment</span><strong>{serviceBooking.paymentStatus === 'Payment Pending' && serviceBooking.quoteCheckout === 'pay-at-shop' ? 'Payment due' : serviceBooking.paymentStatus}</strong></div><div><span>Reference</span><strong>{serviceBooking.paymentReference || serviceBooking.code || serviceBooking._id}</strong></div></div>
           {serviceBooking.quoteStatus && serviceBooking.customerPartsNote && <p><strong>Parts you will bring:</strong> {serviceBooking.customerPartsNote}</p>}
-          {quotePending && <CustomerQuoteActions
+          {(quotePending || serviceBooking.quoteCheckout === 'awaiting') && <CustomerQuoteActions
             booking={serviceBooking}
             settings={settings}
             onBookingUpdate={setServiceBooking}
             onAccepted={() => setShowPaymentForm(true)}
           />}
           {serviceBooking.paymentRejectionReason && <p className="customer-error" role="alert">Payment needs attention: {serviceBooking.paymentRejectionReason}</p>}
+          {serviceBooking.queueKey && ['pending','assigned','confirmed'].includes(serviceBooking.status) && serviceBooking.paymentStatus === 'Payment Pending' && <button type="button" onClick={async () => {
+            try { setServiceBooking((await api.cancelQueueRequest(serviceBooking._id)).serviceRequest); } catch (err) { setError(err.message); }
+          }}>Cancel queue request</button>}
+          {!['cancelled','declined'].includes(serviceBooking.status) && serviceBooking.paymentMethod === 'Cash' && serviceBooking.paymentStatus === 'Payment Pending' && <p>Pending cash payment - Due {new Date(serviceBooking.paymentDueAt).toLocaleString('en-PH')}</p>}
           {paymentPending && !showPaymentForm && <button className="customer-primary-button" type="button" onClick={() => setShowPaymentForm(true)}>Pay with GCash</button>}
           {showPaymentForm && paymentPending && <ReservationPaymentForm reservation={serviceBooking} amount={getServicePaymentSummary(serviceBooking).downPaymentAmount} settings={settings} showServiceBreakdown onSubmit={submitPayment} onClose={() => setShowPaymentForm(false)} isSaving={isSaving} />}
           <Link className="customer-secondary-button" to="/my-purchases?tab=services">Back to bookings</Link>
@@ -169,7 +173,7 @@ export default function ReservationDetail() {
 
   if (!reservation) return <CustomerPage title="Details not found" description={error || 'This record is not in your account.'}>{error && <p className="customer-error" role="alert">{error}</p>}<Link to="/my-purchases?tab=all">Back to My Purchases</Link></CustomerPage>;
 
-  const canSubmitPayment = reservation.status === 'Pending Down Payment';
+  const canSubmitPayment = reservation.paymentMethod !== 'Cash' && reservation.status === 'Pending Down Payment';
   const canCustomerCancel = ['Pending Down Payment', 'Payment Submitted'].includes(reservation.status);
   const currentStep = {
     'Pending Down Payment': 0,
@@ -202,6 +206,7 @@ export default function ReservationDetail() {
           <div><span>Balance due at pickup</span><strong>{money(reservation.balanceDue)}</strong></div>
         </div>
         {pickupAddress && <p className="customer-pickup-location">Pickup at {pickupAddress}{pickupHours ? ` · ${pickupHours}` : ''}</p>}
+        {reservation.paymentMethod === 'Cash' && reservation.status === 'Pending Down Payment' && <p>Pending cash payment - Pay the deposit at the shop by {new Date(reservation.paymentDueAt).toLocaleString('en-PH')}.</p>}
         {canSubmitPayment && !showPaymentForm && <p className="customer-payment-countdown">Pay within {countdown}</p>}
         {reservation.status === 'Reserved' && <p className="customer-reservation-note">Bring your reservation code <strong>{reservation.code}</strong> at pickup and pay the balance of {money(reservation.balanceDue)}.</p>}
         {['Cancelled', 'Expired'].includes(reservation.status) && <p className="customer-reservation-terminal-reason"><strong>{reservation.status} reason:</strong> {reservation.cancelReason || 'No reason was provided.'}</p>}

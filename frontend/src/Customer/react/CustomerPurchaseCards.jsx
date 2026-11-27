@@ -73,7 +73,7 @@ export function ItemReservationCard({ reservation, showType = false }) {
         <p>{keyDate}</p>
         {showType && <small className="customer-purchase-date">Created {formatDate(reservation.createdAt)}</small>}
       </div>
-      <span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.status}</span>
+      <span className={`customer-status-pill ${statusClass(reservation.status)}`}>{reservation.paymentMethod === 'Cash' && reservation.status === 'Pending Down Payment' ? 'Pending cash payment' : reservation.status}</span>
     </div>
     <div className="customer-reservation-card-finances customer-purchase-card-finances">
       <span>Total <strong>{money(reservation.total)}</strong></span>
@@ -108,7 +108,7 @@ export function ServiceBookingCard({
   const total = prototype ? serviceTotal(booking, true)
     : booking.quoteStatus === 'quoted' ? Number(booking.quotedPrice || 0) : payment.totalAmount;
   const paid = hasPaymentSnapshot ? payment.amountPaid : total;
-  const balance = hasPaymentSnapshot ? payment.balanceDue : 0;
+  const balance = booking.quoteCheckout === 'pay-at-shop' ? total - paid : hasPaymentSnapshot ? payment.balanceDue : 0;
   const mechanicFee = Number(booking.mechanicFeeTotal || 0);
   const servicePrice = booking.quoteStatus === 'accepted' ? Number(booking.quotedPrice || total)
     : booking.servicePriceTotal === undefined
@@ -124,19 +124,21 @@ export function ServiceBookingCard({
         </span>
         {booking.partsSource === 'customer' && <span className="customer-parts-source-tag">Own parts</span>}
         <h2>{serviceName(booking, prototype)}</h2>
-        <p>{!prototype && booking.pricePerUnit ? `${serviceUnitSummary(booking.units || 1, booking.unitLabel)} · ` : ''}{formatDate(date)}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
+        <p>{!prototype && booking.pricePerUnit ? `${serviceUnitSummary(booking.units || 1, booking.unitLabel)} · ` : ''}{booking.queueKey ? 'Service queue' : formatDate(date)}{bookingTime ? ` · ${bookingTime}` : ''}{booking.vehicle ? ` · ${booking.vehicle}` : ''}</p>
         {!prototype && booking.description && <p>{booking.description}</p>}
         {!prototype && booking.quoteStatus && booking.customerPartsNote && <p><strong>Parts you will bring:</strong> {booking.customerPartsNote}</p>}
         {showType && !prototype && <small className="customer-purchase-date">Created {formatDate(booking.createdAt)}</small>}
       </div>
       <span className={`customer-status-pill ${statusClass(status)}`}>{status}</span>
     </div>
+    {booking.queueKey && booking.status !== 'cancelled' && booking.paymentStatus === 'Payment Pending' && booking.paymentDueAt && <p>Pay by {new Date(booking.paymentDueAt).toLocaleString('en-PH')}</p>}
+    {booking.quoteCheckout && <small>{booking.paymentStatus === 'Payment Pending' && booking.quoteCheckout === 'pay-at-shop' ? 'Payment due' : booking.paymentStatus}</small>}
     {!quotePending && <p className="customer-service-booking-price-line">
       {booking.quoteStatus === 'accepted'
         ? `Labor quote ${serviceMoney(servicePrice)}`
         : `Service ${serviceMoney(servicePrice)} + Mechanic fee ${serviceMoney(mechanicFee)}`}
     </p>}
-    {quotePending
+    {(quotePending || booking.quoteCheckout === 'awaiting')
       ? <CustomerQuoteActions
         booking={booking}
         settings={settings}

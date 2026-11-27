@@ -33,6 +33,8 @@ function Dashboard() {
   return (
     <div className="admin-page admin-dashboard">
       {dashboard.error && <div className="admin-inline-error" role="alert"><span>{dashboard.error}</span><button type="button" onClick={dashboard.retry}>Retry</button></div>}
+      {dashboard.data && <AIRevenueAnalysis dashboardData={dashboard.data} />}
+      <details><summary>Sales trends and shop operations</summary>
       {dashboard.data ? <StatStrip stats={dashboard.data.stats} /> : (
         <section className="admin-stat-strip admin-stat-strip--loading" aria-label="Loading business overview">
           {Array.from({ length: 4 }, (_, index) => <div className="admin-stat-cell admin-stat-cell--skeleton" key={index}><Skeleton label="Loading metric" /></div>)}
@@ -56,11 +58,12 @@ function Dashboard() {
             <CategoryRevenue categories={dashboard.data.categories || []} />
             <InventoryHealth inventory={dashboard.data.inventoryHealth} />
           </div>
-          <AIRevenueAnalysis dashboardData={dashboard.data} />
+
         </>
       ) : dashboard.loading ? (
         <div className="admin-dashboard-lower"><Skeleton className="admin-panel-skeleton" /><Skeleton className="admin-panel-skeleton" /></div>
       ) : <EmptyState>No dashboard data is available.</EmptyState>}
+      </details>
     </div>
   );
 }

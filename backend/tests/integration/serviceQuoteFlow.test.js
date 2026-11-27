@@ -48,8 +48,7 @@ async function createQuoteRequest(startTime = '10:00') {
     .send({ bookings: [{
       serviceId: String(fixtures.service._id),
       partsSource: 'customer', mechanicId:String(fixtures.mechanic._id),
-      date: nextOpenDate(),
-      startTime,
+      requestKey: crypto.randomUUID(),
       vehicle: 'Integration motorcycle',
       notes: 'Customer will provide the replacement parts.',
       customerPartsNote: 'Customer will provide the replacement parts.'
@@ -146,8 +145,7 @@ describe('labor-only service quote flow', () => {
       .send({ bookings: [{
         serviceId: String(fixtures.service._id),
         partsSource: 'shop',
-        date: nextOpenDate(),
-        startTime: '10:00',
+        requestKey: crypto.randomUUID(),
         vehicle: 'Integration motorcycle'
       }] });
     const requestId = created.body.results[0].serviceRequest._id;
@@ -164,7 +162,7 @@ describe('labor-only service quote flow', () => {
       recordId: requestId
     }).lean();
     expect(notification.message).toContain(fixtures.service.name);
-    expect(notification.message).toContain('10:00');
+    expect(notification.message).toContain('Service queue');
     expect(notification.message).toContain(`${fixtures.customer.firstName} ${fixtures.customer.lastName}`);
   });
 
@@ -220,6 +218,12 @@ describe('labor-only service quote flow', () => {
 
   it('resumes pay-at-shop checkout at the agreed price and records labor only on completion', async () => {
     const request = await createQuoteRequest();
+    // Scheduled bookings created their slot locks when the customer requested the quote.
+    await require('../../utils/serviceSlotCapacity').ensureSlotLocks(nextOpenDate(), '10:00', '11:00');
+    // A quote already awaiting checkout from the scheduled-booking build.
+    await ServiceRequest.updateOne({ _id: request._id }, { $unset: { queueKey: 1 }, $set: {
+      scheduledDate: new Date(nextOpenDate() + 'T00:00:00+08:00'), startTime: '10:00', endTime: '11:00'
+    } });
     const quoteUrl = `/api/service-requests/${request._id}/quote`;
     const checkout = (amount) => api.post(`${quoteUrl}/checkout`)
       .set('Authorization', `Bearer ${customerToken}`).send({ method: 'Cash at pickup', amount });

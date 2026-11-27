@@ -1,4 +1,4 @@
-const { revenueCoverage } = require('./revenueCoverage');
+const { revenueCoverage, revenueTransactionKey } = require('./revenueCoverage');
 const { confirmedManualOrders, inManualSalesPeriod, productName } = require('./historicalMerchandise');
 const REVENUE_TIMEZONE = 'Asia/Manila';
 const ORDER_STATUSES = ['completed', 'Paid'];
@@ -65,6 +65,7 @@ function buildRevenuePipelines({ startDate, endDate } = {}) {
           revenue: { $ifNull: ['$totalPrice', '$totalAmount'] },
           ...dateFields('createdAt'),
           items: 1,
+          walkInId: 1,
           isSampleData: 1,
           orNumber: 1,
           source: { $literal: 'order' }
@@ -101,6 +102,7 @@ function buildRevenuePipelines({ startDate, endDate } = {}) {
           ...dateFields('completedAt'),
           serviceCategory: 1,
           serviceType: 1,
+          walkInId: 1,
           quoteStatus: 1,
           quotedPrice: 1,
           source: { $literal: 'service' }
@@ -153,6 +155,7 @@ function normalizeRevenueSources({ orders = [], reservations = [], services = []
   return sourceRows.flatMap((row) => {
     const revenue = Number(row.revenue ?? row.totalPrice ?? row.totalAmount ?? row.total ?? row.estimatedPrice ?? 0);
     const parts = {
+      ...(row.walkInId ? { walkInId: String(row.walkInId) } : {}),
       year: Number(row.year),
       month: Number(row.month),
       quarter: Number(row.quarter),
@@ -248,7 +251,7 @@ function groupRevenueByPeriod(entries, unit) {
     const key = typeof id === 'string' ? id : JSON.stringify(id);
     const group = groups.get(key) || { _id: id, revenue: 0, count: 0, records: new Set() };
     group.revenue += entry.revenue;
-    group.records.add(entry.recordId);
+    group.records.add(revenueTransactionKey(entry));
     group.count = group.records.size;
     groups.set(key, group);
   });
@@ -261,7 +264,7 @@ function groupRevenueByPeriod(entries, unit) {
 
 function summarizeRevenue(entries) {
   const totalSales = entries.reduce((sum, entry) => sum + entry.revenue, 0);
-  const transactionCount = new Set(entries.map((entry) => entry.recordId)).size;
+  const transactionCount = new Set(entries.map(revenueTransactionKey)).size;
   return {
     totalSales,
     totalOrders: transactionCount,

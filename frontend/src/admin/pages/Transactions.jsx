@@ -6,6 +6,7 @@ import { adminApi as api } from "../services/adminApi";
 import { formatServiceName, serviceUnitSummary } from "../../utils/servicePricing";
 import ServicePriceBreakdown from "../../components/ServicePriceBreakdown";
 import { getServicePaymentSummary, getServiceBookingStatus } from "../../utils/servicePayment";
+import WalkInPOS from './WalkInPOS';
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 import TransactionsPageActions from "./TransactionsPageActions";
 import { getItemsPageData, getItemsRequest, itemFilterOptions } from "./itemsTransactionView";
@@ -109,7 +110,7 @@ function formatServiceRequestRecord(request) {
   const quoteStatusLabels = {
     quote_requested: 'Awaiting quote',
     quoted: `Quoted PHP ${quotePrice.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-    accepted: 'Accepted',
+    accepted: getServiceBookingStatus(request),
     rejected: 'Rejected by customer',
     declined: 'Declined by mechanic',
     cancelled: 'Cancelled'
@@ -123,7 +124,7 @@ function formatServiceRequestRecord(request) {
     recordType: "service",
     recordLabel: "Service",
     partsSource: request.partsSource === "customer" ? "customer" : "shop",
-    customer: customer.isDeleted ? "Deleted customer" : customerName || customer.email || "Unknown",
+    customer: customer.isDeleted ? "Deleted customer" : customerName || customer.email || (request.walkInId ? 'Walk-in Guest' : 'Unknown'),
     date: request.scheduledDate
       ? new Date(request.scheduledDate).toLocaleDateString("en-PH")
       : new Date(request.createdAt).toLocaleDateString("en-PH"),
@@ -471,8 +472,8 @@ function Transactions() {
         {transaction.paymentStatus === "Payment Submitted" && (
           <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
         )}
-        {["Payment Pending", "Confirmed"].includes(transaction.paymentStatus) && transaction.balance > 0 && (
-          <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : transaction.paid > 0 ? "Mark balance paid at shop" : "Mark paid at shop"}</button>
+        {!transaction.walkInId && (!transaction.queueKey || transaction.paymentStatus === "Confirmed" || transaction.paymentMethod === "Cash") && ["Payment Pending", "Confirmed"].includes(transaction.paymentStatus) && transaction.balance > 0 && (
+          <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : transaction.queueKey && transaction.paymentMethod === 'Cash' && transaction.paymentStatus === 'Payment Pending' ? 'Record cash deposit received - ' + formatMoney(transaction.downPaymentAmount) : transaction.paid > 0 ? "Mark balance paid at shop" : "Mark paid at shop"}</button>
         )}
         <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel-service")}>Cancel booking</button>
         {["assigned", "confirmed"].includes(transaction.bookingStatus) && (
@@ -496,7 +497,7 @@ function Transactions() {
       </>;
     }
     if (transaction.isReservation && transaction.status === "Pending Down Payment") {
-      return <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button>;
+      return <>{cashDepositAction(transaction)}<button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button></>;
     }
     if (transaction.isReservation && transaction.status === "Expired") {
       return <>
@@ -509,11 +510,20 @@ function Transactions() {
       : null;
   };
 
+  const collectProductDeposit = async transaction => {
+    try {
+      await api.confirmReservation(transaction._id, true);
+      setRefreshKey(key => key + 1);
+    } catch (err) { setError(err.message); }
+  };
+  const cashDepositAction = transaction => transaction.paymentMethod === 'Cash' && <button type="button" className="btn-small btn-edit" onClick={() => collectProductDeposit(transaction)}>Record cash deposit received - {formatMoney(transaction.downPaymentAmount)}</button>;
+
   const markServicePaidAtShop = async (transaction) => {
     setMarkingPaidAtShopId(transaction._id);
     setError("");
     try {
-      await api.markServicePaidAtShop(transaction._id);
+      if (transaction.queueKey && transaction.paymentMethod === 'Cash' && transaction.paymentStatus === 'Payment Pending') await api.collectServiceDeposit(transaction._id);
+      else await api.markServicePaidAtShop(transaction._id);
       setSettingsToast("Service payment marked paid at the shop.");
       setRefreshKey((key) => key + 1);
     } catch (paymentError) {
@@ -836,6 +846,7 @@ function Transactions() {
 
   return (
     <AdminPageFrame>
+      <WalkInPOS onChange={() => setRefreshKey(key => key + 1)} />
       <section className="section-content active">
         <div className="transactions-container">
           {error && (
@@ -1024,7 +1035,7 @@ function Transactions() {
                       </span>
                       {activeTab === "services" && transaction.isServiceRequest && (
                         <>
-                          <small className="transaction-reservation-detail">Payment: {transaction.paymentStatus}</small>
+                          <small className="transaction-reservation-detail">Payment: {transaction.quoteCheckout === 'pay-at-shop' && transaction.paymentStatus === 'Payment Pending' ? 'Payment due' : transaction.paymentStatus}</small>
                           {transaction.paymentReference && <small className="transaction-reservation-detail">Ref {transaction.paymentReference}</small>}
                         </>
                       )}
@@ -1040,8 +1051,8 @@ function Transactions() {
                           {transaction.paymentStatus === "Payment Submitted" && (
                             <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "review")}>Review payment</button>
                           )}
-                          {["Payment Pending", "Confirmed"].includes(transaction.paymentStatus) && transaction.balance > 0 && (
-                            <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : transaction.paid > 0 ? "Mark balance paid at shop" : "Mark paid at shop"}</button>
+                          {!transaction.walkInId && (!transaction.queueKey || transaction.paymentStatus === "Confirmed" || transaction.paymentMethod === "Cash") && ["Payment Pending", "Confirmed"].includes(transaction.paymentStatus) && transaction.balance > 0 && (
+                            <button className="btn-small btn-edit" type="button" disabled={markingPaidAtShopId === transaction._id} onClick={() => markServicePaidAtShop(transaction)}>{markingPaidAtShopId === transaction._id ? "Saving..." : transaction.queueKey && transaction.paymentMethod === 'Cash' && transaction.paymentStatus === 'Payment Pending' ? 'Record cash deposit received - ' + formatMoney(transaction.downPaymentAmount) : transaction.paid > 0 ? "Mark balance paid at shop" : "Mark paid at shop"}</button>
                           )}
                           <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel-service")}>Cancel booking</button>
                           {["assigned", "confirmed"].includes(transaction.bookingStatus) && (
@@ -1061,7 +1072,7 @@ function Transactions() {
                           <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button>
                         </>
                       ) : transaction.isReservation && transaction.status === "Pending Down Payment" ? (
-                        <button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button>
+                        <>{cashDepositAction(transaction)}<button className="btn-small btn-delete" type="button" onClick={() => beginReservationAction(transaction, "cancel")}>Cancel</button></>
                       ) : transaction.isReservation && transaction.status === "Expired" ? (
                         <>
                           {transaction.amountPaid > 0 && !transaction.refundDecision && <button className="btn-small btn-edit" type="button" onClick={() => beginReservationAction(transaction, "refund")}>Record refund decision</button>}
@@ -1449,8 +1460,8 @@ function Transactions() {
                 <p><strong>Service{selectedTransaction.partsSource === "customer" ? " (labor only)" : ""}:</strong> {formatMoney(selectedServicePrice)}</p>
                 <p><strong>Mechanic fee:</strong> {formatMoney(selectedMechanicFee)}</p>
                 <p><strong>Total:</strong> {formatMoney(selectedServiceTotal)}</p>
-                <p><strong>Down payment ({selectedTransaction.downPaymentPercent}%):</strong> {formatMoney(selectedTransaction.downPaymentAmount)}</p>
-                <p><strong>Down payment paid:</strong> {formatMoney(selectedTransaction.paid)}</p>
+                {!selectedTransaction.walkInId && <><p><strong>Down payment ({selectedTransaction.downPaymentPercent}%):</strong> {formatMoney(selectedTransaction.downPaymentAmount)}</p>
+                <p><strong>Down payment paid:</strong> {formatMoney(selectedTransaction.paid)}</p></>}
                 <p><strong>Balance to collect:</strong> {formatMoney(selectedTransaction.balance)}</p>
                 {selectedTransaction.balance > 0 && <p><strong>At service completion:</strong> Collect balance of {formatMoney(selectedTransaction.balance)} at the shop.</p>}
                 <p><strong>Payment reference:</strong> {selectedTransaction.paymentReference || "Not provided"}</p>

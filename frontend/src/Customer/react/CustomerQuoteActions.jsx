@@ -10,14 +10,13 @@ const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', {
 export default function CustomerQuoteActions({
   booking,
   settings,
-  onBookingUpdate,
-  onAccepted,
-  redirectAfterAccept = false
+  onBookingUpdate
 }) {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   const quoteStatus = booking.quoteStatus;
+  if (booking.quoteCheckout === 'awaiting' && !['cancelled','declined'].includes(booking.status)) return <button type="button" className="customer-primary-button" onClick={()=>navigate('/customer/checkout?quote='+booking._id)}>Continue to checkout</button>;
   if (!['quote_requested', 'quoted'].includes(quoteStatus)) return null;
 
   const quotedPrice = Number(booking.quotedPrice || 0);
@@ -28,7 +27,7 @@ export default function CustomerQuoteActions({
       ?? 30
   );
   const total = quotedPrice;
-  const downPayment = booking.downPaymentAmount != null
+  const downPayment = quoteStatus !== 'quoted' && booking.downPaymentAmount != null
     ? Number(booking.downPaymentAmount)
     : Math.round((total * downPaymentPercent / 100 + Number.EPSILON) * 100) / 100;
 
@@ -45,10 +44,7 @@ export default function CustomerQuoteActions({
       });
       onBookingUpdate?.(response.serviceRequest);
       if (action === 'accept') {
-        onAccepted?.(response.serviceRequest);
-        if (redirectAfterAccept) {
-          navigate(`/customer/reservations/${booking._id}`, { state: { showPayment: true } });
-        }
+        navigate('/customer/checkout?quote='+booking._id);
       }
     } catch (requestError) {
       setError(requestError.message || 'Quote response could not be saved.');
@@ -78,7 +74,7 @@ export default function CustomerQuoteActions({
         {isSubmitting ? 'Saving...' : 'Accept quote'}
       </button>
       <button className="customer-secondary-button" type="button" disabled={isSubmitting} onClick={() => respond('reject')}>
-        Reject
+        Decline
       </button>
     </div>
   </section>;

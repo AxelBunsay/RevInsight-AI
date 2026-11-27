@@ -48,6 +48,7 @@ router.post('/reservations/:id/cancel', protect, reservations.cancelAdminReserva
 router.post('/reservations/:id/refund-decision', protect, reservations.decideExpiredRefund);
 router.post('/service-requests/:id/confirm-payment', protect, serviceRequests.reviewServicePayment);
 router.post('/service-requests/:id/reject-payment', protect, serviceRequests.reviewServicePayment);
+router.post('/service-requests/:id/cash-deposit', protect, serviceRequests.collectCashDeposit);
 router.post('/service-requests/:id/paid-at-shop', protect, serviceRequests.markServicePaidAtShop);
 
 // Admin: delete mechanic via admin API

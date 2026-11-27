@@ -1,3 +1,4 @@
+import ContributorList from './ContributorList';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RevenueAnswerChart from './RevenueAnswerChart';
 import { adminApi } from '../../services/adminApi';
@@ -911,6 +912,7 @@ function AIRevenueAnalysis({ dashboardData }) {
         {overallRisk.level || 'Not enough data'}
       </span>
       <p className="ai-revenue-overall-risk__why">{overallRiskWhy}</p>
+      <ContributorList concentration={analysis.concentration} />
     </div>
 
     {isLoading ? <p className="ai-revenue-empty" role="status">Loading revenue analysis…</p>

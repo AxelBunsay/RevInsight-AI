@@ -1,4 +1,4 @@
-const { revenueCoverage } = require('./revenueCoverage');
+const { revenueCoverage, revenueTransactionKey } = require('./revenueCoverage');
 const { summarizeSalesMix } = require('./historicalMerchandise');
 const {
   groupRevenueByPeriod, calculateRevenueRisk,
@@ -76,9 +76,9 @@ function buildScopedRevenue(allEntries, input = {}, now = new Date()) {
   risk.overallRisk = { level: concentrationLevel, reason: unavailableReason || 'concentration of classified contributor revenue in ' + scope.label };
   const records = new Map();
   for (const row of entries) {
-    const key = row.source + ':' + row.recordId;
+    const key = revenueTransactionKey(row);
     const record = records.get(key) || {
-      _id: key, sourceId: row.recordId, recordType: row.source === 'service' ? 'service' : 'item',
+      _id: key, sourceId: row.walkInId || row.recordId, recordType: row.source === 'service' ? 'service' : 'item',
       completedAt: row.dateLabel + 'T00:00:00+08:00', itemNames: new Set(), types: new Set(), amount: 0, status: 'completed'
     };
     record.types.add(row.revenueType || record.recordType);

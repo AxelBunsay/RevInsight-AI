@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../../services/api';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { api, request } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
+import ServicePaymentOptions from './ServicePaymentOptions';
 import { serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
@@ -14,7 +15,49 @@ import '../styles/customer-flow.css';
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function Checkout() {
+  const [params] = useSearchParams();
+  const id = params.get('quote');
+  return id ? <QuoteCheckout key={id} id={id} /> : <CartCheckout />;
+}
+
+function QuoteCheckout({id}) {
   const navigate = useNavigate();
+  const [booking,setBooking] = useState(null);
+  const [payment,setPayment] = useState('Cash');
+  const [busy,setBusy] = useState(false);
+  const [error,setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    api.getCustomerServiceRequests().then(({requests}) => {
+      if (!active) return;
+      const found = requests.find(row => row._id === id);
+      if (found?.quoteCheckout === 'awaiting') setBooking(found);
+      else navigate('/customer/reservations/'+id,{replace:true});
+    }).catch(err=>{if(active)setError(err.message)});
+    return () => { active=false; };
+  },[id,navigate]);
+  async function confirm() {
+    setBusy(true); setError('');
+    try {
+      const {serviceRequest} = await request('/api/service-requests/'+id+'/quote/checkout',{
+        method:'POST',tokenKey:'customerToken',body:JSON.stringify({method:payment,amount:booking.quotedPrice})
+      });
+      if (payment === 'GCash' && serviceRequest.downPaymentAmount > 0) navigate('/customer/reservations/'+id,{state:{showPayment:true}});
+      else navigate('/my-purchases?tab=services');
+    } catch(err) { setError(err.message); } finally { setBusy(false); }
+  }
+  return <CustomerPage title="Service checkout"><section className="customer-checkout-panel">
+    {error && <p role="alert">{error}</p>}
+    {booking && <><h2>{booking.serviceType}</h2><p>Accepted labor quote ? {money(booking.quotedPrice)}</p>
+      <ServicePaymentOptions payment={payment} onChange={setPayment} />
+      <button className="customer-primary-button" disabled={busy} onClick={confirm}>Confirm service booking</button></>}
+    <Link to={'/customer/reservations/'+id}>View booking</Link>
+  </section></CustomerPage>;
+}
+
+function CartCheckout() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const reservationId = searchParams.get('reservation');
   const checkoutFlow = searchParams.get('flow');
@@ -24,7 +67,8 @@ export default function Checkout() {
   const [checkoutReservation, setCheckoutReservation] = useState(null);
   const isReservationFlow = Boolean(reservationId || checkoutReservation || (checkoutFlow !== 'services' && productItems.length));
   const [step, setStep] = useState(reservationId ? 'payment' : isReservationFlow ? 'reservation' : 'payment');
-  const [payment, setPayment] = useState('Cash at pickup');
+  const [checkoutKey] = useState(() => crypto.randomUUID());
+  const [payment, setPayment] = useState(location.state?.servicePaymentMethod || 'Cash');
   const [settings, setSettings] = useState(null);
   const [loadedReservationId, setLoadedReservationId] = useState('');
   const isLoadingReservation = Boolean(reservationId && loadedReservationId !== reservationId);
@@ -56,7 +100,7 @@ export default function Checkout() {
     api.getCustomerReservation(reservationId).then((response) => {
       if (!isMounted) return;
       setCheckoutReservation(response.reservation);
-      if (response.reservation.status !== 'Pending Down Payment') {
+      if (response.reservation.paymentMethod === 'Cash' || response.reservation.status !== 'Pending Down Payment') {
         navigate(`/customer/reservations/${response.reservation._id}`, { replace: true });
       }
     }).catch((requestError) => {
@@ -82,10 +126,11 @@ export default function Checkout() {
         productId: item.id,
         ...(item.variantId ? { variantId: item.variantId } : {}),
         qty: item.quantity
-      })));
+      })), payment, checkoutKey);
       const reservation = response.reservation;
       setCheckoutReservation(reservation);
       productItems.forEach((item) => removeCartItem(item.key));
+      if (payment === 'Cash') { navigate('/customer/reservations/' + reservation._id, { replace: true }); return; }
       setSearchParams({ reservation: reservation._id }, { replace: true });
       setStep('payment');
       setShowPaymentModal(true);
@@ -140,8 +185,9 @@ export default function Checkout() {
         serviceId: item.serviceId || item.id,
         partsSource: item.partsSource || 'shop',
         ...(item.mechanicId ? { mechanicId: item.mechanicId } : {}),
-        date: item.bookingDate,
-        startTime: item.startTime,
+        queue: true,
+        requestKey: item.requestKey || checkoutKey + '-' + serviceItems.indexOf(item),
+        paymentMethod: payment,
         ...(item.units ? { units: item.units } : {}),
         vehicle: item.vehicle,
         notes: item.notes
@@ -176,6 +222,7 @@ export default function Checkout() {
           {step === 'reservation' && <>
             <p className="customer-eyebrow">STEP 1 OF 2</p>
             <h2>Review your items</h2>
+            <ServicePaymentOptions payment={payment} onChange={setPayment} />
             <div className="customer-review-lines">{productItems.map((item) => <div key={item.key}><span><strong>{item.name}</strong><small>Qty {item.quantity} · Only {item.stock} left</small></span><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
             <div className="customer-reservation-payment-instructions">
               <p><strong>Items total</strong><strong>{money(productSubtotal)}</strong></p>
@@ -203,7 +250,7 @@ export default function Checkout() {
           <div className="customer-checkout-progress" aria-label="Service checkout progress">{['Payment', 'Review'].map((label, index) => <div className={step === (index === 0 ? 'payment' : 'review') ? 'is-current' : step === 'review' && index === 0 ? 'is-complete' : ''} key={label}><span>{step === 'review' && index === 0 ? '✓' : index + 1}</span><strong>{label}</strong></div>)}</div>
           {step === 'payment' ? <>
             <p className="customer-eyebrow">STEP 1 OF 2</p><h2>Payment method</h2>
-            <div className="customer-payment-options">{['Cash at pickup', 'GCash', 'Card on pickup'].map((method) => <label className={payment === method ? 'is-selected' : ''} key={method}><input type="radio" name="payment" value={method} checked={payment === method} onChange={() => setPayment(method)} /><span><strong>{method}</strong><small>{method === 'Cash at pickup' ? 'Pay at the shop' : method === 'GCash' ? 'Submit payment after booking' : 'Pay at the shop'}</small></span></label>)}</div>
+            <ServicePaymentOptions payment={payment} onChange={setPayment} />
             <button type="button" className="customer-primary-button" onClick={() => setStep('review')} disabled={!serviceItems.length}>Review service booking</button>
           </> : <>
             <p className="customer-eyebrow">STEP 2 OF 2</p><h2>Review your service booking</h2>

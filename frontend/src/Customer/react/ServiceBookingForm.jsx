@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
@@ -6,14 +6,11 @@ import { useCustomerPrototype } from './useCustomerPrototype';
 import { formatServiceName } from '../../utils/servicePricing';
 import { calculateServiceAmounts } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
-import { clearCustomerAuthAction, readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
+import { readCustomerAuthAction, saveCustomerAuthAction } from './customerAuthAction';
 import { getAuthToken } from '../../auth/authSession';
 import {
-  canSubmitServiceBooking,
-  getDateChangeState,
   runWithBookingLock
 } from './serviceBookingTime';
-import ServiceBookingTimeSelect from './ServiceBookingTimeSelect';
 import { getServicePartsSource } from './servicePartsMode';
 import '../styles/customer-flow.css';
 
@@ -22,44 +19,6 @@ function formatDuration(minutes) {
   if (value < 60) return `${value} min`;
   const hours = value / 60;
   return `${hours} ${hours === 1 ? 'hr' : 'hrs'}`;
-}
-
-function manilaDateKey(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Manila',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function addDays(dateKey, days) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + days));
-  return date.toISOString().slice(0, 10);
-}
-
-function weekdayForDate(dateKey) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, day)));
-}
-
-function dateSummary(dateKey) {
-  const [year, month, day] = dateKey.split('-').map(Number);
-  return new Intl.DateTimeFormat('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC'
-  }).format(new Date(Date.UTC(year, month - 1, day)));
-}
-
-function localTimeLabel(time) {
-  if (!time) return '';
-  const [hours, minutes] = time.split(':').map(Number);
-  return `${hours % 12 || 12}:${String(minutes).padStart(2, '0')} ${hours >= 12 ? 'PM' : 'AM'}`;
 }
 
 function VehicleForm({ value, onChange, onSave, submitLabel = 'Save motorcycle' }) {
@@ -86,13 +45,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
   const [loadedServiceId, setLoadedServiceId] = useState('');
   const [serviceRetryKey, setServiceRetryKey] = useState(0);
   const isLoadingService = !providedService && loadedServiceId !== serviceId;
-  const [bookingDate, setBookingDate] = useState(() => {
-    const action = location.state?.resumeAction ? readCustomerAuthAction() : null;
-    return action?.type === 'service' && action.serviceId === serviceId
-      ? action.date
-      : editingCartItem?.bookingDate || location.state?.bookingDate || manilaDateKey();
-  });
-  const [timeSlot, setTimeSlot] = useState(editingCartItem?.startTime || '');
+  const [requestKey] = useState(() => editingCartItem?.requestKey || crypto.randomUUID());
   const [vehicle, setVehicle] = useState(editingCartItem?.vehicle || '');
   const [availableMechanics, setAvailableMechanics] = useState([]);
   const [mechanicsLoadError, setMechanicsLoadError] = useState('');
@@ -101,24 +54,12 @@ export default function ServiceBookingForm({ service: providedService = null, pa
   const [notes, setNotes] = useState(editingCartItem?.notes || '');
   const [customerPartsNote, setCustomerPartsNote] = useState(editingCartItem?.customerPartsNote || '');
   const [units, setUnits] = useState(editingCartItem?.units || 1);
-  const [schedule, setSchedule] = useState(null);
-  const [slots, setSlots] = useState([]);
-  const [isLoadingSlots, setIsLoadingSlots] = useState(true);
-  const [availabilityError, setAvailabilityError] = useState('');
-  const [closedMessage, setClosedMessage] = useState('');
   const [bookingError, setBookingError] = useState(location.state?.message || '');
   const [bookingSuccess, setBookingSuccess] = useState('');
   const [isSendingBooking, setIsSendingBooking] = useState(false);
-  const [isFindingNext, setIsFindingNext] = useState(false);
   const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [vehicleForm, setVehicleForm] = useState({ make: '', model: '', year: '', plate: '' });
-  const resumedActionRef = useRef('');
-  const resumeRequestedRef = useRef(Boolean(location.state?.resumeAction));
   const bookingSendingRef = useRef(false);
-  const slotRequestRef = useRef(0);
-  const nextAvailableRequestRef = useRef(0);
-  const today = manilaDateKey();
-
   useEffect(() => {
     let active = true;
     api.getAvailableMechanics().then((response) => {
@@ -139,9 +80,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
     api.getService(serviceId).then((response) => {
       if (active) {
         setUnits(editingCartItem?.units || 1);
-        setBookingDate(editingCartItem?.bookingDate || location.state?.bookingDate || manilaDateKey());
-        setTimeSlot(editingCartItem?.startTime || '');
-        setVehicle(editingCartItem?.vehicle || '');
+        setVehicle(editingCartItem?.vehicle || (location.state?.resumeAction && readCustomerAuthAction()?.motorcycle) || '');
         setNotes(editingCartItem?.notes || '');
         setCustomerPartsNote(editingCartItem?.customerPartsNote || '');
         setService(response.service);
@@ -168,90 +107,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
     serviceRetryKey
   ]);
 
-  const loadSlots = useCallback(async (date, requestedUnits = units) => {
-    const requestId = ++slotRequestRef.current;
-    if (!date) {
-      setSchedule(null);
-      setSlots([]);
-      setClosedMessage('');
-      setAvailabilityError('');
-      setTimeSlot('');
-      setIsLoadingSlots(false);
-      return;
-    }
-    setIsLoadingSlots(true);
-    setAvailabilityError('');
-    setTimeSlot('');
-    try {
-      const response = await api.getServiceSlots(serviceId, date, requestedUnits);
-      if (requestId !== slotRequestRef.current) return;
-      setSchedule(response);
-      setSlots(response.slots || []);
-      setClosedMessage(response.open ? '' : response.closedMessage || '');
-      if (editingCartItem && editingCartItem.bookingDate === date) {
-        const existingTime = editingCartItem.startTime || '';
-        const existingSlot = response.slots?.find((slot) => slot.startTime === existingTime);
-        setTimeSlot(existingTime);
-        if (!existingSlot || existingSlot.status !== 'available') {
-          setBookingError('That time was just booked. Please choose another.');
-        }
-      }
-      if (resumeRequestedRef.current) {
-        const action = readCustomerAuthAction();
-        if (action?.type === 'service' && action.serviceId === serviceId && action.date === date && action.returnPath === `${location.pathname}${location.search}`) {
-          const actionKey = `${action.createdAt}:${action.serviceId}:${action.date}:${action.time}`;
-          if (resumedActionRef.current !== actionKey) {
-            resumedActionRef.current = actionKey;
-            const matchingSlot = response.slots?.find((slot) => slot.startTime === action.time);
-            if (matchingSlot?.status === 'available') {
-              setTimeSlot(action.time);
-              setVehicle('');
-              setBookingError('Choose a saved motorcycle to continue with this booking.');
-            } else {
-              setTimeSlot('');
-              setBookingError('That booking time is no longer available. Please choose another time.');
-            }
-            clearCustomerAuthAction();
-            resumeRequestedRef.current = false;
-            navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-          }
-        } else {
-          clearCustomerAuthAction();
-          resumeRequestedRef.current = false;
-          navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-        }
-      }
-    } catch (error) {
-      if (requestId !== slotRequestRef.current) return;
-      setSchedule(error.details || null);
-      setSlots([]);
-      setClosedMessage('');
-      setAvailabilityError(error.message || 'Booking times could not be loaded.');
-      if (resumeRequestedRef.current) {
-        clearCustomerAuthAction();
-        resumeRequestedRef.current = false;
-        navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
-      }
-    } finally {
-      if (requestId === slotRequestRef.current) setIsLoadingSlots(false);
-    }
-  }, [editingCartItem, location.pathname, location.search, navigate, serviceId, units]);
-
-  useEffect(() => {
-    if (service) void Promise.resolve().then(() => loadSlots(bookingDate));
-  }, [bookingDate, loadSlots, service]);
-
-  const selectedSlot = slots.find((slot) => slot.startTime === timeSlot);
-  const nextDateLimit = schedule?.maxDaysAhead ?? 30;
-  const maximumDate = addDays(today, nextDateLimit);
-  const allSlotsUnavailable = !isLoadingSlots && slots.length > 0 && slots.every((slot) => slot.status !== 'available');
-  const canAddBooking = canSubmitServiceBooking({
-    bookingDate,
-    timeSlot,
-    selectedSlot,
-    motorcycle: vehicle,
-    isLoadingSlots
-  });
+  const canAddBooking = Boolean(vehicle.trim());
 
   if (isLoadingService) return <CustomerPage title="Loading service" description="Loading service details." />;
   if (serviceError === 'not-found') return <CustomerPage title="Service not found" description="This service could not be found."><Link to="/customer/services">Back to Services</Link></CustomerPage>;
@@ -281,57 +137,6 @@ export default function ServiceBookingForm({ service: providedService = null, pa
   const unitPromptLabel = (service.unitLabel || 'unit').endsWith('s')
     ? service.unitLabel
     : `${service.unitLabel || 'unit'}s`;
-  const handleDateChange = (event) => {
-    const nextDate = event.target.value;
-    slotRequestRef.current += 1;
-    nextAvailableRequestRef.current += 1;
-    if (!nextDate) {
-      const state = getDateChangeState('');
-      setBookingDate(state.bookingDate);
-      setTimeSlot(state.timeSlot);
-      setClosedMessage('');
-      return;
-    }
-    const dayName = weekdayForDate(nextDate);
-    if (schedule && !schedule.openDays.includes(dayName)) {
-      setClosedMessage(`The shop is closed on ${dayName === 'Sun' ? 'Sundays' : `${dayName}s`}.`);
-      const state = getDateChangeState(nextDate);
-      setTimeSlot(state.timeSlot);
-      return;
-    }
-    setClosedMessage('');
-    const state = getDateChangeState(nextDate);
-    setBookingDate(state.bookingDate);
-    setTimeSlot(state.timeSlot);
-  };
-
-  const handleNextAvailable = async () => {
-    setIsFindingNext(true);
-    setBookingError('');
-    const requestId = ++nextAvailableRequestRef.current;
-    try {
-      for (let offset = 1; offset <= nextDateLimit; offset += 1) {
-        const date = addDays(bookingDate || today, offset);
-        if (date > maximumDate) break;
-        const response = await api.getServiceSlots(serviceId, date, units);
-        if (requestId !== nextAvailableRequestRef.current) return;
-        const availableSlot = response.slots?.find((slot) => slot.status === 'available');
-        if (availableSlot) {
-          setBookingDate(date);
-          setClosedMessage('');
-          return;
-        }
-      }
-      setBookingError('No available booking times were found in the current booking window.');
-    } catch (error) {
-      if (requestId === nextAvailableRequestRef.current) {
-        setBookingError(error.message || 'Available booking times could not be found.');
-      }
-    } finally {
-      if (requestId === nextAvailableRequestRef.current) setIsFindingNext(false);
-    }
-  };
-
   const saveVehicle = (event) => {
     event.preventDefault();
     const name = `${vehicleForm.year} ${vehicleForm.make} ${vehicleForm.model}`.trim();
@@ -344,21 +149,13 @@ export default function ServiceBookingForm({ service: providedService = null, pa
   const submitBooking = async () => {
     setBookingError('');
     try {
-      const latest = await api.getServiceSlots(service._id, bookingDate, units);
-      const currentSlot = latest.slots?.find((slot) => slot.startTime === timeSlot);
-      if (!currentSlot || currentSlot.status !== 'available') {
-        setBookingError('That time was just booked. Please choose another.');
-        setTimeSlot('');
-        await loadSlots(bookingDate);
-        return;
-      }
       if (quoteRequired) {
         const response = await api.createServiceBookings([{
           serviceId: service._id,
           partsSource: 'customer',
+          requestQuote: true,
           ...(selectedMechanicId ? { mechanicId: selectedMechanicId } : {}),
-          date: bookingDate,
-          startTime: timeSlot,
+          queue: true, requestKey,
           ...(service.pricePerUnit ? { units } : {}),
           vehicle: vehicle.trim(),
           notes: notes.trim(),
@@ -393,10 +190,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         category: service.category,
         duration: durationLabel,
         durationMinutes: service.durationMinutes,
-        bookingDate,
-        startTime: timeSlot,
-        timeSlot: localTimeLabel(timeSlot),
-        endTime: currentSlot.endTime,
+        queue: true, requestKey, timeSlot: "Service queue",
         vehicle: vehicle.trim(),
         notes
       };
@@ -410,13 +204,13 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         setBookingError('');
         return;
       }
-      setBookingError(error.message || 'That booking time could not be checked. Please try again.');
-      await loadSlots(bookingDate);
+      setBookingError(error.message || 'The queue request could not be submitted. Please try again.');
+
     }
   };
 
   const addBooking = async () => {
-    if (!canAddBooking || !selectedSlot || (quoteRequired && !customerPartsNote.trim()) || bookingSendingRef.current) return;
+    if (!canAddBooking || (quoteRequired && !customerPartsNote.trim()) || bookingSendingRef.current) return;
     const customerToken = getAuthToken('customer');
     if (!customerToken || customerToken === 'prototype-guest') {
       const returnPath = isModal
@@ -426,8 +220,6 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         type: 'service',
         returnPath,
         serviceId: service._id,
-        date: bookingDate,
-        time: timeSlot,
         motorcycle: vehicle.trim()
       });
       const redirectParams = new URLSearchParams({ redirect: returnPath, returnTo: returnPath });
@@ -437,16 +229,8 @@ export default function ServiceBookingForm({ service: providedService = null, pa
     return runWithBookingLock(bookingSendingRef, setIsSendingBooking, submitBooking);
   };
 
-  const missingBookingChoice = !bookingDate
-    ? 'Choose a date to continue.'
-    : !selectedSlot
-      ? 'Choose a time to continue.'
-      : !vehicle.trim()
-        ? 'Choose a motorcycle to continue.'
-        : '';
-  const summary = selectedSlot && vehicle
-    ? `${dateSummary(bookingDate)} · ${localTimeLabel(selectedSlot.startTime)} - ${localTimeLabel(selectedSlot.endTime)} · ${vehicle}`
-    : 'Choose a date, time, and motorcycle to preview your booking.';
+  const previewHint = 'Choose a motorcycle for your service request.';
+  const summary = canAddBooking ? 'Service queue - ' + vehicle : '';
 
   const bookingForm = <>
       {isModal && <header className="customer-service-booking-modal-heading">
@@ -456,7 +240,8 @@ export default function ServiceBookingForm({ service: providedService = null, pa
           <span>Code: {service.code || 'N/A'}</span>
           <span>{formatDuration(Number(service.durationMinutes || 60) * (service.pricePerUnit && service.scaleDuration !== false ? units : 1))}</span>
         </div>
-        {service.description && <p>{service.description}</p>}
+        {service.description && <p className="customer-service-modal-description">{service.description}</p>}
+        {!canAddBooking && <p className="customer-booking-preview-hint">{previewHint}</p>}
       </header>}
       {!isModal && partsSource === 'customer' && <p className="customer-labor-only-note">
         Labor only: you bring your own parts.{' '}
@@ -470,7 +255,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
         </div>
       </section>}
       <section className={`customer-booking-panel${isModal ? ' is-modal' : ''}`}>
-        {!isModal && <div className="customer-flow-section-heading"><div><p className="customer-eyebrow">BOOK A SERVICE</p><h2>Book a time</h2></div><span>{durationLabel} · all times Manila time</span></div>}
+        {!isModal && <div className="customer-flow-section-heading"><div><p className="customer-eyebrow">BOOK A SERVICE</p><h2>Join the service queue</h2></div><span>{durationLabel} · all times Manila time</span></div>}
         {!isModal && partsSource === 'shop' && (service.laborOnlyPrice != null || service.laborPriceMin != null || service.laborPriceMax != null) && <p className="customer-labor-only-switch"><Link to={`/customer/services/${service._id}?parts=own`}>Book labor only (I have my own parts)</Link></p>}
         {service.pricePerUnit && !quoteRequired && <p className="customer-service-unit-price">{`${partsSource === 'customer' ? 'Labor-only ' : ''}₱${unitPrice.toLocaleString('en-PH')} + ₱${Number(service.mechanicFee || 0).toLocaleString('en-PH')} mechanic fee per ${service.unitLabel}`}</p>}
         {service.pricePerUnit && <label className="customer-service-units">How many {unitPromptLabel}?
@@ -481,18 +266,6 @@ export default function ServiceBookingForm({ service: providedService = null, pa
           </span>
         </label>}
         <div className="customer-booking-fields">
-          <label>Booking date<input type="date" min={today} max={maximumDate} value={bookingDate} onChange={handleDateChange} required />{closedMessage && <small className="customer-field-error" role="status">{closedMessage}</small>}</label>
-          <ServiceBookingTimeSelect
-            slots={slots}
-            timeSlot={timeSlot}
-            isLoading={isLoadingSlots}
-            closedMessage={closedMessage}
-            availabilityError={availabilityError}
-            onChange={(event) => {
-              setTimeSlot(event.target.value);
-              setBookingError('');
-            }}
-          />
           <div className="customer-mechanic-field">
             <label htmlFor="service-mechanic">Mechanic</label>
             <div className="customer-mechanic-select-wrap">
@@ -514,7 +287,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
                 {availableMechanics.map((mechanic) => {
                   const status = mechanic.availabilityStatus || 'available';
                   const onLeave = status === 'on-leave';
-                  return <option key={mechanic.id} value={mechanic.id} disabled={onLeave}>
+                  return <option key={mechanic.id} value={mechanic.id} disabled={onLeave || status === 'busy'}>
                     {`${mechanic.displayName} - ${mechanicStatusLabel(status)}${onLeave ? ' (On leave)' : ''}`}
                   </option>;
                 })}
@@ -544,10 +317,7 @@ export default function ServiceBookingForm({ service: providedService = null, pa
             {vehicles.length > 0 && showVehicleForm && <button className="customer-vehicle-cancel" type="button" onClick={() => { setShowVehicleForm(false); setVehicle(vehicles[0].name); }}>Choose a saved motorcycle</button>}
           </div>
         </div>
-        {availabilityError && <p className="customer-error" role="alert">{availabilityError}</p>}
         {bookingError && <p className="customer-error" role="alert">{bookingError}</p>}
-        {closedMessage && <p className="customer-shop-closed-message" role="status">{closedMessage}</p>}
-        {allSlotsUnavailable && <div className="customer-no-slots"><p>No slots left on this date</p><button type="button" className="customer-secondary-button" onClick={handleNextAvailable} disabled={isFindingNext}>{isFindingNext ? 'Finding a date...' : 'Show next available'}</button></div>}
         {quoteRequired && <p className="customer-quote-payment-note">No payment now. The mechanic will send you a price first.</p>}
         {quoteRequired && <label className="customer-notes-field">Parts you will bring<textarea required value={customerPartsNote} onChange={(event) => { setCustomerPartsNote(event.target.value); setBookingSuccess(''); }} rows="3" placeholder="For example: Brake pads" /><small>Tell the mechanic which parts you will provide.</small></label>}
         <label className="customer-notes-field">Notes{quoteRequired ? ' (optional)' : ' for the mechanic'}<textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows="3" placeholder="Anything the mechanic should know?" />{!quoteRequired && <small>{service.pricePerUnit ? 'Notes do not change the price. Choose the quantity above.' : 'Notes do not change the service price.'}</small>}</label>
@@ -556,10 +326,10 @@ export default function ServiceBookingForm({ service: providedService = null, pa
           <Link className="customer-primary-button" to="/my-purchases?tab=services">View in My purchases</Link>
         </>}
         <div className="customer-booking-summary">
-          <p>{summary}</p>
+          {summary && <p>{summary}</p>}
+          {!isModal && !canAddBooking && <p>{previewHint}</p>}
           {!quoteRequired && <ServicePriceBreakdown {...serviceAmounts} className={isModal ? 'is-modal-summary' : ''} />}
           <div className="customer-booking-footer">{!quoteRequired && <p>Estimated total <strong>₱{Number(serviceAmounts.estimatedPrice).toLocaleString('en-PH')}</strong></p>}<button type="button" className="customer-primary-button" disabled={isSendingBooking || !canAddBooking || (quoteRequired && !customerPartsNote.trim()) || Boolean(bookingSuccess)} onClick={addBooking}>{quoteRequired ? (isSendingBooking ? 'Sending...' : 'Send request') : editCartKey ? 'Update booking' : 'Add booking to cart'}</button></div>
-          {!canAddBooking && <small className="customer-booking-hint">{missingBookingChoice || (closedMessage ? 'Choose an open date.' : 'Choose an available time to continue.')}</small>}
           {quoteRequired && !customerPartsNote.trim() && <small className="customer-field-error" role="status">Describe the parts you will provide.</small>}
         </div>
       </section>

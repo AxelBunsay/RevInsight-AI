@@ -28,6 +28,7 @@ const paymentSubmissionSchema = new mongoose.Schema({
 }, { _id: true });
 
 const reservationSchema = new mongoose.Schema({
+  requestKey: String,
   code: { type: String, required: true, unique: true, sparse: true },
   customerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   customerName: { type: String, required: true },
@@ -68,5 +69,7 @@ const reservationSchema = new mongoose.Schema({
   refundDecisionAt: { type: Date, default: null },
   expiredAt: { type: Date, default: null }
 }, { timestamps: false });
+
+reservationSchema.index({ customerId: 1, requestKey: 1 }, { unique: true, partialFilterExpression: { requestKey: { $type: 'string' } } });
 
 module.exports = mongoose.model('Reservation', reservationSchema, 'orders');

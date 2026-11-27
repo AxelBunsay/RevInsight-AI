@@ -4,6 +4,8 @@ const dashboardController = require('../../controllers/adminControllers/dashboar
 const { protect } = require('../../middleware/adminAuth');
 const productImageUpload = require('../../middleware/productImageUpload');
 
+router.use('/walk-ins', protect, require('./walkIn'));
+
 // Dashboard Routes
 router.get('/dashboard', protect, dashboardController.getDashboardStats);
 router.get('/dashboard/revenue', protect, dashboardController.getRevenueData);

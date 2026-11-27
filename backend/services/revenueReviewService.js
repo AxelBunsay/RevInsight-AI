@@ -6,6 +6,7 @@ const Product = require('../models/product');
 const Review = require('../models/revenueMonthReview');
 const Audit = require('../models/adminAudit');
 const { buildRevenuePipelines, getManilaDateParts, normalizeRevenueSources, REVENUE_TIMEZONE } = require('../utils/revenue');
+const { revenueTransactionKey } = require('../utils/revenueCoverage');
 const { resolveRevenueScope } = require('../utils/revenueScope');
 
 const numeric = value => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
@@ -20,9 +21,9 @@ const keys = records => [...new Map(records.map(row => [row.recordType + ':' + r
 async function loadReviewRecords(session = null) {
   const pipelines = buildRevenuePipelines();
   const sources = await Promise.all([
-    Order.find(pipelines.orders[0].$match).select('_id status createdAt totalPrice totalAmount items').session(session).lean(),
+    Order.find(pipelines.orders[0].$match).select('_id walkInId status createdAt totalPrice totalAmount items').session(session).lean(),
     Reservation.find({status:pipelines.reservations[0].$match.status}).select('_id code status completedAt total items').session(session).lean(),
-    ServiceRequest.find(pipelines.services[0].$match).select('_id status completedAt estimatedPrice serviceType serviceCategory quoteStatus quotedPrice').session(session).lean()
+    ServiceRequest.find(pipelines.services[0].$match).select('_id walkInId status completedAt estimatedPrice serviceType serviceCategory quoteStatus quotedPrice').session(session).lean()
   ]);
   const ids = sources.slice(0,2).flatMap(rows => rows.flatMap(row => (Array.isArray(row.items) ? row.items : []).map(item => item?.productId).filter(Boolean)));
   const products = ids.length ? await Product.find({ _id: { $in: ids } }).select('_id category').session(session).lean() : [];
@@ -124,7 +125,7 @@ async function getQuarterReview(selectedQuarter, { session = null, now = new Dat
       : review && !current ? 'needs_review'
       : blocking ? 'blocked'
       : current ? review.status : 'awaiting_review';
-    const eligibleTransactionCount = monthRecords.filter(row=>row.eligible).length;
+    const eligibleTransactionCount = new Set(monthRecords.filter(row => row.eligible).map(({ source, row }) => revenueTransactionKey({ source, recordId: row._id, walkInId: row.walkInId }))).size;
     return {
       monthKey, label: new Intl.DateTimeFormat('en-PH',{ timeZone:REVENUE_TIMEZONE, month:'long',year:'numeric' }).format(new Date(startDate+'T00:00:00+08:00')),
       startDate, endDateExclusive, periodStatus, eligibleTransactionCount,

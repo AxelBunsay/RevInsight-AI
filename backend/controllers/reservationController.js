@@ -168,6 +168,14 @@ async function expireReservations() {
 
 const createReservation = async (req, res) => {
   try {
+    const requestKey = req.body?.requestKey;
+    if (requestKey !== undefined) {
+      if (typeof requestKey !== 'string' || !/^[\w-]{12,100}$/.test(requestKey)) return res.status(400).json({ message: 'Invalid reservation request identifier.' });
+      const existing = await Reservation.findOne({ customerId: req.user.userId, requestKey });
+      if (existing) return res.json({ success: true, reservation: existing });
+    }
+    const paymentMethod = req.body?.paymentMethod ?? 'GCash';
+    if (!['Cash', 'GCash'].includes(paymentMethod)) return res.status(400).json({ message: 'Choose Cash or GCash.' });
     const requestedItems = req.body?.items;
     if (!Array.isArray(requestedItems) || requestedItems.length < 1 || requestedItems.length > 50) {
       return res.status(400).json({ success: false, message: 'Add between 1 and 50 items to the reservation.' });
@@ -242,6 +250,10 @@ const createReservation = async (req, res) => {
     let reservation;
     try {
       await session.withTransaction(async () => {
+        if (requestKey) {
+          reservation = await Reservation.findOne({ customerId: user._id, requestKey }).session(session);
+          if (reservation) return;
+        }
         await holdReservationStock(items, session);
         const counter = await Counter.findOneAndUpdate(
           { _id: 'reservation' },
@@ -252,6 +264,7 @@ const createReservation = async (req, res) => {
         [reservation] = await Reservation.create([{
           code: `RSV-${String(counter.sequence).padStart(4, '0')}`,
           customerId: user._id,
+          requestKey,
           customerName: name,
           customerPhone: user.phoneNumber || '',
           items,
@@ -261,6 +274,7 @@ const createReservation = async (req, res) => {
           downPaymentAmount,
           amountPaid: 0,
           stockHeld: true,
+          paymentMethod,
           balanceDue: total,
           paymentDueAt: new Date(Date.now() + settings.pendingPaymentHours * 60 * 60 * 1000)
         }], { session });
@@ -356,6 +370,7 @@ const submitPayment = async (req, res) => {
     await expireReservations();
     const reservation = await Reservation.findOne({ _id: req.params.id, customerId: req.user.userId, code: { $exists: true } });
     if (!reservation) return res.status(404).json({ success: false, message: 'Reservation not found.' });
+    if (reservation.paymentMethod === 'Cash') return res.status(409).json({ message: 'Pay the cash deposit at the shop.' });
     if (!canTransitionReservationStatus(reservation.status, 'Payment Submitted')) {
       return res.status(409).json({ success: false, message: 'Payment can only be submitted for a pending down payment.' });
     }
@@ -593,7 +608,9 @@ const confirmReservation = async (req, res) => {
       const reservation = await Reservation.findOne({ _id: req.params.id, code: { $exists: true } }).session(session);
       if (!reservation) throw Object.assign(new Error('Reservation not found.'), { status: 404 });
       const before = auditSnapshot(reservation);
-      if (!canTransitionReservationStatus(reservation.status, 'Reserved')) {
+      const cashReceived = req.body?.cashReceived === true && reservation.paymentMethod === 'Cash'
+        && reservation.status === 'Pending Down Payment' && reservation.paymentDueAt > new Date();
+      if (!cashReceived && !canTransitionReservationStatus(reservation.status, 'Reserved')) {
         throw Object.assign(new Error('Only submitted payments can be confirmed.'), { status: 409 });
       }
       // Old pending reservations acquire a hold here; new checkouts already own one.
