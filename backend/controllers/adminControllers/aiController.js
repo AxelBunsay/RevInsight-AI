@@ -133,10 +133,12 @@ async function gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntr
     const scope = resolveRevenueScope(req.body);
     const scoped = (await getControllerResult(dashboard.getScopedRevenue, { ...req, query: req.body })).data;
     return {
-      stats: { totalRevenue: scoped.concentration.totalRevenue, totalTransactions: scoped.reportRecords.length },
+      stats: { totalRevenue: scoped.concentration.totalRevenue, totalTransactions: scoped.coverage.includedTransactions },
       coverage: scoped.coverage,
       analysisScopes: { concentration: scope.label, overallRisk: scope.label, trend: 'All recorded completed quarters', forecast: 'All recorded completed quarters', selectedQuarter: period?.key || null },
-      selectedQuarter: quarterRevenueContext(chartEntriesRes.data, period),
+      selectedQuarter: scope.mode === 'selectedQuarter'
+        ? { ...period, ...scoped.concentration, ...scoped.concentration.indicators }
+        : quarterRevenueContext(chartEntriesRes.data, period),
       quarterly: quarterlyRes.data,
       ...(includeChartEntries ? { chartEntries: scoped.entries } : {}),
       revenueRisk: scoped.risk, revenueConcentration: scoped.concentration,
@@ -170,6 +172,26 @@ function hashAnalysisData(analysisData) {
   return createHash('sha256').update(JSON.stringify(analysisData)).digest('hex');
 }
 
+function scopedFacts(data, question) {
+  const { scope, contributors, indicators, totalRevenue, coverage } = data.revenueConcentration;
+  const money = value => '₱' + value.toLocaleString('en-PH', { maximumFractionDigits: 2 });
+  const top = contributors[0];
+  const facts = [`${scope.label}: ${money(totalRevenue)} across ${coverage.includedTransactions} eligible transactions.`];
+  if (top) facts.push(`${top.name} led with ${money(top.revenue)} (${indicators.topOneShare}% of classified contributor revenue). Top three: ${indicators.topThreeShare}%. HHI: ${indicators.hhi}. Concentration risk: ${indicators.concentrationLevel}.`);
+  else facts.push(data.revenueConcentration.unavailableReason);
+  facts.push(coverage.completeness === 'reviewed' ? 'The closed quarter was reviewed.' : 'Coverage is unverified.');
+  const change = data.riskLevels?.qoqChange?.value;
+  if (/chang|trend|compar/i.test(question) && Number.isFinite(change)) {
+    facts.push(`Latest completed-quarter change (all-records history): ${change}%.`);
+  }
+  const forecast = data.officialForecast;
+  if (/forecast|likely next|predict/i.test(question)) {
+    facts.push(forecast ? `${forecast.targetLabel} (all-records history): ${money(forecast.expected)}, likely range ${money(forecast.low)}–${money(forecast.high)}.` : 'An official forecast is unavailable.');
+    if (forecast?.quarterToDate) facts.push(`${forecast.quarterToDate.quarter} to date: ${money(forecast.quarterToDate.revenue)} at ${forecast.quarterToDate.percentElapsed}% elapsed.`);
+  }
+  return facts.filter(Boolean).join(' ');
+}
+
 async function askRevenueAI(req, res, dependencies = {}) {
   const revenueInsights = dependencies.generateRevenueInsights || generateRevenueInsights;
   const dashboard = dependencies.dashboardController || dashboardController;
@@ -186,8 +208,32 @@ async function askRevenueAI(req, res, dependencies = {}) {
   try {
     const revenueData = await gatherRevenueAnalysisData(req, dashboard, now, { includeChartEntries: true });
     const { chartEntries, ...aiRevenueData } = revenueData;
-    const generated = await revenueInsights(question, aiRevenueData, { requestId });
-    const answer = formatRevenueAnswer(generated);
+    const facts = req.body?.scope ? scopedFacts(aiRevenueData, question) : '';
+    let answer, availability;
+    let source = 'ai';
+    try {
+      const generated = await revenueInsights(question, aiRevenueData, { requestId });
+      answer = formatRevenueAnswer(generated);
+      if (facts && /[\d₱$%]/u.test(answer)) {
+        // The verified statement can replace a model's numeric opening while
+        // retaining its distinct, qualitative recommendation and outcomes.
+        const advice = answer.match(/\*\*Recommendation\b[\s\S]+/i)?.[0];
+        if (advice && /If you act:/i.test(advice) && /If you ignore it:/i.test(advice)) answer = advice;
+      }
+      // The dashboard supplies the figures. Never publish a second, unbound
+      // numerical claim from model prose alongside that authoritative snapshot.
+      if (facts && (!answer.trim() || /[\d₱$%]/u.test(answer))) {
+        availability = { code: 'UNVERIFIED_MODEL_FIGURES' };
+      }
+    } catch (error) {
+      if (!facts || !error.revenueAI) throw error;
+      availability = { code: error.code, message: error.message };
+    }
+    if (availability) {
+      source = 'template';
+      answer = '**Recommendation**\nReview contributor dependence and verify transaction coverage before changing purchasing plans.\n\n**Possible outcome**\nIf you act: Better coverage may improve planning.\nIf you ignore it: Gaps could obscure changes in demand.';
+    }
+    if (facts) answer = facts + '\n\n' + answer;
     if (!answer.trim()) throw new Error('Revenue AI returned an empty answer.');
     let chart = null;
     let chartType = null;
@@ -214,6 +260,9 @@ async function askRevenueAI(req, res, dependencies = {}) {
       success: true,
       question,
       answer,
+      source,
+      cached: false,
+      ...(availability ? { availability } : {}),
       chart,
       timestamp: now.toISOString()
     });
@@ -260,7 +309,7 @@ async function getRevenueCardInsights(req, res, dependencies = {}) {
     }
     const cached = cache.get(cacheKey);
     if (!refresh && cached && cached.expiresAt > now.getTime()) {
-      return res.json(cached.result);
+      return res.json({ ...cached.result, cached: true });
     }
 
     let generation = !refresh ? requests.get(cacheKey) : null;
@@ -275,7 +324,8 @@ async function getRevenueCardInsights(req, res, dependencies = {}) {
         ]));
         return {
           insights,
-          source: generated.source === 'ai' ? 'ai' : 'template',
+          source: generated.source || 'unknown',
+          cached: false,
           generatedAt: now.toISOString(),
           ...(generated.availability ? { availability: generated.availability } : {}),
           requestId

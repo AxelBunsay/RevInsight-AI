@@ -7,6 +7,7 @@ import InventoryHealth from '../components/dashboard/InventoryHealth';
 import PeriodToggle from '../components/dashboard/PeriodToggle';
 import SalesChart from '../components/dashboard/SalesChart';
 import SalesSummary from '../components/dashboard/SalesSummary';
+import { salesPeriodLabels } from '../components/dashboard/salesPeriodLabels';
 import StatStrip from '../components/dashboard/StatStrip';
 import EmptyState from '../components/common/EmptyState';
 import Panel from '../components/common/Panel';
@@ -43,7 +44,7 @@ function Dashboard() {
 
       <Panel className="admin-sales-hero">
         <div className="admin-sales-hero__header">
-          {seriesState.series.length ? <SalesSummary period={period} series={seriesState.series} /> : <div className="admin-sales-summary"><div className="admin-sales-summary__total"><span>{period === 'daily' ? 'Sales this week' : period === 'weekly' ? 'Sales, last 8 weeks' : 'Sales, last 12 months'}</span><strong>{seriesState.loading ? '—' : '₱0'}</strong><small>{seriesState.error || 'Latest confirmed order sales'}</small></div></div>}
+          {seriesState.series.length ? <SalesSummary period={period} series={seriesState.series} /> : <div className="admin-sales-summary"><div className="admin-sales-summary__total"><span>{salesPeriodLabels[period].heading}</span><strong>{seriesState.loading ? '—' : '₱0'}</strong><small>{seriesState.error || (seriesState.loading ? 'Loading confirmed order sales' : `Latest ₱0 · +0.0% ${salesPeriodLabels[period].comparison}`)}</small></div></div>}
           <PeriodToggle value={period} onChange={setPeriod} />
         </div>
         {seriesState.error && <div className="admin-inline-error" role="alert"><span>{seriesState.error}</span><button type="button" onClick={seriesState.retry}>Retry</button></div>}

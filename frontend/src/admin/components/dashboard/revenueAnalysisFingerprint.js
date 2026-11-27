@@ -1,6 +1,7 @@
 export function createRevenueFiguresFingerprint({ analysis, collectedAmount, outstandingAmount }) {
   const indicators = analysis?.risk?.indicators || {};
   const fingerprintData = {
+    salesMix: analysis?.concentration?.salesMix,
     totals: [Number(collectedAmount || 0), Number(outstandingAmount || 0)],
     quarters: (analysis?.quarters || []).map(({ year, quarter, revenue }) => [year, quarter, Number(revenue || 0)]),
     overallRisk: [analysis?.risk?.overallRisk?.level || '', analysis?.risk?.overallRisk?.reason || ''],

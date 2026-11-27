@@ -332,7 +332,8 @@ describe('revenue AI controller helpers', () => {
 
     const first = await call();
     const second = await call();
-    expect(first.result).toEqual(second.result);
+    expect(first.result.cached).toBe(false);
+    expect(second.result).toEqual({ ...first.result, cached: true });
     expect(first.result).toMatchObject({ source: 'ai', generatedAt: '2026-11-04T00:00:00.000Z' });
     expect(first.result.insights.trend).toEqual({
       summary: 'Revenue is stable.',

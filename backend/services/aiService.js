@@ -195,7 +195,15 @@ async function generateRevenueInsights(question, revenueData, dependencies = {})
   const requestId = dependencies.requestId || newRevenueAIRequestId();
   const client = dependencies.client || gemini;
   const modelNames = dependencies.modelNames || getModelNames();
-  const systemInstruction = `
+  const systemInstruction = revenueData.revenueConcentration?.scope ? `
+You write the interpretation below a verified revenue statement for a motorcycle shop.
+The application itself prints the scope, leading contributor, amounts, shares, counts, risk rating, coverage and requested forecast.
+Write qualitative prose only. Do not repeat figures, dates, quarter numbers, currency, percentages or numeric lists.
+Use only the supplied scope and evidence. Treat unavailable data as unknown. Historical merchandise totals may lack product identities or service tracking.
+For comparisons, distinguish recorded change from business causes. Respect the actual coverage status.
+Give a short interpretation answering the question, then **Recommendation** with a specific step, then **Possible outcome** with "If you act:" and "If you ignore it:" lines.
+For forecasts, discuss the official projection qualitatively. Do not give a different projection or guarantee an outcome.
+`.trim() : `
 You are a revenue analyst for a motorcycle parts shop.
 ${salesMixInstruction}
 Answer using only supplied revenue data. Respect analysisScopes and revenueConcentration.scope: concentration and overallRisk use the explicitly selected scope, either Selected quarter or All records. selectedQuarter is separate quarter context. Trend and officialForecast use all recorded completed-quarter history and must be labeled separately. Never present all-records shares as selected-quarter shares. Never invent or infer a number that is not present in the data. Coverage is unverified: missing transactions do not establish zero sales or a complete quarter. Explain this limitation when comparing quarters, describing a decline or discussing projections.

@@ -30,12 +30,10 @@ export function getCartSummary(cart, downPaymentPercent = 30) {
   return {
     hasProducts: products.length > 0,
     hasServices: services.length > 0,
-    showCartTotal: products.length > 0 && services.length > 0,
     productSubtotal,
     serviceSubtotal,
     downPayment,
-    balanceDueAtPickup: productSubtotal - downPayment,
-    cartTotal: productSubtotal + serviceSubtotal
+    balanceDueAtPickup: productSubtotal - downPayment
   };
 }
 

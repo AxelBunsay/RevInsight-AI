@@ -90,7 +90,7 @@ async function main() {
       await customer.getByPlaceholder('Anything the mechanic should know?',{exact:true}).fill('Synthetic responsive interaction check');
       const layout=await dimensions(customer);ensure(layout.documentWidth<=layout.viewport,'Booking form overflow');
       await customer.screenshot({path:path.join(out,environment+'-booking-form.png'),fullPage:true});
-      await customer.getByRole('button',{name:'Add booking to cart',exact:true}).click();await customer.waitForURL('**/customer/cart');await customer.getByRole('button',{name:'Continue to service checkout',exact:true}).waitFor();
+      await customer.getByRole('button',{name:'Add booking to cart',exact:true}).click();await customer.waitForURL('**/customer/cart');await customer.getByRole('button',{name:'Check out services',exact:true}).waitFor();
       return{date:true,time,motorcycle:true,mechanic:true,notes:true,addedToCart:true,formLayout:layout};
     });
     await check(environment,'Admin Dashboard chart and report controls',admin,async()=>{

@@ -37,8 +37,11 @@ function AdminLayout() {
   useEffect(() => {
     const responsiveQuery = window.matchMedia(ADMIN_DRAWER_MEDIA_QUERY);
     const syncLayout = (event) => {
+      if (drawerRef.current?.contains(document.activeElement)) {
+        document.activeElement?.blur();
+      }
       setIsDrawerLayout(event.matches);
-      if (!event.matches) dispatchDrawer({ type: 'close' });
+      dispatchDrawer({ type: 'close' });
     };
 
     responsiveQuery.addEventListener('change', syncLayout);

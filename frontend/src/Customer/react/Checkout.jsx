@@ -8,7 +8,7 @@ import ServicePaymentOptions from './ServicePaymentOptions';
 import { serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
-import { getServiceCartPaymentSummary, isCartItemSelected } from './serviceCart';
+import { getCartSummary, getServiceCartPaymentSummary, isCartItemSelected } from './serviceCart';
 import { calculateServicePayment, getServicePaymentSummary } from '../../utils/servicePayment';
 import '../styles/customer-flow.css';
 
@@ -62,8 +62,8 @@ function CartCheckout() {
   const reservationId = searchParams.get('reservation');
   const checkoutFlow = searchParams.get('flow');
   const { cart, removeCartItem } = useCustomerPrototype();
-  const productItems = cart.filter((item) => item.kind === 'product' && isCartItemSelected(item));
-  const serviceItems = cart.filter((item) => item.kind === 'service' && isCartItemSelected(item));
+  const productItems = checkoutFlow === 'services' ? [] : cart.filter((item) => item.kind === 'product' && isCartItemSelected(item));
+  const serviceItems = checkoutFlow === 'products' || reservationId ? [] : cart.filter((item) => item.kind === 'service' && isCartItemSelected(item));
   const [checkoutReservation, setCheckoutReservation] = useState(null);
   const isReservationFlow = Boolean(reservationId || checkoutReservation || (checkoutFlow !== 'services' && productItems.length));
   const [step, setStep] = useState(reservationId ? 'payment' : isReservationFlow ? 'reservation' : 'payment');
@@ -78,9 +78,7 @@ function CartCheckout() {
   const [showPaymentModal, setShowPaymentModal] = useState(Boolean(reservationId));
   const [servicePayment, setServicePayment] = useState(null);
   const [paymentMessage, setPaymentMessage] = useState('');
-  const productSubtotal = productItems.reduce((total, item) => total + item.price * item.quantity, 0);
-  const serviceTotal = serviceItems.reduce((total, item) => total + Number(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)), 0);
-  const downPaymentAmount = Math.round((productSubtotal * (settings?.downPaymentPercent ?? 30) / 100 + Number.EPSILON) * 100) / 100;
+  const { productSubtotal, downPayment: downPaymentAmount, balanceDueAtPickup } = getCartSummary(productItems, settings?.downPaymentPercent ?? 30);
   const serviceDownPaymentPercent = settings?.serviceDownPaymentPercent ?? settings?.downPaymentPercent ?? 30;
   const servicePaymentEstimate = getServiceCartPaymentSummary(serviceItems, serviceDownPaymentPercent);
 
@@ -197,7 +195,7 @@ function CartCheckout() {
         ...result,
         cartItem: itemsByKey.get(result.cartKey)
       }));
-      if (results.length !== serviceItems.length) {
+      if (results.some(result => !result.cartItem) || new Set(results.map(result => result.cartKey)).size !== serviceItems.length || results.length !== serviceItems.length) {
         throw new Error('The booking results were incomplete. Your cart was not changed.');
       }
       setBookingResults(results);
@@ -227,7 +225,7 @@ function CartCheckout() {
             <div className="customer-reservation-payment-instructions">
               <p><strong>Items total</strong><strong>{money(productSubtotal)}</strong></p>
               <p><strong>Down payment ({settings?.downPaymentPercent ?? 30}%): due now</strong><strong>{money(downPaymentAmount)}</strong></p>
-              <p><strong>Balance due at pickup</strong><strong>{money(productSubtotal - downPaymentAmount)}</strong></p>
+              <p><strong>Balance due at pickup</strong><strong>{money(balanceDueAtPickup)}</strong></p>
               <p className="customer-reservation-note">Checkout holds your items until the payment deadline. Submit your down payment to keep the reservation.</p>
               {settings?.pickupAddress && <p className="customer-pickup-location">Pickup at {settings.pickupAddress}{settings.pickupHours ? ` · ${settings.pickupHours}` : ''}</p>}
             </div>
@@ -289,7 +287,7 @@ function CartCheckout() {
                 <ServicePaymentBreakdown booking={itemPaymentEstimate} />
               </span></div>;
             })}</div>
-            <div className="customer-review-meta"><p><span>Service total</span><strong>{money(serviceTotal)}</strong></p><p><span>Down payment ({serviceDownPaymentPercent}%)</span><strong>{money(servicePaymentEstimate.downPaymentAmount)}</strong></p><p><span>Balance due at the shop</span><strong>{money(servicePaymentEstimate.balanceDue)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>
+            <div className="customer-review-meta"><p><span>Service total</span><strong>{money(servicePaymentEstimate.totalAmount)}</strong></p><p><span>Down payment ({serviceDownPaymentPercent}%)</span><strong>{money(servicePaymentEstimate.downPaymentAmount)}</strong></p><p><span>Balance due at the shop</span><strong>{money(servicePaymentEstimate.balanceDue)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>
             {serviceItems.length > 0 && <div className="customer-checkout-actions"><button type="button" className="customer-secondary-button" onClick={() => setStep('payment')}>Back</button><button type="button" className="customer-primary-button" onClick={completeServiceBooking} disabled={!serviceItems.length || isSubmitting}>{isSubmitting ? 'Submitting bookings...' : `Submit ${serviceItems.length} service booking${serviceItems.length === 1 ? '' : 's'}`}</button></div>}
           </>}
         </section>

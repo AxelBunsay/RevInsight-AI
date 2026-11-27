@@ -336,7 +336,7 @@ export function CustomerPage({ title, description, children, preserveScrollOnMou
         {actions
           ? <div className="customer-heading-title-row"><h1>{title}</h1>{actions}</div>
           : <h1>{title}</h1>}
-        <p>{description}</p>
+        {description && <p>{description}</p>}
         </section>}
       {children}
   </>;

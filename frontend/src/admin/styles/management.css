@@ -247,7 +247,12 @@
 }
 .admin-root .admin-management-page .transactions-table-scroll {
   width: 100%;
+  max-width: 100%;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .admin-root .admin-management-page .transaction-card-list {
   display: none;
@@ -486,7 +491,7 @@
 .admin-root .admin-management-page .transactions-container {
   overflow-x: visible;
 }
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .admin-root .admin-management-page .transactions-tabs button,
   .admin-root .admin-management-page .transactions-page-actions .btn-small,
   .admin-root .admin-management-page .transactions-container .search-filter input,
@@ -1810,7 +1815,7 @@
   margin-top: 2px;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1100px) {
   .admin-root .admin-management-page .admin-dialog-backdrop {
     z-index: 1100;
     padding: 12px;

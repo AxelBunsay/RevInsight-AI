@@ -161,7 +161,7 @@ async function main() {
         await page.getByText('Added to Reservation Cart', { exact: true }).waitFor();
         await page.getByRole('button', { name: 'Close product details' }).click();
         await page.goto('http://localhost:5100/customer/cart');
-        await page.getByRole('button', { name: 'Continue to checkout', exact: true }).click();
+        await page.getByRole('button', { name: 'Check out products', exact: true }).click();
         const response = page.waitForResponse(r => r.url().endsWith('/api/reservations') && r.request().method() === 'POST');
         await page.getByRole('button', { name: 'Continue to payment', exact: true }).click();
         const created = await response;

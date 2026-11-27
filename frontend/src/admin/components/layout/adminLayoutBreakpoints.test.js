@@ -12,9 +12,9 @@ const sidebarSource = readFileSync(new URL('./AdminSidebar.jsx', import.meta.url
 const layoutStyles = readFileSync(new URL('../../styles/layout.css', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
 
 describe('admin drawer breakpoint and actions', () => {
-  it('uses the single 1024px viewport breakpoint', () => {
-    expect(ADMIN_DRAWER_BREAKPOINT).toBe(1024);
-    expect(ADMIN_DRAWER_MEDIA_QUERY).toBe('(max-width: 1024px)');
+  it('uses the single 1100px tablet-to-drawer breakpoint', () => {
+    expect(ADMIN_DRAWER_BREAKPOINT).toBe(1100);
+    expect(ADMIN_DRAWER_MEDIA_QUERY).toBe('(max-width: 1100px)');
   });
 
   it.each(['toggle', 'open'])('opens from the hamburger action: %s', (action) => {

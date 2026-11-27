@@ -225,6 +225,8 @@ export const adminApi = {
     method: 'POST',
     body: JSON.stringify({ ...(selectedQuarter ? { selectedQuarter } : {}), ...(scope ? { scope } : {}) })
   }).then(mapRevenueCardInsights),
+  getQuarterReview: (selectedQuarter) => request('/api/dashboard/analytics/quarter-review?' + new URLSearchParams({ selectedQuarter })),
+  reviewRevenueMonth: (decision) => request('/api/dashboard/analytics/month-review', { method: 'POST', body: JSON.stringify(decision) }),
   getScopedRevenue: (selectedQuarter, scope = 'allRecords') => request('/api/dashboard/analytics/scoped-revenue?' + new URLSearchParams({ scope, ...(selectedQuarter ? { selectedQuarter } : {}) })),
   getRevenueAnalysisData: async (selectedQuarter, scope) => {
     if (scope) {

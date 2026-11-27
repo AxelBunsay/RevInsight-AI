@@ -1150,6 +1150,7 @@
 }
 .customer-login-options {
   display: flex;
+  font-size: 0.875rem;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
@@ -1157,4 +1158,18 @@
 }
 .customer-login-options a { color: #91390e; font-weight: 600; padding-block: 8px; }
 .customer-login-options a:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-.customer-auth-form .customer-login-options .customer-auth-remember { margin: 0; }
+.customer-auth-page .customer-auth-form .customer-login-options .customer-auth-remember {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0;
+}
+
+.customer-login-options .customer-auth-remember input[type="checkbox"] {
+  flex: none;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+}

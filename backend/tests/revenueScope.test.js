@@ -13,6 +13,23 @@ const dashboard = { getDashboardStats:ok({}),getQuarterlyData:ok([]),getRevenueR
 const card = {summary:'Recorded figures.',recommendation:'Review the mix.',ifFollowed:'Risk may change.',ifIgnored:'Risk could persist.'};
 const insights=Object.fromEntries(['trend','risk','concentration','service','forecast'].map(k=>[k,card]));
 describe('one revenue scope for dashboard, export and AI',()=>{
+ it('discards a generated answer that twice misquotes the scoped total', async()=>{
+   const example = { ...entries[0], name:'Coolant', revenue:2570 };
+   const rows = [example, ...Array.from({length:78}, (_,i)=>({
+     ...example, name:'Part '+i, recordId:'other:'+i, revenue:i===77?288:266
+   }))];
+   const scoped=buildScopedRevenue(rows,{scope:'selectedQuarter',selectedQuarter:'2026-Q2'});
+   const res=response();
+   await askRevenueAI({body:{scope:'selectedQuarter',selectedQuarter:'2026-Q2',question:'What leads revenue?'}},res,{
+     dashboardController:{...dashboard,getScopedRevenue:ok(scoped)},
+     generateRevenueInsights:async()=> 'Coolant leads at ₱2,570. Quarter total ₱2,340. Out of ₱2,340.'
+   });
+   expect(res.data.source).toBe('template');
+   expect(res.data.answer).toContain('₱23,340 across 79');
+   expect(res.data.answer).toContain('Coolant led with ₱2,570 (11.01%');
+   expect(res.data.answer).not.toContain('₱2,340');
+   expect(res.data.answer).toContain('Coverage is unverified');
+ });
  it('preserves an unsplit mixed sale and keeps it out of a product ranking',async()=>{
    const rows = normalizeRevenueSources({orders:[{_id:'mixed',createdAt:'2024-01-01',totalPrice:100,
      items:[{recordType:'mixed',name:'Parts and installation',price:80,quantity:1},
@@ -82,6 +99,10 @@ describe('one revenue scope for dashboard, export and AI',()=>{
    const res=response(), generate=vi.fn().mockResolvedValue('Verified scoped answer.');
    await askRevenueAI({body:{scope,selectedQuarter,question:'Explain risk.'}},res,{dashboardController:dashboard,generateRevenueInsights:generate});
    expect(generate.mock.calls[0][1].revenueConcentration).toEqual(data.concentration);
+   expect(res.data).toMatchObject({source:'ai', cached:false});
+   expect(res.data.answer).toContain(data.scope.label);
+   expect(res.data.answer).toContain('₱'+data.concentration.totalRevenue.toLocaleString('en-PH')+' across '+data.coverage.includedTransactions);
+   expect(res.data.answer).toContain(topOneShare+'% of classified contributor revenue');
    const chart=buildRevenueChartData('top_contributors',data.entries,data.quarters,new Date(),data.scope);
    expect(chart.title).toContain(data.scope.label);
    expect(chart.datasets[0].data[0]).toBe(data.concentration.contributors[0].revenue);
