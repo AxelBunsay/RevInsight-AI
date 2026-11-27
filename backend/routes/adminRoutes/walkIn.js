@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const mongoose = require('mongoose');
 const WalkIn = require('../../models/walkIn');
+const Admin = require('../../models/adminModels/admin');
 const Product = require('../../models/product');
 const Service = require('../../models/service');
 const ServiceRequest = require('../../models/serviceRequest');
@@ -26,15 +27,30 @@ async function stockLine(line, session) {
   return { product, variant };
 }
 
+async function receiptViews(visits) {
+  const ids = visits.map(visit => visit.handledBy).filter(Boolean);
+  const staff = ids.length ? await Admin.find({ _id: { $in: ids } }).select('username').lean() : [];
+  const names = new Map(staff.map(account => [String(account._id), account.username]));
+  return visits.map(visit => ({
+    ...visit.toObject(),
+    handledByName: names.get(String(visit.handledBy)) ?? null
+  }));
+}
+
+async function sendReceipt(res, visit) {
+  const [receipt] = await receiptViews([visit]);
+  res.json({ visit: receipt });
+}
+
 router.get('/', async (req, res) => {
   const visits = await WalkIn.find({ status: { $ne: 'Paid' } }).sort({ createdAt: 1 }).select('-proofId');
-  res.json({ visits });
+  res.json({ visits: await receiptViews(visits) });
 });
 
 router.get('/:id', async (req, res) => {
   const visit = await WalkIn.findById(req.params.id).select('-proofId');
   if (!visit) fail('Visit not found.', 404);
-  res.json({ visit });
+  return sendReceipt(res, visit);
 });
 
 router.post('/', async (req, res) => {
@@ -80,7 +96,7 @@ router.post('/', async (req, res) => {
     visit = await WalkIn.findOne(identity);
     if (!visit) throw error;
   }
-  res.json({ visit });
+  return sendReceipt(res, visit);
 });
 
 router.param('id', (req, res, next, id) => validId(id) ? next() : res.status(400).json({ message: 'Invalid visit ID.' }));
@@ -109,7 +125,7 @@ router.post('/:id/receipt', upload.single('proof'), async (req, res) => {
     await receipts.removeReceipt(proof.publicId);
     throw error;
   }
-  res.json({ visit });
+  return sendReceipt(res, visit);
 });
 
 router.post('/:id/reject', async (req, res) => {
@@ -120,7 +136,7 @@ router.post('/:id/reject', async (req, res) => {
       'submissions.$.reviewedBy': req.admin.id, 'submissions.$.reason': reason },
       $unset: { proofId: 1, proofFormat: 1, reference: 1 } }, { new: true });
   if (!visit) fail('No GCash receipt awaiting review.', 409);
-  res.json({ visit });
+  return sendReceipt(res, visit);
 });
 
 router.post('/:id/confirm', async (req, res) => {
@@ -163,7 +179,7 @@ router.post('/:id/confirm', async (req, res) => {
     await visit.save({ session });
   });
   await Promise.all(visit.items.map(line => evaluateLowStockAlert(line.productId)));
-  res.json({ visit });
+  return sendReceipt(res, visit);
 });
 
 router.use((error, req, res, next) => {

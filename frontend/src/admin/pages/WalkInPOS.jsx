@@ -50,7 +50,7 @@ export default function WalkInPOS({ onChange }) {
   }
 
   return <section className="admin-panel walk-in-pos"><button className="btn-small" type="button" aria-expanded={open} onClick={() => setOpen(!open)}>Walk-in POS</button>
-    {open && <fieldset disabled={busy}><legend>Walk-in Guest</legend>
+    {open && <fieldset disabled={busy}><legend>{visit ? 'Walk-in receipt' : 'Walk-in Guest'}</legend>
       {error && <p role="alert">{error}</p>}
       {!visit ? <>
         <form onSubmit={async e => {
@@ -71,6 +71,8 @@ export default function WalkInPOS({ onChange }) {
         <button className="btn-small btn-edit" disabled={!items.length && !serviceId} onClick={() => submit('', { requestKey: key, method, items, serviceId })}>{serviceId ? 'Queue service and open checkout' : 'Open checkout'}</button>
       </> : <>
         <h3>Visit {visit._id}</h3>
+        <p>Customer: {visit.customer || 'Walk-in Guest'}</p>
+        <p>Handled by: {visit.handledByName || 'Staff not recorded'}</p>
         {visit.items.map(i => <p key={i._id}>{i.productName} × {i.quantity} · {money(i.price * i.quantity)}</p>)}
         {visit.jobId && <p>{visit.serviceName} · {money(visit.serviceTotal)} · Job {visit.jobId}</p>}
         <p><strong>{money(visit.total)}</strong> · {visit.method} · {visit.status === 'Paid' ? 'Paid in full' : visit.status}</p>

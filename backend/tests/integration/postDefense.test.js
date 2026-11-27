@@ -4,7 +4,7 @@ import supertest from 'supertest';
 
 const require = createRequire(import.meta.url);
 const { app, startReplicaSet, stopReplicaSet, clearCollections, createFixtures, mockCloudinary,
-  Product, Mechanic, Service, ServiceRequest, BusinessRecord, Order, Reservation,
+  Admin, Product, Mechanic, Service, ServiceRequest, BusinessRecord, Order, Reservation,
   signAdmin, signCustomer, signMechanic } = require('./helpers');
 const { expireServiceBookings } = require('../../controllers/serviceRequestController');
 const { expireReservations } = require('../../controllers/reservationController');
@@ -41,6 +41,24 @@ describe('walk-in posting and online payment holds', () => {
     const result = await api.get(dashboard).set('Authorization', staff).query(query).expect(200);
     return result.body.data.concentration;
   }
+  it('keeps the original receipt handler through confirmation and lookup by another admin', async () => {
+    const manager = await Admin.create({ username: 'test_manager', password: 'TestOnlyStaff123' });
+    const authorization = 'Bearer ' + signAdmin(manager);
+    const { visit } = (await startVisit('Cash', [productLine()]).expect(200)).body;
+    const expected = { customer: 'Walk-in Guest', handledBy: fixtures.admin.id, handledByName: fixtures.admin.username };
+    expect(visit).toMatchObject(expected);
+    const url = visits + '/' + visit._id;
+    const pending = await api.get(visits).set('Authorization', authorization).expect(200);
+    expect(pending.body.visits[0]).toMatchObject(expected);
+    for (const response of [
+      await api.post(url + '/confirm').set('Authorization', authorization).expect(200),
+      await api.get(url).set('Authorization', authorization).expect(200)
+    ]) expect(response.body.visit).toMatchObject(expected);
+    await WalkIn.updateOne({ _id: visit._id }, { $unset: { handledBy: 1 } });
+    const legacy = await api.get(url).set('Authorization', authorization).expect(200);
+    expect(legacy.body.visit.handledByName).toBeNull();
+  });
+
   it('posts a single paid PHP 450 receipt and recognizes each line at the correct event', async () => {
     const { visit } = (await startVisit('Cash', [productLine()], fixtures.service.id).expect(200)).body;
     expect(visit).toMatchObject({ total: 450, customer: 'Walk-in Guest', handledBy: fixtures.admin.id, status: 'Unpaid' });
