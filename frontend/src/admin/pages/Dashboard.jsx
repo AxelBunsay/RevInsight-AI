@@ -7,6 +7,7 @@ import InventoryHealth from '../components/dashboard/InventoryHealth';
 import PeriodToggle from '../components/dashboard/PeriodToggle';
 import SalesChart from '../components/dashboard/SalesChart';
 import SalesSummary from '../components/dashboard/SalesSummary';
+import { salesPeriodLabels } from '../components/dashboard/salesPeriodLabels';
 import StatStrip from '../components/dashboard/StatStrip';
 import EmptyState from '../components/common/EmptyState';
 import Panel from '../components/common/Panel';
@@ -33,6 +34,8 @@ function Dashboard() {
   return (
     <div className="admin-page admin-dashboard">
       {dashboard.error && <div className="admin-inline-error" role="alert"><span>{dashboard.error}</span><button type="button" onClick={dashboard.retry}>Retry</button></div>}
+      {dashboard.data && <AIRevenueAnalysis dashboardData={dashboard.data} />}
+      <details><summary>Sales trends and shop operations</summary>
       {dashboard.data ? <StatStrip stats={dashboard.data.stats} /> : (
         <section className="admin-stat-strip admin-stat-strip--loading" aria-label="Loading business overview">
           {Array.from({ length: 4 }, (_, index) => <div className="admin-stat-cell admin-stat-cell--skeleton" key={index}><Skeleton label="Loading metric" /></div>)}
@@ -41,7 +44,7 @@ function Dashboard() {
 
       <Panel className="admin-sales-hero">
         <div className="admin-sales-hero__header">
-          {seriesState.series.length ? <SalesSummary period={period} series={seriesState.series} /> : <div className="admin-sales-summary"><div className="admin-sales-summary__total"><span>{period === 'daily' ? 'Sales this week' : period === 'weekly' ? 'Sales, last 8 weeks' : 'Sales, last 12 months'}</span><strong>{seriesState.loading ? '—' : '₱0'}</strong><small>{seriesState.error || 'Latest confirmed order sales'}</small></div></div>}
+          {seriesState.series.length ? <SalesSummary period={period} series={seriesState.series} /> : <div className="admin-sales-summary"><div className="admin-sales-summary__total"><span>{salesPeriodLabels[period].heading}</span><strong>{seriesState.loading ? '—' : '₱0'}</strong><small>{seriesState.error || (seriesState.loading ? 'Loading confirmed order sales' : `Latest ₱0 · +0.0% ${salesPeriodLabels[period].comparison}`)}</small></div></div>}
           <PeriodToggle value={period} onChange={setPeriod} />
         </div>
         {seriesState.error && <div className="admin-inline-error" role="alert"><span>{seriesState.error}</span><button type="button" onClick={seriesState.retry}>Retry</button></div>}
@@ -56,11 +59,12 @@ function Dashboard() {
             <CategoryRevenue categories={dashboard.data.categories || []} />
             <InventoryHealth inventory={dashboard.data.inventoryHealth} />
           </div>
-          <AIRevenueAnalysis dashboardData={dashboard.data} />
+
         </>
       ) : dashboard.loading ? (
         <div className="admin-dashboard-lower"><Skeleton className="admin-panel-skeleton" /><Skeleton className="admin-panel-skeleton" /></div>
       ) : <EmptyState>No dashboard data is available.</EmptyState>}
+      </details>
     </div>
   );
 }

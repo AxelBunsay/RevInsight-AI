@@ -1,30 +1,74 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { api } from '../../services/api';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { api, request } from '../../services/api';
 import { CustomerPage } from './CustomerLayout';
 import { useCustomerPrototype } from './useCustomerPrototype';
 import ReservationPaymentForm from './ReservationPaymentForm';
+import ServicePaymentOptions from './ServicePaymentOptions';
 import { serviceUnitSummary } from '../../utils/servicePricing';
 import ServicePriceBreakdown from '../../components/ServicePriceBreakdown';
 import ServicePaymentBreakdown from '../../components/ServicePaymentBreakdown';
-import { getServiceCartPaymentSummary, isCartItemSelected } from './serviceCart';
+import { getCartSummary, getServiceCartPaymentSummary, isCartItemSelected } from './serviceCart';
 import { calculateServicePayment, getServicePaymentSummary } from '../../utils/servicePayment';
 import '../styles/customer-flow.css';
 
 const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export default function Checkout() {
+  const [params] = useSearchParams();
+  const id = params.get('quote');
+  return id ? <QuoteCheckout key={id} id={id} /> : <CartCheckout />;
+}
+
+function QuoteCheckout({id}) {
   const navigate = useNavigate();
+  const [booking,setBooking] = useState(null);
+  const [payment,setPayment] = useState('Cash');
+  const [busy,setBusy] = useState(false);
+  const [error,setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    api.getCustomerServiceRequests().then(({requests}) => {
+      if (!active) return;
+      const found = requests.find(row => row._id === id);
+      if (found?.quoteCheckout === 'awaiting') setBooking(found);
+      else navigate('/customer/reservations/'+id,{replace:true});
+    }).catch(err=>{if(active)setError(err.message)});
+    return () => { active=false; };
+  },[id,navigate]);
+  async function confirm() {
+    setBusy(true); setError('');
+    try {
+      const {serviceRequest} = await request('/api/service-requests/'+id+'/quote/checkout',{
+        method:'POST',tokenKey:'customerToken',body:JSON.stringify({method:payment,amount:booking.quotedPrice})
+      });
+      if (payment === 'GCash' && serviceRequest.downPaymentAmount > 0) navigate('/customer/reservations/'+id,{state:{showPayment:true}});
+      else navigate('/my-purchases?tab=services');
+    } catch(err) { setError(err.message); } finally { setBusy(false); }
+  }
+  return <CustomerPage title="Service checkout"><section className="customer-checkout-panel">
+    {error && <p role="alert">{error}</p>}
+    {booking && <><h2>{booking.serviceType}</h2><p>Accepted labor quote ? {money(booking.quotedPrice)}</p>
+      <ServicePaymentOptions payment={payment} onChange={setPayment} />
+      <button className="customer-primary-button" disabled={busy} onClick={confirm}>Confirm service booking</button></>}
+    <Link to={'/customer/reservations/'+id}>View booking</Link>
+  </section></CustomerPage>;
+}
+
+function CartCheckout() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const reservationId = searchParams.get('reservation');
   const checkoutFlow = searchParams.get('flow');
   const { cart, removeCartItem } = useCustomerPrototype();
-  const productItems = cart.filter((item) => item.kind === 'product' && isCartItemSelected(item));
-  const serviceItems = cart.filter((item) => item.kind === 'service' && isCartItemSelected(item));
+  const productItems = checkoutFlow === 'services' ? [] : cart.filter((item) => item.kind === 'product' && isCartItemSelected(item));
+  const serviceItems = checkoutFlow === 'products' || reservationId ? [] : cart.filter((item) => item.kind === 'service' && isCartItemSelected(item));
   const [checkoutReservation, setCheckoutReservation] = useState(null);
   const isReservationFlow = Boolean(reservationId || checkoutReservation || (checkoutFlow !== 'services' && productItems.length));
   const [step, setStep] = useState(reservationId ? 'payment' : isReservationFlow ? 'reservation' : 'payment');
-  const [payment, setPayment] = useState('Cash at pickup');
+  const [checkoutKey] = useState(() => crypto.randomUUID());
+  const [payment, setPayment] = useState(location.state?.servicePaymentMethod || 'Cash');
   const [settings, setSettings] = useState(null);
   const [loadedReservationId, setLoadedReservationId] = useState('');
   const isLoadingReservation = Boolean(reservationId && loadedReservationId !== reservationId);
@@ -34,9 +78,7 @@ export default function Checkout() {
   const [showPaymentModal, setShowPaymentModal] = useState(Boolean(reservationId));
   const [servicePayment, setServicePayment] = useState(null);
   const [paymentMessage, setPaymentMessage] = useState('');
-  const productSubtotal = productItems.reduce((total, item) => total + item.price * item.quantity, 0);
-  const serviceTotal = serviceItems.reduce((total, item) => total + Number(item.estimatedPrice ?? Number(item.price || 0) + Number(item.mechanicFee || 0)), 0);
-  const downPaymentAmount = Math.round((productSubtotal * (settings?.downPaymentPercent ?? 30) / 100 + Number.EPSILON) * 100) / 100;
+  const { productSubtotal, downPayment: downPaymentAmount, balanceDueAtPickup } = getCartSummary(productItems, settings?.downPaymentPercent ?? 30);
   const serviceDownPaymentPercent = settings?.serviceDownPaymentPercent ?? settings?.downPaymentPercent ?? 30;
   const servicePaymentEstimate = getServiceCartPaymentSummary(serviceItems, serviceDownPaymentPercent);
 
@@ -56,7 +98,7 @@ export default function Checkout() {
     api.getCustomerReservation(reservationId).then((response) => {
       if (!isMounted) return;
       setCheckoutReservation(response.reservation);
-      if (response.reservation.status !== 'Pending Down Payment') {
+      if (response.reservation.paymentMethod === 'Cash' || response.reservation.status !== 'Pending Down Payment') {
         navigate(`/customer/reservations/${response.reservation._id}`, { replace: true });
       }
     }).catch((requestError) => {
@@ -82,10 +124,11 @@ export default function Checkout() {
         productId: item.id,
         ...(item.variantId ? { variantId: item.variantId } : {}),
         qty: item.quantity
-      })));
+      })), payment, checkoutKey);
       const reservation = response.reservation;
       setCheckoutReservation(reservation);
       productItems.forEach((item) => removeCartItem(item.key));
+      if (payment === 'Cash') { navigate('/customer/reservations/' + reservation._id, { replace: true }); return; }
       setSearchParams({ reservation: reservation._id }, { replace: true });
       setStep('payment');
       setShowPaymentModal(true);
@@ -140,8 +183,9 @@ export default function Checkout() {
         serviceId: item.serviceId || item.id,
         partsSource: item.partsSource || 'shop',
         ...(item.mechanicId ? { mechanicId: item.mechanicId } : {}),
-        date: item.bookingDate,
-        startTime: item.startTime,
+        queue: true,
+        requestKey: item.requestKey || checkoutKey + '-' + serviceItems.indexOf(item),
+        paymentMethod: payment,
         ...(item.units ? { units: item.units } : {}),
         vehicle: item.vehicle,
         notes: item.notes
@@ -151,7 +195,7 @@ export default function Checkout() {
         ...result,
         cartItem: itemsByKey.get(result.cartKey)
       }));
-      if (results.length !== serviceItems.length) {
+      if (results.some(result => !result.cartItem) || new Set(results.map(result => result.cartKey)).size !== serviceItems.length || results.length !== serviceItems.length) {
         throw new Error('The booking results were incomplete. Your cart was not changed.');
       }
       setBookingResults(results);
@@ -176,11 +220,12 @@ export default function Checkout() {
           {step === 'reservation' && <>
             <p className="customer-eyebrow">STEP 1 OF 2</p>
             <h2>Review your items</h2>
+            <ServicePaymentOptions payment={payment} onChange={setPayment} />
             <div className="customer-review-lines">{productItems.map((item) => <div key={item.key}><span><strong>{item.name}</strong><small>Qty {item.quantity} · Only {item.stock} left</small></span><strong>{money(item.price * item.quantity)}</strong></div>)}</div>
             <div className="customer-reservation-payment-instructions">
               <p><strong>Items total</strong><strong>{money(productSubtotal)}</strong></p>
               <p><strong>Down payment ({settings?.downPaymentPercent ?? 30}%): due now</strong><strong>{money(downPaymentAmount)}</strong></p>
-              <p><strong>Balance due at pickup</strong><strong>{money(productSubtotal - downPaymentAmount)}</strong></p>
+              <p><strong>Balance due at pickup</strong><strong>{money(balanceDueAtPickup)}</strong></p>
               <p className="customer-reservation-note">Checkout holds your items until the payment deadline. Submit your down payment to keep the reservation.</p>
               {settings?.pickupAddress && <p className="customer-pickup-location">Pickup at {settings.pickupAddress}{settings.pickupHours ? ` · ${settings.pickupHours}` : ''}</p>}
             </div>
@@ -203,7 +248,7 @@ export default function Checkout() {
           <div className="customer-checkout-progress" aria-label="Service checkout progress">{['Payment', 'Review'].map((label, index) => <div className={step === (index === 0 ? 'payment' : 'review') ? 'is-current' : step === 'review' && index === 0 ? 'is-complete' : ''} key={label}><span>{step === 'review' && index === 0 ? '✓' : index + 1}</span><strong>{label}</strong></div>)}</div>
           {step === 'payment' ? <>
             <p className="customer-eyebrow">STEP 1 OF 2</p><h2>Payment method</h2>
-            <div className="customer-payment-options">{['Cash at pickup', 'GCash', 'Card on pickup'].map((method) => <label className={payment === method ? 'is-selected' : ''} key={method}><input type="radio" name="payment" value={method} checked={payment === method} onChange={() => setPayment(method)} /><span><strong>{method}</strong><small>{method === 'Cash at pickup' ? 'Pay at the shop' : method === 'GCash' ? 'Submit payment after booking' : 'Pay at the shop'}</small></span></label>)}</div>
+            <ServicePaymentOptions payment={payment} onChange={setPayment} />
             <button type="button" className="customer-primary-button" onClick={() => setStep('review')} disabled={!serviceItems.length}>Review service booking</button>
           </> : <>
             <p className="customer-eyebrow">STEP 2 OF 2</p><h2>Review your service booking</h2>
@@ -242,7 +287,7 @@ export default function Checkout() {
                 <ServicePaymentBreakdown booking={itemPaymentEstimate} />
               </span></div>;
             })}</div>
-            <div className="customer-review-meta"><p><span>Service total</span><strong>{money(serviceTotal)}</strong></p><p><span>Down payment ({serviceDownPaymentPercent}%)</span><strong>{money(servicePaymentEstimate.downPaymentAmount)}</strong></p><p><span>Balance due at the shop</span><strong>{money(servicePaymentEstimate.balanceDue)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>
+            <div className="customer-review-meta"><p><span>Service total</span><strong>{money(servicePaymentEstimate.totalAmount)}</strong></p><p><span>Down payment ({serviceDownPaymentPercent}%)</span><strong>{money(servicePaymentEstimate.downPaymentAmount)}</strong></p><p><span>Balance due at the shop</span><strong>{money(servicePaymentEstimate.balanceDue)}</strong></p><p><span>Payment</span><strong>{payment}</strong></p></div>
             {serviceItems.length > 0 && <div className="customer-checkout-actions"><button type="button" className="customer-secondary-button" onClick={() => setStep('payment')}>Back</button><button type="button" className="customer-primary-button" onClick={completeServiceBooking} disabled={!serviceItems.length || isSubmitting}>{isSubmitting ? 'Submitting bookings...' : `Submit ${serviceItems.length} service booking${serviceItems.length === 1 ? '' : 's'}`}</button></div>}
           </>}
         </section>

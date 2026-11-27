@@ -1,0 +1,11 @@
+.walk-in-pos { margin-bottom: 1rem; }
+.walk-in-pos fieldset { display: grid; gap: .75rem; border: 0; padding: 1rem 0 0; min-width: 0; }
+.walk-in-pos legend { font-weight: 700; }
+.walk-in-pos label { display: grid; gap: .3rem; }
+.walk-in-pos input, .walk-in-pos select { padding: .5rem; max-width: 100%; }
+.walk-in-pos form { display: grid; gap: .5rem; }
+.walk-in-pos button { justify-self: start; }
+.walk-in-pos h3, .walk-in-pos p { margin: 0; overflow-wrap: anywhere; }
+@media (min-width: 48rem) {
+  .walk-in-pos fieldset { max-width: 42rem; }
+}

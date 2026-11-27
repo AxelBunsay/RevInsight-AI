@@ -5,6 +5,7 @@ import supertest from 'supertest';
 const require = createRequire(import.meta.url);
 const {
   app,
+  BusinessRecord,
   Order,
   Reservation,
   ServiceRequest,
@@ -92,6 +93,20 @@ describe('revenue integration', () => {
     }]);
     return { order, reservation, service };
   }
+
+  it('rounds top-three share once from revenue totals rather than summing rounded contributor shares', async () => {
+    const amounts = [30000, 20500, 13000, 6500];
+    await Order.create({
+      customerName: 'Synthetic revenue fixture', customerPhone: '09000000000',
+      items: amounts.map((amount, i) => ({ productId: fixtures.product._id, productName: 'Concentration part ' + i, category: 'Brakes', price: amount, quantity: 1 })),
+      totalPrice: 70000, status: 'completed', createdAt: new Date('2026-07-15T12:00:00+08:00')
+    });
+    const result = await api.get('/api/dashboard/analytics/revenue-concentration').set('Authorization', 'Bearer ' + adminToken);
+    expect(result.status).toBe(200);
+    expect(result.body.data.totalRevenue).toBe(70000);
+    expect(result.body.data.indicators).toMatchObject({ topOneShare: 42.86, topThreeShare: 90.71, hhi: 0.3126 });
+  });
+
 
   it('keeps dashboard, quarterly, sales report, and concentration totals consistent', async () => {
     await createSalesFixtures();
@@ -331,4 +346,73 @@ describe('revenue integration', () => {
     expect(response.body.data.categories).toHaveLength(5);
     expect(response.body.data.categories.every((category) => category.revenue === 0 && category.jobs === 0)).toBe(true);
   });
+  it('uses the same completed records for scoped concentration and export, including Manila boundaries', async () => {
+    for (const [quarter, amounts] of [[2,[4000,3000,2000,1000]],[3,[6000,2500,1000,500]]]) {
+      await Order.create({customerName:'Synthetic scope fixture',customerPhone:'09000000000',
+        status:'completed',totalPrice:10000,createdAt:new Date(quarter===2?'2026-06-30T23:59:59+08:00':'2026-07-01T00:00:00+08:00'),
+        items:amounts.map((price,i)=>({productName:['Pads','Battery','Cable','Labor'][i],category:'Parts',price,quantity:1}))});
+    }
+    await Order.create({customerName:'Synthetic pending',customerPhone:'09000000000',status:'pending',totalPrice:90000,
+      createdAt:new Date('2026-07-10T12:00:00+08:00'),items:[]});
+    for(const [scope,selectedQuarter,topOneShare,topThreeShare,hhi,total]of[
+      ['selectedQuarter','2026-Q2',40,90,.3,10000],['selectedQuarter','2026-Q3',60,95,.435,10000],['allRecords','2026-Q3',50,92.5,.3538,20000]
+    ]){
+      const response=await api.get('/api/dashboard/analytics/scoped-revenue').query({scope,selectedQuarter}).set('Authorization','Bearer '+adminToken);
+      expect(response.status).toBe(200);
+      const data=response.body.data;
+      expect(data.concentration.totalRevenue).toBe(total);
+      expect(data.concentration.indicators).toMatchObject({topOneShare,topThreeShare,hhi,concentrationLevel:'High'});
+      expect(data.reportRecords.reduce((sum,row)=>sum+row.amount,0)).toBe(total);
+      expect(JSON.stringify(data)).not.toContain('Synthetic scope fixture');
+      expect(JSON.stringify(data)).not.toContain('09000000000');
+    }
+    expect((await api.get('/api/dashboard/analytics/scoped-revenue')).status).toBe(401);
+    expect((await api.get('/api/dashboard/analytics/scoped-revenue?scope=selectedQuarter').set('Authorization','Bearer '+adminToken)).status).toBe(400);
+  });
+
+  it('classifies only the linked manual source inside the Manila dates and counts each receipt once', async () => {
+    const generic = { productName:'Daily sales (historical record)', category:'Uncategorized', price:100, quantity:1 };
+    async function add(date, receipt, options = {}) {
+      const items = options.items || [generic];
+      const { insertedId } = await Order.collection.insertOne({
+        createdAt:new Date(date), status:'completed', orNumber:receipt, isSampleData:!!options.sample,
+        items, totalPrice:items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+      });
+      const year = date.slice(0,4);
+      if (!options.unlinked) await BusinessRecord.collection.insertOne({
+        sourceId:insertedId, recordType:'product', laborFee:0, isSampleData:!!options.sample,
+        notes:options.note || `HISTORICAL RECORD ${year} - ORD ${receipt} / ${receipt + 1}`
+      });
+    }
+    await add('2021-12-31T23:59:59+08:00',1);
+    await add('2022-01-01T00:00:00+08:00',2);
+    await add('2026-03-31T23:59:59+08:00',3);
+    await add('2026-04-01T00:00:00+08:00',4);
+    await add('2026-03-21T12:00:00+08:00',5,{sample:true});
+    await add('2026-03-22T12:00:00+08:00',6,{unlinked:true});
+    await add('2026-03-23T12:00:00+08:00',7,{note:'HISTORICAL RECORD 2026 - ORD 999'});
+    await add('2026-03-24T12:00:00+08:00',8,{items:[
+      {productName:'Pads',price:60,quantity:1}, {serviceType:'Fitting',price:40,quantity:1}
+    ]});
+    await add('2026-03-25T12:00:00+08:00',9,{items:['Item sales','Unknown','Uncategorized'].map(productName =>
+      ({ productName, category:'Uncategorized', price:10, quantity:1 }))});
+    const fetchScope = async query => {
+      const response = await api.get('/api/dashboard/analytics/scoped-revenue').query(query).set('Authorization','Bearer '+adminToken);
+      expect(response.status).toBe(200);
+      return response.body.data;
+    };
+    const march = await fetchScope({scope:'selectedQuarter',selectedQuarter:'2026-Q1'});
+    expect(march.concentration.salesMix).toMatchObject({manualItemSales:130,itemSales:190,knownProductRevenue:60,serviceRevenue:40,
+      unclassifiedRevenue:300, products:[{name:'Pads',revenue:60}], topOneShare:100, hhi:1});
+    expect(march.reportRecords.find(row=>row.recordType==='mixed')).toMatchObject({amount:100,itemName:'Pads, Fitting'});
+    const april = await fetchScope({scope:'selectedQuarter',selectedQuarter:'2026-Q2'});
+    expect(april.concentration.salesMix).toMatchObject({manualItemSales:0,itemSales:0,unclassifiedRevenue:100,serviceNotice:null});
+    const all = await fetchScope({scope:'allRecords'});
+    expect(all.concentration.salesMix).toMatchObject({manualItemSales:230,knownProductRevenue:60,percentOfEligible:7.23,
+      itemSales:290,serviceRevenue:40,unclassifiedRevenue:500});
+    expect(all.concentration.totalRevenue).toBe(830);
+    expect(all.reportRecords).toHaveLength(9);
+    expect(all.reportRecords.reduce((sum,row)=>sum+row.amount,0)).toBe(830);
+  });
+
 });

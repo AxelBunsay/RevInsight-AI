@@ -1,0 +1,68 @@
+.admin-root .quarter-review {
+  container-type: inline-size;
+  margin: 0 0 16px;
+  color: var(--ink);
+}
+.quarter-review__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+}
+.quarter-review__header h3 { margin: 0; font-size: 16px; }
+.quarter-review__header [role="status"] { color: var(--muted); font-size: 12px; }
+.admin-root .quarter-review__picker {
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+  margin: 16px 0;
+}
+.quarter-review__picker label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; }
+.quarter-review__picker input, .quarter-review__picker select {
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+}
+.quarter-review__picker input { width: 7rem; }
+.quarter-review button:disabled { cursor: default; opacity: .55; }
+.quarter-review__months { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.quarter-review__month { overflow-wrap: anywhere; }
+.quarter-review__month .ai-revenue-card__heading { align-items: center; }
+.quarter-review__month h4 { margin: 0; }
+.quarter-review__month [data-review-status] { align-self: start; white-space: normal; text-align: center; }
+.quarter-review__month > span { margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+.admin-root .quarter-review__month > p, .quarter-review__flags { margin: 4px 0; font-size: 12px; line-height: 1.45; }
+.quarter-review__flags { padding-inline-start: 18px; }
+.quarter-review__flags [data-severity="blocking"], .admin-root .quarter-review > [role="alert"] { color: #a3271b; }
+.quarter-review__dates { margin: 6px 0; }
+.quarter-review__dates summary {
+  width: fit-content;
+  padding: 5px 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.quarter-review__dates summary::marker { color: var(--brand); }
+.quarter-review__dates ul { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; padding: 0; list-style: none; }
+.quarter-review__dates time { color: var(--muted); font-size: 12px; }
+.quarter-review__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+.quarter-review__confirmation { display: flex; align-items: flex-start; gap: 6px; flex-basis: 100%; font-size: 12px; }
+.quarter-review__confirmation input { accent-color: var(--brand); }
+.quarter-review :is(button, input, select, summary):focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@container (max-width: 710px) {
+  .quarter-review__months { grid-template-columns: 1fr; }
+}
+@media print { .quarter-review { display: none; } }

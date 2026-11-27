@@ -47,9 +47,8 @@ async function createQuoteRequest(startTime = '10:00') {
     .set('Authorization', `Bearer ${customerToken}`)
     .send({ bookings: [{
       serviceId: String(fixtures.service._id),
-      partsSource: 'customer',
-      date: nextOpenDate(),
-      startTime,
+      partsSource: 'customer', mechanicId:String(fixtures.mechanic._id),
+      requestKey: crypto.randomUUID(),
       vehicle: 'Integration motorcycle',
       notes: 'Customer will provide the replacement parts.',
       customerPartsNote: 'Customer will provide the replacement parts.'
@@ -57,10 +56,6 @@ async function createQuoteRequest(startTime = '10:00') {
   expect(response.status).toBe(200);
   expect(response.body.results[0].ok).toBe(true);
   const request = response.body.results[0].serviceRequest;
-  const assigned = await api.put('/api/service-requests/assign')
-    .set('Authorization', `Bearer ${adminToken}`)
-    .send({ requestId: request._id, mechanicId: String(fixtures.mechanic._id) });
-  expect(assigned.status).toBe(200);
   return ServiceRequest.findById(request._id);
 }
 
@@ -150,8 +145,7 @@ describe('labor-only service quote flow', () => {
       .send({ bookings: [{
         serviceId: String(fixtures.service._id),
         partsSource: 'shop',
-        date: nextOpenDate(),
-        startTime: '10:00',
+        requestKey: crypto.randomUUID(),
         vehicle: 'Integration motorcycle'
       }] });
     const requestId = created.body.results[0].serviceRequest._id;
@@ -168,7 +162,7 @@ describe('labor-only service quote flow', () => {
       recordId: requestId
     }).lean();
     expect(notification.message).toContain(fixtures.service.name);
-    expect(notification.message).toContain('10:00');
+    expect(notification.message).toContain('Service queue');
     expect(notification.message).toContain(`${fixtures.customer.firstName} ${fixtures.customer.lastName}`);
   });
 
@@ -222,6 +216,41 @@ describe('labor-only service quote flow', () => {
     expect(await Notification.countDocuments({ audience: 'mechanic', mechanicId: fixtures.mechanic._id, type: 'service_quote_accepted', recordId: request._id })).toBe(1);
   });
 
+  it('resumes pay-at-shop checkout at the agreed price and records labor only on completion', async () => {
+    const request = await createQuoteRequest();
+    // Scheduled bookings created their slot locks when the customer requested the quote.
+    await require('../../utils/serviceSlotCapacity').ensureSlotLocks(nextOpenDate(), '10:00', '11:00');
+    // A quote already awaiting checkout from the scheduled-booking build.
+    await ServiceRequest.updateOne({ _id: request._id }, { $unset: { queueKey: 1 }, $set: {
+      scheduledDate: new Date(nextOpenDate() + 'T00:00:00+08:00'), startTime: '10:00', endTime: '11:00'
+    } });
+    const quoteUrl = `/api/service-requests/${request._id}/quote`;
+    const checkout = (amount) => api.post(`${quoteUrl}/checkout`)
+      .set('Authorization', `Bearer ${customerToken}`).send({ method: 'Cash at pickup', amount });
+    const changeStatus = (status) => api.put('/api/service-requests/status')
+      .set('Authorization', `Bearer ${mechanicToken}`).send({ requestId: request._id, status });
+    const source = { recordType: 'service', sourceId: request._id };
+    expect((await submitQuote(request._id, 425.5)).status).toBe(200);
+    expect((await api.post(`${quoteUrl}/accept`).set('Authorization', `Bearer ${customerToken}`)).status).toBe(200);
+    expect((await checkout(425)).status).toBe(409);
+    await Mechanic.updateOne({ _id: fixtures.mechanic._id }, { availabilityStatus: 'on-leave' });
+    expect((await checkout(425.5)).status).toBe(409);
+    expect((await ServiceRequest.findById(request._id)).quoteCheckout).toBe('awaiting');
+    await Mechanic.updateOne({ _id: fixtures.mechanic._id }, { availabilityStatus: 'available' });
+    const responses = await Promise.all([checkout(425.5), checkout(425.5)]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(await Notification.countDocuments({ type: 'service_quote_checkout', recordId: request._id })).toBe(1);
+    expect((await changeStatus('in-progress')).status).toBe(200);
+    expect(await ServiceRequest.findById(request._id)).toMatchObject({
+      status: 'in-progress', quoteStatus: 'accepted', quotedPrice: 425.5,
+      quoteCheckout: 'pay-at-shop', paymentStatus: 'Payment Pending', balanceDue: 425.5
+    });
+    expect(await BusinessRecord.countDocuments(source)).toBe(0);
+    expect((await changeStatus('completed')).status).toBe(200);
+    expect((await changeStatus('completed')).status).toBe(400);
+    expect(await BusinessRecord.find(source)).toMatchObject([{ amount: 425.5, laborFee: 425.5 }]);
+  });
+
   it('records quoted labor once on completion and includes it in mechanic KPIs', async () => {
     const request = await createQuoteRequest();
     expect((await submitQuote(request._id, 425)).status).toBe(200);
@@ -229,6 +258,9 @@ describe('labor-only service quote flow', () => {
       .set('Authorization', `Bearer ${customerToken}`);
     expect(accepted.status).toBe(200);
 
+    const checkout = await api.post(`/api/service-requests/${request._id}/quote/checkout`)
+      .set('Authorization', `Bearer ${customerToken}`).send({method:'GCash',amount:425});
+    expect(checkout.status).toBe(200);
     const payment = await api.post(`/api/service-requests/${request._id}/payment`)
       .set('Authorization', `Bearer ${customerToken}`)
       .field('reference', '4250000001')

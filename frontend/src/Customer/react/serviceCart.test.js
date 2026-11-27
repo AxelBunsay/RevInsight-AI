@@ -65,12 +65,10 @@ describe('service cart helpers', () => {
     ], 30)).toEqual({
       hasProducts: true,
       hasServices: true,
-      showCartTotal: true,
       productSubtotal: 500,
       serviceSubtotal: 600,
       downPayment: 150,
-      balanceDueAtPickup: 350,
-      cartTotal: 1100
+      balanceDueAtPickup: 350
     });
   });
 
@@ -98,8 +96,7 @@ describe('service cart helpers', () => {
       productSubtotal: 500,
       serviceSubtotal: 200,
       downPayment: 150,
-      balanceDueAtPickup: 350,
-      cartTotal: 700
+      balanceDueAtPickup: 350
     });
   });
 });

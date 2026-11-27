@@ -2,14 +2,12 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 const Mechanic = require('../models/mechanic');
 
-const isDeletedCustomer = async (userId) => {
-  const user = await User.findById(userId).select('isDeleted').lean();
-  return !user || user.isDeleted === true;
-};
-
-const isInactiveCustomer = async (userId) => {
-  const user = await User.findById(userId).select('isActive').lean();
-  return !user || user.isActive === false;
+const customerSessionError = async (claims) => {
+  const user = await User.findById(claims.userId).select('isDeleted isActive sessionVersion').lean();
+  if (!user || user.isDeleted) return 'This customer account has been deleted.';
+  if (user.isActive === false) return 'Customer account is inactive.';
+  if ((user.sessionVersion ?? 0) !== (claims.sessionVersion ?? 0)) return 'Invalid token';
+  return null;
 };
 
 const isInactiveMechanic = async (mechanicId) => {
@@ -32,12 +30,8 @@ const authenticate = async (req, res, next) => {
 
   if (decoded.role === 'customer') {
     try {
-      if (await isDeletedCustomer(decoded.userId)) {
-        return res.status(401).json({ message: 'This customer account has been deleted.' });
-      }
-      if (await isInactiveCustomer(decoded.userId)) {
-        return res.status(401).json({ message: 'Customer account is inactive.' });
-      }
+      const message = await customerSessionError(decoded);
+      if (message) return res.status(401).json({ message });
     } catch (error) {
       console.error('[authenticate] customer status check failed', error);
       return res.status(500).json({ message: 'Authentication could not be verified.' });
@@ -78,4 +72,4 @@ const adminOnly = (req, res, next) => {
   }
 };
 
-module.exports = { authenticate, adminOnly, isDeletedCustomer, isInactiveCustomer, isInactiveMechanic };
+module.exports = { authenticate, adminOnly, customerSessionError, isInactiveMechanic };

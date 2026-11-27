@@ -6,6 +6,7 @@ const paymentUpload = require('../middleware/paymentUpload');
 
 // User gets their own service requests
 router.get('/my', authorizeRoles('customer'), serviceRequestController.getUserServiceRequests);
+router.post('/:id/quote/checkout', authorizeRoles('customer'), serviceRequestController.checkoutQuote);
 router.post('/:id/quote/accept', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
 router.post('/:id/quote/reject', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
 router.post('/:id/quote/cancel', authorizeRoles('customer'), serviceRequestController.respondToServiceQuote);
@@ -17,6 +18,17 @@ router.post('/:id/payment', authorizeRoles('customer'), (req, res, next) => {
     next();
   });
 }, serviceRequestController.submitServicePayment);
+router.post('/:id/queue/cancel', authorizeRoles('customer'), async (req, res) => {
+  const ServiceRequest = require('../models/serviceRequest');
+  const request = await ServiceRequest.findOne({ _id: req.params.id, user: req.user.userId,
+    queueKey: { $exists: true }, paymentStatus: 'Payment Pending', status: { $in: ['pending','assigned','confirmed'] } });
+  if (!request) return res.status(409).json({ message: 'This request cannot be cancelled.' });
+  const updated = await ServiceRequest.findOneAndUpdate({ _id: request._id, status: request.status, paymentStatus: 'Payment Pending' },
+    { $set: { status: 'cancelled', cancelReason: 'Customer cancelled queue request.', updatedAt: new Date() },
+      $push: { statusHistory: { status: 'cancelled', timestamp: new Date(), note: 'Customer cancelled queue request.' } } }, { new: true });
+  if (!updated) return res.status(409).json({ message: 'Booking has changed. Refresh and try again.' });
+  res.json({ serviceRequest: updated });
+});
 // Mechanic gets their assigned jobs
 router.get('/mechanic/quotes', authorizeRoles('mechanic'), serviceRequestController.getMechanicQuoteRequests);
 router.post('/:id/quote', authorizeRoles('mechanic'), serviceRequestController.submitMechanicQuote);

@@ -14,6 +14,10 @@ const calculateServicePayment = (total, percent) => {
 
 const getServicePaymentSummary = (request = {}) => {
   const totalAmount = roundMoney(request.totalAmount ?? request.estimatedPrice ?? 0);
+  if (request.walkInId) {
+    const amountPaid = Number(request.amountPaid || 0);
+    return { totalAmount, amountPaid, balanceDue: Math.max(0, totalAmount - amountPaid) };
+  }
   const hasSnapshot = request.downPaymentAmount !== undefined
     && request.downPaymentAmount !== null
     && request.balanceDue !== undefined

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
+  walkInId: { type: mongoose.Schema.Types.ObjectId, ref: 'WalkIn' },
   customerName: {
     type: String,
     required: true
@@ -8,7 +9,7 @@ const orderSchema = new mongoose.Schema({
   
   customerPhone: {
     type: String,
-    required: true
+    required() { return !this.walkInId; }
   },
   
   items: [

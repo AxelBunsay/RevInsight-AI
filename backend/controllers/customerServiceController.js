@@ -1,3 +1,4 @@
+const { checkAvailableMechanic } = require('../utils/mechanicAvailability');
 const Service = require('../models/service');
 const ServiceRequest = require('../models/serviceRequest');
 const Mechanic = require('../models/mechanic');
@@ -7,12 +8,7 @@ const ReservationSettings = require('../models/reservationSettings');
 const mongoose = require('mongoose');
 const { calculateServicePayment } = require('../utils/servicePayment');
 const { normalizeServiceCategory } = require('../utils/serviceCategories');
-const {
-  countActiveBookings,
-  ensureSlotLocks,
-  readSlotCount,
-  serializeSlotBooking
-} = require('../utils/serviceSlotCapacity');
+const { readSlotCount } = require('../utils/serviceSlotCapacity');
 
 const TIME_ZONE = 'Asia/Manila';
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -239,43 +235,22 @@ const createServiceBookings = async (req, res) => {
         if (!mongoose.Types.ObjectId.isValid(booking.serviceId)) {
           throw Object.assign(new Error('A selected service could not be found.'), { status: 400 });
         }
-        const service = await Service.findOne({
-          _id: booking.serviceId,
-          isActive: { $ne: false }
-        }).lean();
-        const requestedUnits = validateServiceUnits(service, booking.units);
-        const dateValidation = validateDateForSchedule(booking.date, schedule);
-        if (dateValidation.error) {
-          throw Object.assign(new Error(dateValidation.error), { status: 400 });
-        }
-        if (dateValidation.closed) {
-          const dayLabel = dateValidation.dayName === 'Sun' ? 'Sundays' : `${dateValidation.dayName}s`;
-          throw Object.assign(new Error(`The shop is closed on ${dayLabel}.`), { status: 400 });
-        }
         if (typeof booking.vehicle !== 'string' || !booking.vehicle.trim()) {
           throw Object.assign(new Error('Choose a motorcycle for each service booking.'), { status: 400 });
         }
-        const slots = await getGeneratedSlots(booking.serviceId, booking.date, requestedUnits);
-        const selectedSlot = slots.slots?.find((slot) => slot.startTime === booking.startTime);
-        if (!selectedSlot) {
-          throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
-        }
-        if (selectedSlot.status === 'full') {
-          throw Object.assign(new Error('That time was just booked. Please choose another.'), { status: 409 });
-        }
-        if (selectedSlot.startTime <= (booking.date === todayInManila() ? minutesToTime(currentManilaMinutes()) : '')) {
-          throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
-        }
-        await ensureSlotLocks(booking.date, booking.startTime, selectedSlot.endTime);
-        const dayRange = manilaDayRange(booking.date);
+        if (booking.date || booking.startTime) throw Object.assign(new Error('Advance appointments have been replaced by the service queue. Refresh the service form.'), { status: 400 });
+        const method = booking.paymentMethod ?? 'GCash';
+        if (!['Cash', 'GCash'].includes(method)) throw Object.assign(new Error('Choose Cash or GCash.'), { status: 400 });
+        if (typeof booking.requestKey !== 'string' || !/^[\w-]{12,100}$/.test(booking.requestKey)) throw Object.assign(new Error('Missing queue request identifier.'), { status: 400 });
         const session = await mongoose.startSession();
         let serviceRequest;
+        let replayed = false;
         try {
           await session.withTransaction(async () => {
-            if (booking.date === todayInManila() && selectedSlot.startTime <= minutesToTime(currentManilaMinutes())) {
-              throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
-            }
-
+            serviceRequest = await ServiceRequest.findOne({ user: req.user.userId, queueKey: booking.requestKey }).session(session);
+            if (serviceRequest) { replayed = true; return; }
+            // Serialize submissions for one customer before checking the unpaid limit.
+            await User.updateOne({ _id: req.user.userId }, { $inc: { __v: 1 } }, { session });
             await ensureCustomerUnpaidBookingLimit(req.user.userId, session);
 
             const configuredService = await Service.findOne({
@@ -290,13 +265,14 @@ const createServiceBookings = async (req, res) => {
               if (!mechanic || mechanic.isActive === false) {
                 throw Object.assign(new Error('This mechanic is no longer available. Please choose another mechanic.'), { status: 400 });
               }
+              if (mechanic.availabilityStatus === 'busy') throw Object.assign(new Error('This mechanic is busy.'), { status: 409 });
               if ((mechanic.availabilityStatus || 'available') === 'on-leave') {
                 throw Object.assign(new Error('This mechanic is currently on leave. Please choose another mechanic.'), { status: 400 });
               }
             }
             const hasLaborPriceRange = configuredService.laborPriceMin != null || configuredService.laborPriceMax != null;
             const quoteRequired = partsSource === 'customer'
-              && (hasLaborPriceRange || configuredService.laborOnlyPrice == null);
+              && (booking.requestQuote === true || hasLaborPriceRange || configuredService.laborOnlyPrice == null);
             const customerPartsNote = [booking.customerPartsNote, booking.notes]
               .find((value) => typeof value === 'string' && value.trim())?.trim().slice(0, 1000) || '';
             if (quoteRequired && !customerPartsNote) {
@@ -314,24 +290,19 @@ const createServiceBookings = async (req, res) => {
               schedule.serviceDownPaymentPercent
             );
             const serviceDurationMinutes = durationInMinutes(configuredService, units);
-            const startMinutes = timeToMinutes(booking.startTime);
-            const endTime = minutesToTime(startMinutes + serviceDurationMinutes);
-            if (startMinutes === null || startMinutes + serviceDurationMinutes > timeToMinutes(schedule.closeTime)) {
-              throw Object.assign(new Error('Choose an available booking time.'), { status: 400 });
+            let owner = selectedMechanicId;
+            if (quoteRequired) {
+              const mechanic = await Mechanic.findOne({
+                ...(owner ? { _id: owner } : {}),
+                isActive: { $ne: false }, availabilityStatus: { $nin: ['busy', 'on-leave'] }
+              }).sort({ _id: 1 }).session(session);
+              if (!mechanic) throw Object.assign(new Error('No available mechanic for this queue request.'), { status: 409 });
+              owner = mechanic._id;
             }
-            await serializeSlotBooking({ dateKey: booking.date, startTime: booking.startTime, endTime, session });
-            const activeCount = await countActiveBookings(
-              booking.startTime,
-              endTime,
-              dayRange.start,
-              dayRange.end,
-              session
-            );
-            if (activeCount >= schedule.slotCapacity) {
-              throw Object.assign(new Error('That time was just booked. Please choose another.'), { status: 409 });
-            }
+            if (owner) await checkAvailableMechanic(owner, session);
             const createdAt = new Date();
             serviceRequest = (await ServiceRequest.create([{
+              queueKey: booking.requestKey,
               user: req.user.userId,
               customerId: req.user.userId,
               serviceId: booking.serviceId,
@@ -347,8 +318,8 @@ const createServiceBookings = async (req, res) => {
                 : `Customer booking for ${configuredService.name}`,
               notes: typeof booking.notes === 'string' ? booking.notes.trim() : '',
               vehicle: booking.vehicle.trim(),
-              mechanic: selectedMechanicId,
-              mechanicId: selectedMechanicId,
+              mechanic: owner,
+              mechanicId: owner,
               units,
               pricePerUnit: configuredService.pricePerUnit === true,
               unitLabel: configuredService.pricePerUnit ? configuredService.unitLabel : '',
@@ -360,23 +331,25 @@ const createServiceBookings = async (req, res) => {
               ...paymentSnapshot,
               amountPaid: 0,
               paymentStatus: quoteRequired ? 'Payment Pending' : paymentSnapshot.downPaymentAmount === 0 ? 'Confirmed' : 'Payment Pending',
-              paymentMethod: !quoteRequired && paymentSnapshot.downPaymentAmount === 0 ? 'No upfront payment required' : '',
+              paymentMethod: quoteRequired ? '' : method,
               laborFee: mechanicFeeTotal,
               durationMinutes: serviceDurationMinutes,
               createdAt,
               paymentDueAt: quoteRequired || paymentSnapshot.downPaymentAmount === 0
                 ? null
                 : new Date(createdAt.getTime() + schedule.pendingPaymentHours * 60 * 60 * 1000),
-              scheduledDate: dayRange.start,
-              startTime: booking.startTime,
-              endTime,
-              status: 'pending'
+              status: owner ? 'assigned' : 'pending'
             }], { session }))[0];
+            if (quoteRequired) await Notification.create([{
+              audience:'mechanic', mechanicId:owner, type:'service_quote_requested',
+              message:'Quote requested for ' + configuredService.name, link:'/mechanic/jobs',
+              recordId:serviceRequest._id, recordType:'service'
+            }], { session });
           }, { timeoutMS: 8_000 });
         } finally {
           await session.endSession();
         }
-        if (selectedMechanicId) {
+        if (!replayed && selectedMechanicId && !serviceRequest.quoteStatus) {
           try {
             const customer = await User.findById(req.user.userId).select('firstName lastName name').lean();
             const customerName = [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || customer?.name || 'Customer';
@@ -384,7 +357,7 @@ const createServiceBookings = async (req, res) => {
               audience: 'mechanic',
               mechanicId: selectedMechanicId,
               type: 'service_booking_requested',
-              message: `New service booking: ${serviceRequest.serviceType}. Date: ${booking.date}, time: ${slotLabel(booking.startTime)}. Customer: ${customerName}. Labor-only: ${partsSource === 'customer' ? 'Yes' : 'No'}.`,
+              message: `New service booking: ${serviceRequest.serviceType}. Service queue. Customer: ${customerName}. Labor-only: ${partsSource === 'customer' ? 'Yes' : 'No'}.`,
               link: '/mechanic/jobs',
               recordId: serviceRequest._id,
               recordType: 'service'

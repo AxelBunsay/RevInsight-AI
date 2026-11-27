@@ -4,6 +4,8 @@ const dashboardController = require('../../controllers/adminControllers/dashboar
 const { protect } = require('../../middleware/adminAuth');
 const productImageUpload = require('../../middleware/productImageUpload');
 
+router.use('/walk-ins', protect, require('./walkIn'));
+
 // Dashboard Routes
 router.get('/dashboard', protect, dashboardController.getDashboardStats);
 router.get('/dashboard/revenue', protect, dashboardController.getRevenueData);
@@ -11,11 +13,15 @@ router.get('/dashboard/quarterly', protect, dashboardController.getQuarterlyData
 router.get('/dashboard/daily', protect, dashboardController.getDailyData);
 
 // Analytics Routes
+router.get('/analytics/quarter-review', protect, require('../../controllers/adminControllers/revenueReviewController').getQuarterCompleteness);
+router.post('/analytics/month-review', protect, require('../../controllers/adminControllers/revenueReviewController').reviewMonth);
+router.get('/analytics/scoped-revenue', protect, dashboardController.getScopedRevenue);
 router.get('/analytics/revenue-risk', protect, dashboardController.getRevenueRisk);
 router.get('/analytics/projected-revenue', protect, dashboardController.getProjectedRevenue);
 router.get('/analytics/revenue-concentration', protect, dashboardController.getRevenueConcentration);
 
 // Business records and transactions routes
+router.get('/audit/:recordType/:id', protect, require('../../controllers/adminControllers/auditController').getAuditHistory);
 router.get('/business-records', protect, dashboardController.getBusinessRecords);
 router.get('/transactions', protect, dashboardController.getAllTransactions);
 router.get('/transactions/:id', protect, dashboardController.getTransactionById);

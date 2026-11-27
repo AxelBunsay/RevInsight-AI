@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
 const businessRecordSchema = new mongoose.Schema({
+  walkInId: { type: mongoose.Schema.Types.ObjectId, ref: 'WalkIn' },
+  paymentMethod: String,
   recordType: {
     type: String,
     enum: ['product', 'service'],

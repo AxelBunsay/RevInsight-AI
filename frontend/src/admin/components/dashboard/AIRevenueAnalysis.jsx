@@ -1,3 +1,5 @@
+import ContributorList from './ContributorList';
+import QuarterCompletenessReview from './QuarterCompletenessReview';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import RevenueAnswerChart from './RevenueAnswerChart';
 import { adminApi } from '../../services/adminApi';
@@ -10,6 +12,7 @@ import { createRevenueFiguresFingerprint } from './revenueAnalysisFingerprint';
 import riskThresholds from '../../../../../shared/revenueRiskConfig.json';
 
 const peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 });
+const recordedPeso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 0, maximumFractionDigits: 2 });
 const qoqModerateRange = `${riskThresholds.qoqChange.moderateMin}% to ${riskThresholds.qoqChange.normalMin}%`;
 const hhiModerateRange = `${riskThresholds.concentrationHhi.normalMaxExclusive}–${riskThresholds.concentrationHhi.moderateMaxInclusive}`;
 const contributorModerateRange = `${riskThresholds.topContributorShare.normalMaxExclusive}–${riskThresholds.topContributorShare.moderateMaxInclusive}%`;
@@ -25,7 +28,7 @@ function RiskChip({ level, why }) {
   const tone = ['Normal', 'Moderate', 'High'].includes(level) ? level.toLowerCase() : 'unknown';
   return <span className="ai-revenue-risk">
     <span className={`ai-revenue-risk__chip is-${tone}`}>{level || 'Not enough data'}</span>
-    <span className="ai-revenue-risk__info" tabIndex={0} title={why ? `${why}\n${riskThresholdTooltip}` : riskThresholdTooltip} aria-label={`Risk thresholds. ${riskThresholdTooltip.replaceAll('\n', ' ')}`}>i</span>
+    <span className="ai-revenue-risk__info" tabIndex={0} title={why ? `${why}\n${riskThresholdTooltip}` : riskThresholdTooltip} aria-label={`${why ? why + ' ' : ''}Risk thresholds. ${riskThresholdTooltip.replaceAll('\n', ' ')}`}>i</span>
   </span>;
 }
 
@@ -35,6 +38,22 @@ function quarterName(year, quarter) {
 
 function quarterLabel(year, quarter) {
   return quarterName(year, quarter);
+}
+
+export function ScopedRevenueFigures({ concentration, qoq, yoy }) {
+  if (!concentration?.coverage) return null;
+  const { scope, totalRevenue, coverage } = concentration;
+  const count = coverage.includedTransactions;
+  const quarterMode = scope.mode === 'selectedQuarter';
+  return <div>
+    <span>{quarterMode ? 'Quarter revenue' : 'Total recorded revenue'} · {quarterMode ? scope.key.replace('-', ' ') : 'All recorded quarters'}</span>
+    <strong>{recordedPeso.format(totalRevenue)}</strong>
+    {quarterMode && qoq != null && <em className={qoq >= 0 ? 'is-positive' : 'is-negative'}>
+      {qoq >= 0 ? '▲' : '▼'} {Math.abs(qoq).toFixed(1)}% QoQ
+    </em>}
+    <small>{count} eligible {count === 1 ? 'transaction' : 'transactions'}{count > 0 && ' · avg ' + peso.format(totalRevenue / count) + ' per transaction'}</small>
+    {quarterMode && <small>Coverage may differ across quarters. {yoy == null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>}
+  </div>;
 }
 
 function quarterStart(year, quarter) {
@@ -55,149 +74,27 @@ function signedPercent(value) {
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
-function getOverallRiskWhy(overallRisk, indicators) {
-  if (overallRisk.level === 'Normal') return 'All indicators are within the normal range.';
-  if (!['Moderate', 'High'].includes(overallRisk.level)) {
-    return overallRisk.reason || 'Not enough data to calculate overall risk.';
-  }
-
-  const indicatorLabels = {
-    qoqChange: { reason: 'quarter-over-quarter change', label: 'quarter-over-quarter change' },
-    concentrationHhi: { reason: 'revenue concentration (HHI)', label: 'revenue concentration (HHI)' },
-    topContributorShare: { reason: 'top contributor share', label: 'top contributor share' },
-    forecastVsFourQuarterAverage: {
-      reason: 'forecast versus the four-quarter average',
-      label: 'forecast vs average of the last 4 completed quarters'
-    }
-  };
-  const driver = Object.entries(indicatorLabels)
-    .find(([key, detail]) => overallRisk.reason === detail.reason
-      && Number.isFinite(Number(indicators[key]?.value)));
-  if (!driver) return overallRisk.reason ? `Driven by: ${overallRisk.reason}` : 'Risk driver is unavailable.';
-
-  const [key, detail] = driver;
-  const value = Number(indicators[key].value);
-  const sign = ['qoqChange', 'forecastVsFourQuarterAverage'].includes(key) && value > 0 ? '+' : '';
-  const formattedValue = key === 'concentrationHhi'
-    ? value.toFixed(3)
-    : `${sign}${Number.isInteger(value) ? value : Number(value.toFixed(1))}%`;
-  return `Driven by: ${detail.label} (${formattedValue})`;
+function classifiedCoverage(classified, total) {
+  if (!classified) return '';
+  const percent = classified.percentOfEligible;
+  return recordedPeso.format(classified.amount) + ' of ' + recordedPeso.format(total)
+    + ' eligible revenue' + (percent == null ? '' : ' (' + percent + '%)');
 }
 
-function getLocalCardInsightTemplates({ current, indicators, overallRisk, concentration, serviceItems, estimate }) {
-  const hasNumber = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
-  const formatPercent = (value) => hasNumber(value) ? `${Number(value).toFixed(1)}%` : null;
-  const briefName = (value) => {
-    const words = String(value || '').trim().split(/\s+/).filter(Boolean);
-    return words.length > 5 ? `${words.slice(0, 5).join(' ')}…` : words.join(' ');
-  };
-  const qoq = indicators.qoqChange;
-  const hhi = concentration?.indicators?.hhi;
-  const topShare = indicators.topContributorShare?.value;
-  const topService = serviceItems[0];
-  const forecastChange = indicators.forecastVsFourQuarterAverage?.value;
-  const forecastLevel = indicators.forecastVsFourQuarterAverage?.level || 'Not enough data';
-  const serviceName = briefName(topService?.name);
-  const levelByCard = {
-    trend: qoq?.level || 'Not enough data',
-    risk: overallRisk.level || 'Not enough data',
-    concentration: indicators.concentrationHhi?.level || 'Not enough data',
-    service: indicators.topContributorShare?.level || 'Not enough data',
-    forecast: forecastLevel
-  };
-  const summaryByCard = {
-    trend: qoq && hasNumber(qoq.value)
-      ? `Completed-quarter revenue changed ${formatPercent(qoq.value)}; the risk level is ${levelByCard.trend}.`
-      : `Revenue for ${current ? quarterName(current.year, current.quarter) : 'the selected quarter'} is ${peso.format(current?.revenue || 0)}; quarter-over-quarter change is unavailable.`,
-    risk: overallRisk.reason
-      ? `Overall revenue risk is ${overallRisk.level}, driven by ${briefName(overallRisk.reason)}.`
-      : `Overall revenue risk is ${overallRisk.level || 'Not enough data'}.`,
-    concentration: hasNumber(hhi) && hasNumber(topShare)
-      ? `Revenue concentration HHI is ${Number(hhi).toFixed(3)}, and the top contributor share is ${formatPercent(topShare)}.`
-      : 'Not enough data yet to describe revenue concentration.',
-    service: topService && formatPercent(topService.share)
-      ? `${serviceName} is the leading service contributor at ${formatPercent(topService.share)} of categorized revenue.`
-      : 'Not enough data yet to describe service revenue contribution.',
-    forecast: hasNumber(forecastChange) && estimate?.targetLabel && hasNumber(estimate.expected)
-      ? `The official forecast for ${briefName(estimate.targetLabel)} is ${peso.format(estimate.expected)}, ${formatPercent(forecastChange)} versus the four-quarter average (${forecastLevel} risk).`
-      : 'Not enough data yet to compare the official forecast with the four-quarter average.'
-  };
-  const recommendations = {
-    trend: {
-      High: 'Compare the last two completed-quarter totals and revise promotions after the revenue decline.',
-      Moderate: 'Review completed-quarter revenue monthly and adjust promotions if the change persists.',
-      Normal: 'Keep effective promotions in place and verify revenue at the next quarter close.',
-      default: 'Record more completed-quarter sales before changing the promotion plan.'
-    },
-    risk: {
-      High: `Review ${briefName(overallRisk.reason || 'the leading risk driver')} and set a corrective pricing or promotion action.`,
-      Moderate: `Check ${briefName(overallRisk.reason || 'the leading risk driver')} and choose one targeted sales-mix adjustment.`,
-      Normal: 'Review pricing and promotion results before setting the next quarterly sales plan.',
-      default: 'Complete revenue risk records before choosing a corrective shop action.'
-    },
-    concentration: {
-      High: 'Promote a secondary revenue category and review the leading contributor’s sales mix.',
-      Moderate: 'Run a focused promotion for a smaller category and compare its revenue share.',
-      Normal: 'Review category performance and retain the offers supporting a balanced revenue mix.',
-      default: 'Complete category revenue records before planning a sales-mix promotion.'
-    },
-    service: {
-      High: serviceName ? `Review staffing and pricing for ${serviceName} before taking additional service bookings.` : 'Compare completed service jobs with shop capacity before adjusting staffing.',
-      Moderate: serviceName ? `Check booking capacity for ${serviceName} and test a focused service promotion.` : 'Compare completed service jobs with available capacity before promoting services.',
-      Normal: serviceName ? `Keep ${serviceName} visible in the booking menu and review its completed jobs.` : 'Review completed service jobs before changing the service booking menu.',
-      default: 'Record completed service jobs before changing staffing or service promotions.'
-    },
-    forecast: {
-      High: 'Review the next-quarter promotion and purchasing plan against the official forecast comparison.',
-      Moderate: 'Use the official forecast comparison to revise the next-quarter sales plan.',
-      Normal: 'Align the next-quarter staffing plan with the official forecast comparison.',
-      default: 'Record more completed quarters before revising the next-quarter shop plan.'
-    }
-  };
-  const outcomes = {
-    trend: {
-      High: ['Responding to the decline may stabilize quarter-over-quarter revenue momentum.', 'Ignoring the decline could prolong weaker completed-quarter sales.'],
-      Moderate: ['Adjusting promotions may support revenue recovery if the change continues.', 'Overlooking the change could delay a response to shifting sales.'],
-      Normal: ['Maintaining effective promotions may preserve the current revenue trend.', 'Unnecessary promotion changes could disrupt a stable sales pattern.']
-    },
-    risk: {
-      High: ['Addressing the leading driver may reduce pressure on overall revenue stability.', 'Ignoring the leading driver could leave the current risk unresolved.'],
-      Moderate: ['A targeted response may keep the overall risk from increasing.', 'Delaying a response could allow the identified risk to grow.'],
-      Normal: ['Reviewing shop pricing and promotions may help preserve stable revenue.', 'Skipping the review could leave new risk signals unnoticed.']
-    },
-    concentration: {
-      High: ['Promoting another category may reduce dependence on the leading contributor.', 'Ignoring the imbalance could keep revenue concentrated in one contributor.'],
-      Moderate: ['A secondary-category promotion may gradually broaden the revenue mix.', 'Ignoring the mix could preserve the current contributor imbalance.'],
-      Normal: ['Maintaining balanced category offers may support revenue diversity.', 'Changing balanced offers without evidence could weaken the current mix.']
-    },
-    service: {
-      High: ['Adjusting service capacity may improve availability for customer bookings.', 'Ignoring capacity pressure could limit service availability.'],
-      Moderate: ['A focused service promotion may help align bookings with shop capacity.', 'Leaving service demand unchecked could create scheduling mismatches.'],
-      Normal: ['Keeping the leading service available may sustain its contribution.', 'Removing attention from it could reduce booking visibility.']
-    },
-    forecast: {
-      High: ['Revising the shop plan may better prepare for the projected revenue gap.', 'Ignoring the comparison could leave the next-quarter plan misaligned.'],
-      Moderate: ['Using the forecast comparison may improve next-quarter planning.', 'Ignoring the comparison could weaken planning readiness.'],
-      Normal: ['Aligning staffing with the projection may support steady operations.', 'Ignoring the projection could leave staffing plans less prepared.']
-    }
-  };
-  const hasData = {
-    trend: Boolean(qoq && hasNumber(qoq.value)),
-    risk: Boolean(overallRisk.level && overallRisk.level !== 'Not enough data'),
-    concentration: Boolean(hasNumber(hhi) && hasNumber(topShare)),
-    service: Boolean(topService && hasNumber(topService.share)),
-    forecast: Boolean(hasNumber(forecastChange) && estimate?.targetLabel && hasNumber(estimate.expected))
-  };
-
-  return Object.fromEntries(Object.keys(summaryByCard).map((cardKey) => {
-    const levelTemplates = outcomes[cardKey][levelByCard[cardKey]] || outcomes[cardKey].Normal;
-    return [cardKey, {
-      summary: summaryByCard[cardKey],
-      recommendation: recommendations[cardKey][levelByCard[cardKey]] || recommendations[cardKey].default,
-      ifFollowed: hasData[cardKey] ? levelTemplates[0] : `Not enough data yet to estimate how this choice could affect ${cardKey} revenue.`,
-      ifIgnored: hasData[cardKey] ? levelTemplates[1] : `Not enough data yet to estimate how ignoring this signal could affect ${cardKey} revenue.`
-    }];
-  }));
+export function ProductRevenueSummary({ concentration }) {
+  const mix = concentration?.salesMix;
+  if (!mix) return null;
+  const known = classifiedCoverage({ amount: mix.knownProductRevenue, percentOfEligible: mix.percentOfEligible }, concentration.totalRevenue);
+  return <div className="ai-revenue-product-summary">
+    <p><strong>Item sales · {recordedPeso.format(mix.itemSales)}</strong>{mix.productNotice && ' · ' + mix.productNotice}</p>
+    <p>Known product breakdown · {known}</p>
+    {mix.products.length > 0 && <p>Leading product · {mix.products[0].name} · Top one {mix.topOneShare}% · Top three {mix.topThreeShare}% · HHI {mix.hhi} of identified product sales</p>}
+    {mix.manualWithoutProductBreakdown > 0 && mix.knownProductRevenue > 0 && <p>Historical manual item sales · {recordedPeso.format(mix.manualWithoutProductBreakdown)} · Product breakdown unavailable</p>}
+    {mix.serviceRevenue > 0 && <p>Recorded services · {recordedPeso.format(mix.serviceRevenue)}</p>}
+    {mix.mixedRevenue > 0 && <p>Mixed sales without an item and service split · {recordedPeso.format(mix.mixedRevenue)}</p>}
+    {mix.unclassifiedRevenue > 0 && <p>Unclassified revenue type · {recordedPeso.format(mix.unclassifiedRevenue)}</p>}
+    {mix.serviceNotice && <p>{mix.serviceNotice}</p>}
+  </div>;
 }
 
 function getQuarterRows(rows) {
@@ -271,7 +168,7 @@ function QuarterlyBarChart({ quarters, estimate, selectedKey, currentKey }) {
       estimate: true
     }] : [])
   ];
-  const max = Math.max(...chartBars.map((bar) => bar.value), 1);
+  const max = Math.max(...chartBars.map((bar) => bar.value || 0), 1);
   const width = Math.max(minWidth, chartBars.length * 45);
   const baseline = height - 28;
   const plotHeight = height - 48;
@@ -302,7 +199,7 @@ function QuarterlyBarChart({ quarters, estimate, selectedKey, currentKey }) {
           rx="2"
           tabIndex="0"
         >
-          <title>{`${bar.label}: ${peso.format(bar.value)} · ${countLabel}${bar.inProgress ? ' · in progress' : ''}`}</title>
+          <title>{`${bar.label}: ${(bar.count === 0 ? 'No recorded transactions; completeness unknown' : peso.format(bar.value))} · ${countLabel}${bar.inProgress ? ' · in progress' : ''}`}</title>
         </rect>;
       })}
     </svg>
@@ -322,28 +219,18 @@ function HorizontalBars({ items }) {
   ))}</div>;
 }
 
-function getQuarterDateRange(year, quarter, monthOffset = null) {
-  const startMonth = (quarter - 1) * 3;
-  const start = new Date(year, startMonth + (monthOffset ?? 0), 1);
-  const end = monthOffset === null
-    ? new Date(year, startMonth + 3, 0)
-    : new Date(year, startMonth + monthOffset + 1, 0);
-  const dateOnly = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  return { startDate: dateOnly(start), endDate: dateOnly(end) };
-}
-
 function formatRecordDate(record) {
   const date = new Date(record.completedAt || record.createdAt);
   return Number.isNaN(date.getTime())
     ? '—'
-    : date.toLocaleDateString('en-PH', { month: 'short', day: '2-digit', year: 'numeric' });
+    : date.toLocaleDateString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: '2-digit', year: 'numeric' });
 }
 
 function mapBusinessRecord(record) {
   return {
     id: String(record._id || record.sourceId || '—'),
     date: formatRecordDate(record),
-    type: record.recordType === 'service' ? 'Service' : 'Item',
+    type: ({ service: 'Service', item: 'Item sales', mixed: 'Mixed sale' })[record.recordType] || 'Unclassified',
     customer: record.customer || '—',
     items: record.itemName || '—',
     amount: Number(record.amount || 0),
@@ -365,13 +252,19 @@ function currentQuarterProgress(today = new Date()) {
   };
 }
 
-function AskRevenueAIPanel({ onActivityChange }) {
+function insightLabel(source, cached) {
+  const label = source === 'ai' ? 'Generated by Gemini' : source === 'template' ? 'System-generated summary' : 'Source unknown';
+  return label + (cached === true ? ' · Cached' : cached === false ? ' · Fresh' : '');
+}
+
+function AskRevenueAIPanel({ onActivityChange, selectedQuarter, revenueScope }) {
   const suggestions = [
     'Why did revenue change last quarter?',
     'What are the biggest revenue risks?',
     'How concentrated is revenue among contributors?'
   ];
   const [question, setQuestion] = useState('');
+  const [answerLabel, setAnswerLabel] = useState('');
   const [answer, setAnswer] = useState('');
   const [answerChart, setAnswerChart] = useState(null);
   const [error, setError] = useState('');
@@ -380,20 +273,27 @@ function AskRevenueAIPanel({ onActivityChange }) {
   const [copyMessage, setCopyMessage] = useState('');
   const inFlightRef = useRef(false);
   const lastQuestionRef = useRef('');
+  const activeRef = useRef(true);
+  useEffect(() => {
+    activeRef.current = true;
+    return () => { activeRef.current = false; onActivityChange?.(false); };
+  }, [onActivityChange]);
   const questionFocusedRef = useRef(false);
-  const updateActivity = () => onActivityChange?.(questionFocusedRef.current || inFlightRef.current);
+  const updateActivity = () => { if (activeRef.current) onActivityChange?.(questionFocusedRef.current || inFlightRef.current); };
 
   const submitQuestion = async (value = question) => {
     const trimmedQuestion = value.trim();
     if (!trimmedQuestion || inFlightRef.current) return;
     lastQuestionRef.current = trimmedQuestion;
     setCopyMessage('');
+    const requestedQuarter = selectedQuarter;
     const request = askRevenueQuestion({
       question: trimmedQuestion,
       inFlightRef,
-      request: adminApi.askRevenueAI,
+      request: question => adminApi.askRevenueAI(question, requestedQuarter, revenueScope),
       setIsLoading,
       setAnswer,
+      setMetadata: response => setAnswerLabel(insightLabel(response.source, response.cached)),
       setChart: setAnswerChart,
       setTimestamp: setAnswerTimestamp,
       setError
@@ -420,7 +320,7 @@ function AskRevenueAIPanel({ onActivityChange }) {
   return <section className="ai-revenue-modal ai-revenue-ai-panel" aria-labelledby="ai-revenue-ai-title">
     <p className="ai-revenue-modal__eyebrow">Revenue analysis</p>
     <h2 id="ai-revenue-ai-title">Ask AI</h2>
-    <p className="ai-revenue-modal__detail">Ask a question about your revenue data.</p>
+    <p className="ai-revenue-modal__detail">Concentration scope: {revenueScope === 'selectedQuarter' ? selectedQuarter?.replace('-', ' ') : 'All records'}. Trend and forecast use all-records history.</p>
     <div className="ai-revenue-ai-suggestions" aria-label="Suggested questions">
       {suggestions.map((suggestion) => <button
         type="button"
@@ -483,7 +383,7 @@ function AskRevenueAIPanel({ onActivityChange }) {
       <MarkdownAnswer markdown={answer} />
       {answerChart && <RevenueAnswerChart chart={answerChart} />}
       <footer className="ai-revenue-ai-answer-footer">
-        <span>Generated by AI from your revenue data on {new Intl.DateTimeFormat('en-PH', {
+        <span>{answerLabel} · {new Intl.DateTimeFormat('en-PH', {
           dateStyle: 'medium',
           timeStyle: 'short',
           timeZone: 'Asia/Manila'
@@ -504,23 +404,47 @@ function AIRevenueAnalysis({ dashboardData }) {
   const [collectedAmount, setCollectedAmount] = useState(Number(dashboardData?.stats?.collected || 0));
   const [outstandingAmount, setOutstandingAmount] = useState(Number(dashboardData?.stats?.outstanding || 0));
   const [cardInsights, setCardInsights] = useState({});
-  const [cardInsightSource, setCardInsightSource] = useState('template');
+  const [cardSourceLabel, setCardSourceLabel] = useState('');
   const [cardInsightGeneratedAt, setCardInsightGeneratedAt] = useState('');
   const [cardInsightsLoading, setCardInsightsLoading] = useState(true);
   const [cardInsightsError, setCardInsightsError] = useState('');
+  const [cardInsightsNotice, setCardInsightsNotice] = useState('');
   const [cardInsightRequestInFlight, setCardInsightRequestInFlight] = useState(false);
   const [refreshRemainingSeconds, setRefreshRemainingSeconds] = useState(0);
-  const [selectedQuarterKey, setSelectedQuarterKey] = useState(null);
+  const [selectedQuarterKey, setSelectedQuarterKey] = useState(currentQuarterProgress().key);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const quarterTabsRef = useRef(null);
+  const [revenueScope, setRevenueScope] = useState('selectedQuarter');
+  const scopeLabel = revenueScope === 'allRecords' ? 'All records' : 'Selected quarter · ' + selectedQuarterKey.replace('-', ' ');
+  const changeRevenueScope = (quarter, mode = revenueScope) => {
+    if (quarter === selectedQuarterKey && mode === revenueScope) return;
+    ++cardInsightRequestIdRef.current;
+    ++reviewReloadIdRef.current;
+    setCardInsights({});
+    setCardInsightsNotice('');
+    setCardInsightGeneratedAt('');
+    setCardInsightsError('');
+    setAnalysis(previous => ({ ...previous, risk: null, concentration: null }));
+    setIsLoading(true);
+    setModalId(null);
+    setReportData(null);
+    setSelectedQuarterKey(quarter);
+    setRevenueScope(mode);
+  };
   const [modalId, setModalId] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportMonth, setReportMonth] = useState(null);
-  const [reportRows, setReportRows] = useState([]);
+
+  const [reportData, setReportData] = useState(null);
   const [reportError, setReportError] = useState('');
   const [isReportLoading, setIsReportLoading] = useState(false);
   const [reportCardPage, setReportCardPage] = useState(1);
   const cardInsightRequestInFlightRef = useRef(false);
+  const cardInsightRequestScopeRef = useRef(null);
+  const cardInsightRequestIdRef = useRef(0);
+  const reviewReloadIdRef = useRef(0);
   const askAIActiveRef = useRef(false);
+  const onAskActivityChange = useCallback(isActive => { askAIActiveRef.current = isActive; }, []);
   const latestFiguresFingerprintRef = useRef('');
   const lastAIRequestFingerprintRef = useRef('');
   const lastAIRequestAtRef = useRef(0);
@@ -538,8 +462,39 @@ function AIRevenueAnalysis({ dashboardData }) {
   useAdminModalEffects(reportOpen, () => setReportOpen(false));
   useAdminModalEffects(Boolean(modalId), () => setModalId(null));
 
+  const refreshAfterReview = async () => {
+    const request = ++reviewReloadIdRef.current;
+    ++cardInsightRequestIdRef.current;
+    cardInsightRequestInFlightRef.current = false;
+    setCardInsightRequestInFlight(false);
+    setCardInsightsLoading(false);
+    setCardInsights({});
+    setCardSourceLabel('');
+    setCardInsightsError('');
+    setCardInsightsNotice('');
+    setCardInsightGeneratedAt('');
+    try {
+      const result = await adminApi.getRevenueAnalysisData(selectedQuarterKey, revenueScope);
+      if (request !== reviewReloadIdRef.current) return;
+      setAnalysis({
+        quarters:getQuarterRows(result.quarterly?.data),
+        risk:result.risk?.data || null,
+        concentration:result.concentration?.data || null
+      });
+      setDataUpdatedAt(new Date());
+      setReportData(null);
+      setReportOpen(false);
+    } catch {
+      if (request === reviewReloadIdRef.current) setRefreshError(true);
+    }
+  };
+
   const requestCardInsights = useCallback(async ({ fingerprint, forceRefresh = false, showLoading = false } = {}) => {
-    if (cardInsightRequestInFlightRef.current) return false;
+    const quarter = selectedQuarterKey || currentQuarterProgress().key;
+    const scope = revenueScope + ':' + quarter;
+    if (cardInsightRequestInFlightRef.current && cardInsightRequestScopeRef.current === scope) return false;
+    const requestId = ++cardInsightRequestIdRef.current;
+    cardInsightRequestScopeRef.current = scope;
     cardInsightRequestInFlightRef.current = true;
     setCardInsightRequestInFlight(true);
     lastAIRequestAtRef.current = Date.now();
@@ -549,26 +504,32 @@ function AIRevenueAnalysis({ dashboardData }) {
       setCardInsightsError('');
     }
     try {
-      const result = await adminApi.getRevenueCardInsights(forceRefresh);
+      const result = await adminApi.getRevenueCardInsights(forceRefresh, quarter, revenueScope);
+      if (requestId !== cardInsightRequestIdRef.current) return false;
       setCardInsights(result.insights || {});
-      setCardInsightSource(result.source === 'ai' ? 'ai' : 'template');
+      setCardSourceLabel(insightLabel(result.source, result.cached));
       setCardInsightGeneratedAt(result.generatedAt || '');
+      setCardInsightsNotice(result.availability?.message || '');
       setCardInsightsError('');
       if (forceRefresh) setRefreshRemainingSeconds(30);
       return true;
     } catch (error) {
+      if (requestId !== cardInsightRequestIdRef.current) return false;
+      setCardInsightsNotice('');
       setCardInsights({});
-      setCardInsightSource('template');
+      setCardSourceLabel('');
       setCardInsightGeneratedAt('');
       setCardInsightsError(error.message || 'AI insights are unavailable.');
       if (forceRefresh) setRefreshRemainingSeconds(Number(error.details?.retryAfterSeconds || 0));
       return false;
     } finally {
-      cardInsightRequestInFlightRef.current = false;
-      setCardInsightRequestInFlight(false);
-      if (showLoading) setCardInsightsLoading(false);
+      if (requestId === cardInsightRequestIdRef.current) {
+        cardInsightRequestInFlightRef.current = false;
+        setCardInsightRequestInFlight(false);
+        if (showLoading) setCardInsightsLoading(false);
+      }
     }
-  }, []);
+  }, [selectedQuarterKey, revenueScope]);
 
   useEffect(() => {
     if (!refreshRemainingSeconds) return undefined;
@@ -593,7 +554,7 @@ function AIRevenueAnalysis({ dashboardData }) {
 
       try {
         const [result, statsResponse] = await Promise.all([
-          adminApi.getRevenueAnalysisData(),
+          adminApi.getRevenueAnalysisData(selectedQuarterKey, revenueScope),
           adminApi.getDashboardStats()
         ]);
         if (!active) return;
@@ -621,7 +582,7 @@ function AIRevenueAnalysis({ dashboardData }) {
 
         if (figuresChanged) {
           setCardInsights({});
-          setCardInsightSource('template');
+          setCardSourceLabel('');
           setCardInsightGeneratedAt('');
           setCardInsightsError('');
         }
@@ -682,17 +643,31 @@ function AIRevenueAnalysis({ dashboardData }) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
       window.removeEventListener('focus', onWindowFocus);
     };
-  }, [requestCardInsights]);
+  }, [requestCardInsights, revenueScope, selectedQuarterKey]);
 
   const todayQuarter = currentQuarterProgress();
   const quarters = useMemo(
-    () => fillQuarterGaps(analysis.quarters, {
+    () => {
+      const filled = fillQuarterGaps(analysis.quarters, {
       year: Number(todayQuarter.key.slice(0, 4)),
       quarter: Number(todayQuarter.key.slice(-1))
-    }),
-    [analysis.quarters, todayQuarter.key]
+      });
+      const selected = {year:Number(selectedQuarterKey.slice(0,4)),quarter:Number(selectedQuarterKey.slice(-1)),revenue:0,count:0};
+      if (!filled.some(row => row.year === selected.year && row.quarter === selected.quarter)) filled.push(selected);
+      return filled.sort((a,b) => a.year-b.year || a.quarter-b.quarter);
+    },
+    [analysis.quarters, todayQuarter.key, selectedQuarterKey]
   );
   const matchingQuarterIndex = quarters.findIndex((row) => `${row.year}-Q${row.quarter}` === selectedQuarterKey);
+  useEffect(() => {
+    const tabs = quarterTabsRef.current;
+    const activeTab = tabs?.querySelector('[aria-selected="true"]');
+    if (!activeTab) return;
+    const bounds = tabs.getBoundingClientRect();
+    const activeBounds = activeTab.getBoundingClientRect();
+    if (activeBounds.right > bounds.right) tabs.scrollLeft += activeBounds.right - bounds.right + 4;
+    else if (activeBounds.left < bounds.left) tabs.scrollLeft -= bounds.left - activeBounds.left + 4;
+  }, [selectedQuarterKey, quarters.length, analysis.quarters.length]);
   const currentQuarterIndex = quarters.findIndex((row) => `${row.year}-Q${row.quarter}` === todayQuarter.key);
   const selectedIndex = matchingQuarterIndex >= 0
     ? matchingQuarterIndex
@@ -702,8 +677,9 @@ function AIRevenueAnalysis({ dashboardData }) {
   const current = quarters[selectedIndex];
   const previous = quarters[selectedIndex - 1];
   const yearAgo = current && quarters.find((row) => row.year === current.year - 1 && row.quarter === current.quarter);
-  const qoq = current && previous ? percentChange(current.revenue, previous.revenue) : null;
-  const yoy = current && yearAgo ? percentChange(current.revenue, yearAgo.revenue) : null;
+  const qoq = current?.count && previous?.count ? percentChange(current.revenue, previous.revenue) : null;
+  const yoy = current?.count && yearAgo?.count ? percentChange(current.revenue, yearAgo.revenue) : null;
+  const coverage = analysis.concentration?.coverage;
   const estimate = analysis.risk?.officialForecast || null;
   const chartEstimate = estimate;
   const currentQuarterKey = todayQuarter.key;
@@ -728,17 +704,13 @@ function AIRevenueAnalysis({ dashboardData }) {
     const loadRecords = async () => {
       setIsReportLoading(true);
       setReportError('');
-      setReportRows([]);
+      setReportData(null);
       try {
-        const range = getQuarterDateRange(reportYear, reportQuarterNumber, reportMonth);
-        const firstPage = await adminApi.getBusinessRecords({ ...range, page: 1, limit: 100 });
-        const records = Array.isArray(firstPage.data) ? [...firstPage.data] : [];
-        const totalPages = Math.max(1, Number(firstPage.pagination?.totalPages || 1));
-        for (let page = 2; page <= totalPages; page += 1) {
-          const response = await adminApi.getBusinessRecords({ ...range, page, limit: 100 });
-          records.push(...(Array.isArray(response.data) ? response.data : []));
-        }
-        if (active) setReportRows(records.map(mapBusinessRecord));
+        const response = await adminApi.getScopedRevenue(selectedQuarterKey, revenueScope);
+        if (active) setReportData({
+          rows: (response.data?.reportRecords || []).map(mapBusinessRecord),
+          concentration: response.data?.concentration
+        });
       } catch (error) {
         if (active) setReportError(error.message || 'Business records could not be loaded.');
       } finally {
@@ -747,8 +719,12 @@ function AIRevenueAnalysis({ dashboardData }) {
     };
     loadRecords();
     return () => { active = false; };
-  }, [reportMonth, reportOpen, reportQuarterNumber, reportYear]);
+  }, [reportOpen, reportQuarterNumber, reportYear, selectedQuarterKey, revenueScope]);
 
+  const reportRows = reportData?.rows || [];
+  const reportConcentration = reportData?.concentration;
+  const reportCoverage = reportConcentration?.coverage;
+  const reportIndicators = reportConcentration?.indicators;
   const reportTotal = reportRows.reduce((sum, row) => sum + row.amount, 0);
   const reportCardPageSize = 20;
   const reportCardTotalPages = Math.max(1, Math.ceil(reportRows.length / reportCardPageSize));
@@ -756,20 +732,24 @@ function AIRevenueAnalysis({ dashboardData }) {
   const reportPaid = reportRows.filter((row) => ['paid', 'completed'].includes(row.status.toLowerCase()))
     .reduce((sum, row) => sum + row.amount, 0);
   const reportOutstanding = reportTotal - reportPaid;
-  const monthNames = reportYear && reportQuarterNumber
-    ? [0, 1, 2].map((offset) => new Date(reportYear, (reportQuarterNumber - 1) * 3 + offset, 1).toLocaleString('en-PH', { month: 'short' }))
-    : [];
   const selectedAnalysis = modalId === 'risk'
-    ? { title: 'Revenue risk by category', items: categoryItems }
+    ? { title: 'Revenue risk by category · ' + scopeLabel, items: categoryItems }
     : modalId === 'concentration'
-      ? { title: 'Revenue concentration', items: contributorItems }
-      : { title: 'Service type concentration', items: serviceItems };
+      ? { title: 'Revenue concentration · ' + scopeLabel, items: contributorItems }
+      : { title: 'Service type concentration · ' + scopeLabel, items: serviceItems };
   const indicators = analysis.risk?.indicators || {};
   const overallRisk = analysis.risk?.overallRisk || {
     level: 'Not enough data',
-    reason: `fewer than ${riskThresholds.minimumCompletedQuarters} completed quarters are available`
+    reason: isLoading ? 'Loading concentration figures…' : 'Concentration figures could not be loaded.'
   };
-  const overallRiskWhy = getOverallRiskWhy(overallRisk, indicators);
+  const concentration = analysis.concentration;
+  const unavailableReason = concentration?.unavailableReason;
+  const contributorCoverage = classifiedCoverage(concentration?.classification?.contributors, concentration?.totalRevenue);
+  const categoryCoverage = classifiedCoverage(concentration?.classification?.categories, concentration?.totalRevenue);
+  const metrics = concentration?.indicators;
+  const overallRiskWhy = metrics?.hhi != null
+    ? `HHI ${metrics.hhi} · Top contributor ${metrics.topOneShare}% · Top three ${metrics.topThreeShare}%`
+    : unavailableReason || overallRisk.reason;
   const selectedTier = modalId === 'risk'
     ? overallRisk.level
     : modalId === 'concentration'
@@ -777,11 +757,11 @@ function AIRevenueAnalysis({ dashboardData }) {
       : indicators.topContributorShare?.level || 'Not enough data';
   const selectedTop = selectedAnalysis.items[0];
   const topContributorIndicator = indicators.topContributorShare;
-  const uncatShare = Number(analysis.risk?.uncategorized?.share || 0);
   const getRiskWhy = (key, fallback) => {
     const indicator = indicators[key];
-    if (key === 'qoqChange' && indicator?.reason) return indicator.reason;
+    if (indicator?.reason) return indicator.reason;
     if (!indicator || indicator.level === 'Not enough data') {
+      if (key === 'concentrationHhi' || key === 'topContributorShare') return overallRiskWhy;
       return `Fewer than ${riskThresholds.minimumCompletedQuarters} completed quarters are available.`;
     }
     if (key === 'qoqChange') return `completed-quarter revenue changed ${signedPercent(indicator.value)}.`;
@@ -793,29 +773,25 @@ function AIRevenueAnalysis({ dashboardData }) {
   const cardDetails = [
     {
       id: 'risk',
-      title: 'Revenue risk by category',
+      title: 'Revenue risk by category · ' + scopeLabel,
       icon: '✣',
       items: categoryItems,
       riskLevel: overallRisk.level,
-      why: overallRisk.reason ? `overall risk is driven by ${overallRisk.reason}.` : 'Overall risk is not available.',
-      description: analysis.risk?.topCategory
-        ? `${analysis.risk.topCategory} is the largest revenue category`
-        : 'No category revenue is available'
+      why: overallRiskWhy,
+      description: categoryCoverage ? 'By known category · ' + categoryCoverage : 'Category coverage is unavailable.'
     },
     {
       id: 'concentration',
-      title: 'Revenue concentration',
+      title: 'Revenue concentration · ' + scopeLabel,
       icon: '●',
       items: contributorItems,
       riskLevel: indicators.concentrationHhi?.level || 'Not enough data',
       why: getRiskWhy('concentrationHhi'),
-      description: analysis.concentration?.indicators
-        ? `HHI ${Number(analysis.concentration.indicators.hhi || 0).toFixed(3)} · ${Number(analysis.concentration.indicators.topOneShare || 0).toFixed(1)}% top contributor`
-        : 'No contributor data is available'
+      description: overallRiskWhy
     },
     ...(serviceItems.length ? [{
       id: 'service',
-      title: 'Service type concentration',
+      title: 'Service type concentration · ' + scopeLabel,
       icon: '⌁',
       items: serviceItems,
       riskLevel: topContributorIndicator?.level || 'Not enough data',
@@ -823,15 +799,6 @@ function AIRevenueAnalysis({ dashboardData }) {
       description: `${serviceItems[0].share.toFixed(1)}% from ${serviceItems[0].name}`
     }] : [])
   ];
-  const localCardInsightTemplates = getLocalCardInsightTemplates({
-    current,
-    indicators,
-    overallRisk,
-    concentration: analysis.concentration,
-    serviceItems,
-    estimate
-  });
-
   const refreshCardInsights = async () => {
     if (cardInsightRequestInFlightRef.current) return;
     await requestCardInsights({
@@ -848,70 +815,88 @@ function AIRevenueAnalysis({ dashboardData }) {
     return <section className="ai-revenue-modal-insight" aria-label="AI insight">
       <div className="ai-revenue-modal-insight__header">
         <h3>AI insight</h3>
-        <span>{cardInsightSource === 'ai' ? 'AI-generated from your data' : 'Auto-generated summary'}{updatedAt && ` · Updated ${updatedAt}`}</span>
+        <span>{cardSourceLabel}{updatedAt && ` · Updated ${updatedAt}`}</span>
       </div>
-      <RevenueCardInsights
+      {!cardInsightsLoading && !cardInsights[cardKey]?.summary ? <p role="status">{cardInsightsError || 'No insight available.'}</p> : <RevenueCardInsights
         insights={cardInsights[cardKey]}
-        fallbackInsights={localCardInsightTemplates[cardKey]}
+
         isLoading={cardInsightsLoading}
-        error={cardInsightsError}
-      />
+      />}
     </section>;
   };
 
   return <>
   <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
     <div className="ai-revenue-analysis__header">
-      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Quarterly revenue, risk, and concentration from business data</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
+      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Concentration: {scopeLabel}; trend and forecast: all-records history</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
       <div className="ai-revenue-toolbar">
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>ⓘ Risk thresholds</button>
-        <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportMonth(null); setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
+        <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
       </div>
     </div>
     <div className="ai-revenue-overall-risk">
-      <div className="ai-revenue-overall-risk__title">
-        <strong>Overall risk</strong>
-        <button
-          type="button"
-          className="ai-revenue-overall-risk__info"
-          aria-label="Show revenue risk thresholds"
-          aria-haspopup="dialog"
-          onClick={() => setSettingsOpen(true)}
-        >i</button>
+      <div className="ai-revenue-overall-risk__heading">
+        <div className="ai-revenue-overall-risk__title">
+          <strong>Concentration risk — {scopeLabel}</strong>
+          <button
+            type="button"
+            className="ai-revenue-overall-risk__info"
+            aria-label="Show revenue risk thresholds"
+            aria-haspopup="dialog"
+            onClick={() => setSettingsOpen(true)}
+          >i</button>
+        </div>
+        <div className="ai-revenue-tabs ai-revenue-scope" role="group" aria-label="Revenue concentration scope">
+          <button type="button" aria-pressed={revenueScope === 'selectedQuarter'} onClick={() => changeRevenueScope(selectedQuarterKey, 'selectedQuarter')}>Selected quarter</button>
+          <button type="button" aria-pressed={revenueScope === 'allRecords'} onClick={() => changeRevenueScope(selectedQuarterKey, 'allRecords')}>All records</button>
+        </div>
       </div>
       <span className={`ai-revenue-overall-risk__chip is-${['Normal', 'Moderate', 'High'].includes(overallRisk.level) ? overallRisk.level.toLowerCase() : 'unknown'}`}>
-        {overallRisk.level || 'Not enough data'}
+        {overallRisk.level === 'Not enough data' ? 'Unrated' : overallRisk.level}
       </span>
       <p className="ai-revenue-overall-risk__why">{overallRiskWhy}</p>
+      <ContributorList concentration={analysis.concentration} />
+      {contributorCoverage && <p className="ai-revenue-overall-risk__why">By known contributor · {contributorCoverage}</p>}
+      <ProductRevenueSummary concentration={concentration} />
+    </div>
+
+    {analysis.quarters.length > 0 && (
+      <div ref={quarterTabsRef} className="ai-revenue-tabs" role="tablist" aria-label="Revenue analysis quarter">
+        {quarters.map((row, index) => {
+          const key = `${row.year}-Q${row.quarter}`;
+          return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => {
+            changeRevenueScope(key);
+          }}>{quarterLabel(row.year, row.quarter)}</button>;
+        })}
+      </div>
+    )}
+    <div className="ai-revenue-completeness-banner">
+      <div className="ai-revenue-completeness-banner__copy" role="status" aria-label="Revenue data completeness">
+        <strong>Quarter for review: {selectedQuarterKey.replace('-', ' ')} · {selectedQuarterKey === todayQuarter.key
+          ? 'In progress (' + todayQuarter.percent + '% elapsed)' : selectedQuarterKey < todayQuarter.key ? 'Closed quarter' : 'Future quarter'}</strong>
+        {coverage && <span>
+          {revenueScope === 'allRecords' && 'All records · '}
+          {coverage.empty ? 'No recorded transactions' : coverage.includedTransactions + ' included transactions'}
+          {coverage.firstRecordedDate && ' · ' + coverage.firstRecordedDate}
+          {coverage.lastRecordedDate !== coverage.firstRecordedDate && ' to ' + coverage.lastRecordedDate}
+          {revenueScope === 'allRecords' && !coverage.empty && ' · ' + recordedPeso.format(analysis.concentration.totalRevenue) + ' recorded'}
+        </span>}
+        <span>{coverage?.notice || 'Coverage is unverified. Missing records may affect comparisons.'}
+          {coverage?.confirmedZeroSales === true && ' Zero sales confirmed for all three months.'}</span>
+      </div>
+      <button type="button" className="ai-revenue-toolbar__action" aria-expanded={reviewOpen} aria-controls="revenue-quarter-review"
+        onClick={() => setReviewOpen(open => !open)}>{reviewOpen ? 'Close review' : 'Review quarter'}</button>
+    </div>
+    <div id="revenue-quarter-review" hidden={!reviewOpen}>
+      <QuarterCompletenessReview key={selectedQuarterKey} selectedQuarter={selectedQuarterKey} onQuarterChange={changeRevenueScope} onReviewed={refreshAfterReview} revision={dataUpdatedAt?.getTime()} />
     </div>
 
     {isLoading ? <p className="ai-revenue-empty" role="status">Loading revenue analysis…</p>
       : loadError ? <p className="ai-revenue-report__error" role="alert">{loadError}</p>
-        : analysis.quarters.length === 0 ? <p className="ai-revenue-empty" role="status">No quarterly revenue data is available yet.</p>
-          : <>
-            <div className="ai-revenue-tabs" role="tablist" aria-label="Revenue analysis quarter">
-              {quarters.map((row, index) => {
-                const key = `${row.year}-Q${row.quarter}`;
-                return <button type="button" role="tab" aria-selected={selectedIndex === index} className={selectedIndex === index ? 'is-active' : ''} key={key} onClick={() => {
-                  setCardInsightsLoading(true);
-                  setCardInsightsError('');
-                  setSelectedQuarterKey(key);
-                }}>{quarterLabel(row.year, row.quarter)}</button>;
-              })}
-            </div>
-            <div className="ai-revenue-completeness-banner">
-              <strong>{todayQuarter.label} is in progress</strong>
-              <span>— {todayQuarter.percent}% of the quarter has elapsed.</span>
-            </div>
+        : <>
             <div className="ai-revenue-summary">
-              <div>
-                <span>Total revenue - {quarterName(current.year, current.quarter)}</span>
-                <strong>{peso.format(current.revenue)}</strong>
-                <em className={qoq === null || qoq >= 0 ? 'is-positive' : 'is-negative'}>{qoq === null ? '—' : `${qoq >= 0 ? '▲' : '▼'} ${Math.abs(qoq).toFixed(1)}% QoQ`}</em>
-                <small>{current.count} records · avg {peso.format(current.count ? current.revenue / current.count : 0)} per record</small>
-                <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
-              </div>
-              <div className="ai-revenue-summary__chart">
+              <ScopedRevenueFigures concentration={analysis.concentration} qoq={qoq} yoy={yoy} />
+              {analysis.quarters.length === 0 ? <p className="ai-revenue-empty" role="status">No quarterly revenue data is available yet.</p> : <div className="ai-revenue-summary__chart">
                 <QuarterlyBarChart
                   quarters={quarters}
                   estimate={chartEstimate}
@@ -921,17 +906,20 @@ function AIRevenueAnalysis({ dashboardData }) {
                 {chartEstimate
                   ? <><p className="ai-revenue-estimate-note">{chartEstimate.targetLabel}: {peso.format(chartEstimate.expected)} · likely {peso.format(chartEstimate.low)} to {peso.format(chartEstimate.high)}</p><div className="ai-revenue-estimate-legend"><span><i className="is-actual" />Actual</span><span><i className="is-estimate" />Forecast</span><span>Current quarter is marked in progress</span></div></>
                   : <p className="ai-revenue-estimate-note">Estimate needs at least {riskThresholds.minimumCompletedQuarters} quarters of data. {analysis.quarters.length} available.</p>}
-              </div>
+              </div>}
             </div>
+          </>}
+    {!isLoading && !loadError && analysis.quarters.length > 0 && <>
             <div className="ai-revenue-collected-row">
-              <div><span>Collected</span><strong>{peso.format(collectedAmount)}</strong></div>
-              <div><span>Outstanding</span><strong>{peso.format(outstandingAmount)}</strong></div>
+              <div><span>Collected · all records</span><strong>{peso.format(collectedAmount)}</strong></div>
+              <div><span>Outstanding · all records</span><strong>{peso.format(outstandingAmount)}</strong></div>
               <div><span>Collection</span><strong>{collectedAmount + outstandingAmount ? Math.round(collectedAmount / (collectedAmount + outstandingAmount) * 100) : 0}%</strong></div>
             </div>
             <div className="ai-revenue-insights-toolbar">
               <span role="status">
-                {cardInsightSource === 'ai' ? 'AI-generated from your data' : 'Auto-generated summary'}
-                {cardInsightsError ? ' · AI unavailable; showing data-based summaries.' : ''}
+                {cardSourceLabel}
+                {cardInsightsNotice && (' · ' + cardInsightsNotice)}
+                {cardInsightsError ? ' · Insights unavailable.' : ''}
                 {cardInsightGeneratedAt && ` · Updated ${new Intl.DateTimeFormat('en-PH', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(cardInsightGeneratedAt))}`}
               </span>
               <button type="button" className="ai-revenue-toolbar__action" onClick={refreshCardInsights} disabled={cardInsightsLoading || cardInsightRequestInFlight || refreshRemainingSeconds > 0}>
@@ -941,9 +929,9 @@ function AIRevenueAnalysis({ dashboardData }) {
               {refreshRemainingSeconds > 0 && <p role="status">Please wait before refreshing revenue insights again.</p>}
               <div className="ai-revenue-cards">
               <div className="ai-revenue-card" role="button" tabIndex={0} onClick={() => openAnalysis('trend')} onKeyDown={(event) => handleCardKeyDown(event, 'trend')}>
-                <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">↗</span><strong className="ai-revenue-card__title">Revenue trend &amp; growth</strong></span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
+                <div className="ai-revenue-card__top"><span className="ai-revenue-card__heading"><span className="ai-revenue-card__icon">↗</span><strong className="ai-revenue-card__title">Revenue trend &amp; growth · all-records history</strong></span><RiskChip level={indicators.qoqChange?.level || 'Not enough data'} why={getRiskWhy('qoqChange')} /></div>
                 <b>{peso.format(current.revenue)}</b>
-                <small>{yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
+                <small>Coverage unverified; recorded-revenue comparisons only. {yoy === null ? 'YoY comparison unavailable' : `${signedPercent(yoy)} vs same quarter last year`}</small>
                 <a className="ai-revenue-card__view" href="#trend-analysis" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAnalysis('trend'); }}>View analysis <span aria-hidden="true">›</span></a>
               </div>
               {cardDetails.map((card) => {
@@ -961,7 +949,6 @@ function AIRevenueAnalysis({ dashboardData }) {
                 <a className="ai-revenue-card__view" href="#estimate-analysis" onClick={(event) => { event.preventDefault(); event.stopPropagation(); openAnalysis('estimate'); }}>View analysis <span aria-hidden="true">›</span></a>
               </div>
             </div>
-            <p className="ai-revenue-uncategorized">Uncategorized (historical): {uncatShare.toFixed(1)}% of revenue</p>
             {(analysis.risk?.completedQuarterCount || 0) < riskThresholds.minimumCompletedQuarters && <p className="ai-revenue-empty" role="status">Fewer than {riskThresholds.minimumCompletedQuarters} completed quarters are available. The quarterly trend is shown; the forecast will appear after more data is recorded.</p>}
           </>}
 
@@ -977,7 +964,7 @@ function AIRevenueAnalysis({ dashboardData }) {
             <p><strong>Concentration (HHI):</strong> Normal &lt; {riskThresholds.concentrationHhi.normalMaxExclusive}; Moderate {hhiModerateRange}; High &gt; {riskThresholds.concentrationHhi.moderateMaxInclusive}.</p>
             <p><strong>Top contributor share:</strong> Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate {contributorModerateRange}; High &gt; {riskThresholds.topContributorShare.moderateMaxInclusive}%.</p>
             <p><strong>Forecast vs. last four completed-quarter average:</strong> Normal ≥ {riskThresholds.forecastVsFourQuarterAverage.normalMin}%; Moderate {forecastModerateRange}; High &lt; {riskThresholds.forecastVsFourQuarterAverage.moderateMin}%.</p>
-            <p>Overall risk is the highest indicator level. Uncategorized historical revenue is excluded from concentration calculations and shown separately.</p>
+            <p>The concentration badge uses the higher of the HHI and top contributor risk levels. Both use revenue attributed to classified contributors. Category shares use revenue with a known category.</p>
           </div>
         </div>
         <div className="ai-revenue-modal__footer">
@@ -989,18 +976,17 @@ function AIRevenueAnalysis({ dashboardData }) {
     {reportOpen && reportYear && reportQuarterNumber && <AdminModalPortal><div className="ai-revenue-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setReportOpen(false); }}>
       <section className="ai-revenue-modal ai-revenue-report" role="dialog" aria-modal="true" aria-labelledby="ai-report-title">
         <header className="ai-revenue-modal__header">
-          <div><p className="ai-revenue-modal__eyebrow">Export</p><h2 id="ai-report-title">Sales / Transactions — {quarterName(reportYear, reportQuarterNumber)}</h2></div>
+          <div><p className="ai-revenue-modal__eyebrow">Export</p><h2 id="ai-report-title">Recorded revenue — {scopeLabel}</h2></div>
           <button type="button" className="ai-revenue-modal__close" aria-label="Close report" onClick={() => setReportOpen(false)}>×</button>
         </header>
         <div className="ai-revenue-modal__body">
         <div className="ai-revenue-report__summary">
-          <strong>{reportMonth === null ? quarterName(reportYear, reportQuarterNumber) : `${monthNames[reportMonth]} ${reportYear}`} Business Records</strong>
+          {reportCoverage && <span>{reportCoverage.includedTransactions ?? 0} included transactions · {reportCoverage.firstRecordedDate || 'No recorded dates'} to {reportCoverage.lastRecordedDate || '—'} · {reportCoverage.completeness === 'reviewed' ? 'Closed quarter reviewed by Admin' : 'Completeness unknown'}{reportCoverage.quarterInProgress ? '; quarter still in progress' : ''}. {reportCoverage.notice}</span>}
+          <strong>{scopeLabel} · same records as concentration</strong>
+          <ProductRevenueSummary concentration={reportConcentration} />
+          {reportIndicators?.hhi != null && <span>Leading contributor: {reportConcentration.contributors[0]?.name} · Top one {reportIndicators.topOneShare}% · Top three {reportIndicators.topThreeShare}% · HHI {reportIndicators.hhi} · {reportIndicators.concentrationLevel}</span>}
           <span>Generated {new Date().toLocaleDateString('en-PH', { day: 'numeric', month: 'long', year: 'numeric' })} · Total: {peso.format(reportTotal)} ({peso.format(reportPaid)} paid, {peso.format(reportOutstanding)} outstanding)</span>
           {reportError && <span className="ai-revenue-report__error" role="alert">{reportError}</span>}
-        </div>
-        <div className="ai-revenue-report__month-tabs" role="group" aria-label="Filter report by month">
-          <button type="button" className={reportMonth === null ? 'is-active' : ''} aria-pressed={reportMonth === null} onClick={() => setReportMonth(null)}>Full quarter</button>
-          {monthNames.map((name, index) => <button type="button" className={reportMonth === index ? 'is-active' : ''} aria-pressed={reportMonth === index} key={name} onClick={() => { setReportCardPage(1); setReportMonth(index); }}>{name}</button>)}
         </div>
         <div className="ai-revenue-report-card-list" aria-label="Business record cards">
           {isReportLoading
@@ -1067,13 +1053,13 @@ function AIRevenueAnalysis({ dashboardData }) {
             <div className={`ai-revenue-callout is-${selectedTier.toLowerCase()}`}><strong>{selectedTier} concentration</strong><span>{selectedTop?.name} contributes {selectedTop?.share.toFixed(1)}% of the displayed revenue mix.</span></div>
             <HorizontalBars items={selectedAnalysis.items} />
             <div className="ai-revenue-thresholds__note">Threshold reference: Normal &lt; {riskThresholds.topContributorShare.normalMaxExclusive}%; Moderate through {riskThresholds.topContributorShare.moderateMaxInclusive}%; High above {riskThresholds.topContributorShare.moderateMaxInclusive}%.</div>
-          </> : <p className="ai-revenue-empty">There is no backend data for this concentration view.</p>}
+          </> : <p className="ai-revenue-empty">{modalId === 'risk' && categoryCoverage ? 'By known category · ' + categoryCoverage : overallRiskWhy}</p>}
           {renderCardInsight(modalId)}
         </div>
       </section>
     </div></AdminModalPortal>}
   </section>
-  <AskRevenueAIPanel onActivityChange={(isActive) => { askAIActiveRef.current = isActive; }} />
+  <AskRevenueAIPanel key={revenueScope + ':' + selectedQuarterKey} selectedQuarter={current ? current.year + '-Q' + current.quarter : null} revenueScope={revenueScope} onActivityChange={onAskActivityChange} />
   </>;
 }
 

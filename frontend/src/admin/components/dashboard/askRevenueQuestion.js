@@ -12,6 +12,7 @@ export async function askRevenueQuestion({
   setIsLoading,
   setAnswer,
   setChart,
+  setMetadata,
   setTimestamp,
   setError
 }) {
@@ -30,6 +31,7 @@ export async function askRevenueQuestion({
       throw new Error('The AI returned an empty answer. Please try again.');
     }
     setAnswer(response.answer);
+    setMetadata?.(response);
     setChart?.(response.chart || null);
     setTimestamp(response.timestamp || new Date().toISOString());
     return true;

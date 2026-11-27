@@ -217,15 +217,22 @@ export const adminApi = {
   getQuarterlySales: () => request('/api/dashboard/dashboard/quarterly'),
   getRevenueConcentration: () => request('/api/dashboard/analytics/revenue-concentration'),
   getRevenueRisk: () => request('/api/dashboard/analytics/revenue-risk'),
-  askRevenueAI: (question) => request('/api/admin/revenue/ask-ai', {
+  askRevenueAI: (question, selectedQuarter, scope) => request('/api/admin/revenue/ask-ai', {
     method: 'POST',
-    body: JSON.stringify({ question })
+    body: JSON.stringify({ question, ...(selectedQuarter ? { selectedQuarter } : {}), ...(scope ? { scope } : {}) })
   }),
-  getRevenueCardInsights: (refresh = false) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
+  getRevenueCardInsights: (refresh = false, selectedQuarter, scope) => request(`/api/admin/ai/card-insights${refresh ? '?refresh=true' : ''}`, {
     method: 'POST',
-    body: JSON.stringify({})
+    body: JSON.stringify({ ...(selectedQuarter ? { selectedQuarter } : {}), ...(scope ? { scope } : {}) })
   }).then(mapRevenueCardInsights),
-  getRevenueAnalysisData: async () => {
+  getQuarterReview: (selectedQuarter) => request('/api/dashboard/analytics/quarter-review?' + new URLSearchParams({ selectedQuarter })),
+  reviewRevenueMonth: (decision) => request('/api/dashboard/analytics/month-review', { method: 'POST', body: JSON.stringify(decision) }),
+  getScopedRevenue: (selectedQuarter, scope = 'allRecords') => request('/api/dashboard/analytics/scoped-revenue?' + new URLSearchParams({ scope, ...(selectedQuarter ? { selectedQuarter } : {}) })),
+  getRevenueAnalysisData: async (selectedQuarter, scope) => {
+    if (scope) {
+      const response = await adminApi.getScopedRevenue(selectedQuarter, scope);
+      return { quarterly: { data: response.data.quarters }, risk: { data: response.data.risk }, concentration: { data: response.data.concentration } };
+    }
     const [quarterly, risk, concentration] = await Promise.all([
       adminApi.getQuarterlySales(),
       adminApi.getRevenueRisk(),
@@ -250,6 +257,7 @@ export const adminApi = {
   createInventory: (item) => request('/api/dashboard/inventory', { method: 'POST', body: item }),
   updateInventory: (id, item) => request(`/api/dashboard/inventory/${id}`, { method: 'PUT', body: item }),
   deleteInventory: (id) => request(`/api/dashboard/inventory/${id}`, { method: 'DELETE' }),
+  getAuditHistory: (recordType, recordId, page = 1) => request('/api/dashboard/audit/' + encodeURIComponent(recordType) + '/' + encodeURIComponent(recordId) + '?page=' + page),
   getBusinessRecords: (query = {}) => {
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => {
@@ -285,6 +293,8 @@ export const adminApi = {
     const suffix = params.toString() ? `?${params.toString()}` : '';
     return request(`/api/service-requests${suffix}`);
   },
+  getPosInventory: getInventoryItems,
+  walkIn: (suffix = '', body) => request('/api/dashboard/walk-ins' + suffix, body === undefined ? {} : { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body) }),
   getServices: () => request('/api/admin/services', { cache: 'no-store' }),
   getReservationSettings: () => request('/api/admin/reservations/settings'),
   updateReservationSettings: (settings) => request('/api/admin/reservations/settings', { method: 'PUT', body: JSON.stringify(settings) }),
@@ -314,7 +324,8 @@ export const adminApi = {
   },
   getReservationReceipts: (id) => request(`/api/admin/reservations/${encodeURIComponent(id)}/receipts`),
   getServiceRequestReceipts: (id) => request(`/api/service-requests/${encodeURIComponent(id)}/payment-receipts`),
-  confirmReservation: (id) => request(`/api/admin/reservations/${id}/confirm`, { method: 'POST' }),
+  collectServiceDeposit: id => request(`/api/admin/service-requests/${id}/cash-deposit`, { method: 'POST' }),
+  confirmReservation: (id, cashReceived = false) => request(`/api/admin/reservations/${id}/confirm`, { method: 'POST', body: JSON.stringify({ cashReceived }) }),
   rejectReservation: (id, reason) => request(`/api/admin/reservations/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   confirmServicePayment: (id) => request(`/api/admin/service-requests/${id}/confirm-payment`, { method: 'POST' }),
   rejectServicePayment: (id, reason) => request(`/api/admin/service-requests/${id}/reject-payment`, { method: 'POST', body: JSON.stringify({ reason }) }),

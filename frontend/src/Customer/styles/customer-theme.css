@@ -196,6 +196,7 @@
   cursor: not-allowed;
 }
 
+.customer-page.customer-page .customer-cart-tabs button[aria-selected="true"],
 .customer-page.customer-page .customer-nav > a.active,
 .customer-page.customer-page .customer-account-menu-trigger.active {
   background-color: var(--c-accent);

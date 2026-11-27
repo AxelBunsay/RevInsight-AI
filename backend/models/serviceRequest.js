@@ -14,10 +14,12 @@ const paymentSubmissionSchema = new mongoose.Schema({
 }, { _id: true });
 
 const serviceRequestSchema = new mongoose.Schema({
+  queueKey: String,
+  walkInId: { type: mongoose.Schema.Types.ObjectId, ref: 'WalkIn' },
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required() { return !this.walkInId; }
   },
   customerId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -44,6 +46,7 @@ const serviceRequestSchema = new mongoose.Schema({
     enum: ['', 'quote_requested', 'quoted', 'accepted', 'rejected', 'declined', 'cancelled'],
     default: ''
   },
+  quoteCheckout: { type: String, enum: ['awaiting', 'pay-at-shop', 'gcash', 'cash'] },
   quotedPrice: { type: Number, min: 0, default: null },
   quoteNote: { type: String, trim: true, maxlength: 1000, default: '' },
   quotedAt: { type: Date, default: null },
@@ -188,6 +191,8 @@ const serviceRequestSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+serviceRequestSchema.index({ user: 1, queueKey: 1 }, { unique: true, partialFilterExpression: { queueKey: { $type: 'string' } } });
 
 serviceRequestSchema.pre('save', function(next) {
   if (!this.code) this.code = `SRV-${String(this._id).slice(-6).toUpperCase()}`;

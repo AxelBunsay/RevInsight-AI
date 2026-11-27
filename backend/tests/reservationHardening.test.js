@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const mongoose = require('mongoose');
+const AdminAudit = require('../models/adminAudit');
 const Reservation = require('../models/orderingModels/reservation');
 const ReservationSettings = require('../models/reservationSettings');
 const ServiceRequest = require('../models/serviceRequest');
@@ -26,6 +27,7 @@ function mockExpiryQuery(candidates = []) {
 
 function mockSession() {
   return {
+    inTransaction: () => true,
     withTransaction: async (callback) => callback(),
     endSession: vi.fn().mockResolvedValue(undefined)
   };
@@ -81,7 +83,7 @@ describe('reservation hardening', () => {
 
     await cancelCustomerReservation({
       params: { id: '507f1f77bcf86cd799439011' },
-      user: { userId: '507f1f77bcf86cd799439012' },
+      user: { userId: '507f1f77bcf86cd799439012', role: 'customer' },
       body: {}
     }, res);
 
@@ -100,16 +102,18 @@ describe('reservation hardening', () => {
   it('cancels pending down payment with an expected-status conditional update', async () => {
     mockExpiryQuery();
     const cancelled = {
+      _id: '507f1f77bcf86cd799439011', status: 'Cancelled',
       toObject: () => ({ status: 'Cancelled', paymentSubmissions: [] })
     };
     const session = mockSession();
     vi.spyOn(mongoose, 'startSession').mockResolvedValue(session);
+    const audit = vi.spyOn(AdminAudit, 'create').mockResolvedValue([]);
     const findOneAndUpdate = vi.spyOn(Reservation, 'findOneAndUpdate').mockResolvedValue(cancelled);
     const res = makeResponse();
 
     await cancelCustomerReservation({
       params: { id: '507f1f77bcf86cd799439011' },
-      user: { userId: '507f1f77bcf86cd799439012' },
+      user: { userId: '507f1f77bcf86cd799439012', role: 'customer' },
       body: { reason: 'Changed my mind' }
     }, res);
 
@@ -123,5 +127,6 @@ describe('reservation hardening', () => {
       expect.objectContaining({ new: true, session })
     );
     expect(res.json).toHaveBeenCalledWith({ success: true, reservation: { status: 'Cancelled' } });
+    expect(audit).toHaveBeenCalledWith([expect.objectContaining({actorRole:'customer',changes:expect.objectContaining({status:{from:'Pending Down Payment',to:'Cancelled'}})})],{session});
   });
 });

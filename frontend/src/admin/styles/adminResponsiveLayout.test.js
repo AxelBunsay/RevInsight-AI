@@ -23,7 +23,7 @@ describe('admin responsive layout styles', () => {
     expect(transactionsPage).toContain('className="transactions-table-scroll"');
     expect(transactionsPage).toContain('<TransactionCards');
     expect(managementStyles).toContain('.admin-root .admin-management-page .transaction-card-list {\n  display: none;');
-    expect(managementStyles).toContain('@media (max-width: 1024px) {');
+    expect(managementStyles).toContain('@media (max-width: 1100px) {');
     expect(managementStyles).toContain('.admin-root .admin-management-page .transactions-table-scroll {\n    display: none;');
     expect(managementStyles).toContain('.admin-root .admin-management-page .transaction-card-list {\n    display: grid;');
     expect(managementStyles).toContain('.admin-root .admin-management-page .transactions-table-scroll {\n  width: 100%;');
@@ -59,7 +59,7 @@ describe('admin responsive layout styles', () => {
     expect(aiRevenueAnalysis).toContain('reportRows.slice((reportCardPage - 1) * reportCardPageSize, reportCardPage * reportCardPageSize)');
     expect(aiRevenueAnalysis).toContain('const reportCardPageSize = 20;');
     expect(aiRevenueAnalysis).toContain('className="ai-revenue-report-card-list"');
-    expect(dashboardStyles).toContain('@media (max-width: 1024px) {');
+    expect(dashboardStyles).toContain('@media (max-width: 1100px) {');
     expect(dashboardStyles).toContain('.admin-root .ai-revenue-report__table-wrap {\n    display: none;');
     expect(dashboardStyles).toContain('.admin-root .ai-revenue-report-card-list {\n    display: grid;');
     expect(dashboardStyles).toContain('.admin-root .ai-revenue-modal-layer .ai-revenue-modal {');

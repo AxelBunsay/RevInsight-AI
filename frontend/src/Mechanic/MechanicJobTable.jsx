@@ -18,6 +18,7 @@ function getBookingCode(job = {}) {
 }
 
 function getScheduledLabel(job) {
+  if (job.walkInId || job.queueKey) return 'Service queue';
   const scheduledDate = job.scheduledDate || job.dueDate;
   const time = [job.startTime || job.dueTime, job.endTime].filter(Boolean).join(' - ');
   if (!scheduledDate) return time ? `Schedule to be confirmed · ${time}` : 'Schedule to be confirmed';

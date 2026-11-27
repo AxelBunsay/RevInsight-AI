@@ -30,7 +30,7 @@ async function main() {
     await page.getByRole('dialog').getByRole('button', { name: 'Add to cart', exact: true }).click();
     await page.getByRole('button', { name: 'Close product details' }).click();
     await page.goto('http://localhost:5100/customer/cart');
-    await page.getByRole('button', { name: 'Continue to checkout', exact: true }).click();
+    await page.getByRole('button', { name: 'Check out products', exact: true }).click();
     await page.getByText('Down payment (40%): due now', { exact: true }).waitFor();
     await page.getByText(/Pickup at QA Changed Pickup Address.*10:00-13:00 QA pickup/).waitFor();
     const review = await page.locator('.customer-reservation-payment-instructions').innerText();

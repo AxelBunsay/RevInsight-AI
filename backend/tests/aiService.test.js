@@ -41,6 +41,29 @@ function createFakeClient(replies) {
 }
 
 describe('AI revenue insight generation', () => {
+  it('gives the recorded total and missing tracking context in historical fallback insights', () => {
+    const mix = { itemSales:13440, knownProductRevenue:0, productNotice:'Product breakdown unavailable',
+      serviceNotice:'Services were not tracked during this period.' };
+    const cards = buildTemplateCardInsights({revenueConcentration:{salesMix:mix}});
+    expect(cards.concentration.summary).toContain('₱13,440');
+    expect(cards.concentration.summary).toContain(mix.productNotice);
+    expect(cards.service.summary).toBe(mix.serviceNotice);
+    expect(isValidCardInsights(cards)).toBe(true);
+  });
+  it('supplies the same historical interpretation to question and card models', async () => {
+    const client = createFakeClient(['Recorded item sales.', JSON.stringify(validInsights())]);
+    const options = {client:client.client, modelNames:['test-model']};
+    const data = {revenueConcentration:{salesMix:{itemSales:13440, knownProductRevenue:0,
+      products:[], percentOfEligible:0, productNotice:'Product breakdown unavailable',
+      serviceNotice:'Services were not tracked during this period.'}}};
+    await generateRevenueInsights('What products contributed?', data, options);
+    await generateCardInsights(data, options);
+    for (const config of client.configurations) {
+      expect(config.systemInstruction).toContain('Rank only salesMix.products');
+      expect(config.systemInstruction).toContain('never infer zero service sales');
+    }
+    expect(await generateRevenueChartType('Rank products')).toBe('top_products');
+  });
   it('returns validated JSON insights for every revenue card', async () => {
     const fake = createFakeClient([JSON.stringify(validInsights())]);
 
@@ -144,17 +167,19 @@ describe('AI revenue insight generation', () => {
     expect(answer).toContain('**Possible outcome**');
   });
 
-  it('accepts only whitelisted chart types and maps none or invalid output to no chart', async () => {
-    const trend = createFakeClient(['quarterly_trend']);
-    const invalid = createFakeClient(['category_share with 100 values']);
-    const none = createFakeClient(['none']);
-    const options = { modelNames: ['primary-test'] };
-
-    await expect(generateRevenueChartType('Show a trend.', { ...options, client: trend.client }))
-      .resolves.toBe('quarterly_trend');
-    await expect(generateRevenueChartType('Explain a risk.', { ...options, client: invalid.client }))
-      .resolves.toBeNull();
-    await expect(generateRevenueChartType('Explain a risk.', { ...options, client: none.client }))
-      .resolves.toBeNull();
+  it('selects optional charts locally without spending provider calls', async () => {
+    const fake = createFakeClient(['must not be called']);
+    const options = { client: fake.client, modelNames: ['primary-test'] };
+    for (const [question, expected] of [
+      ['Show a trend.', 'quarterly_trend'],
+      ['Compare quarters.', 'quarter_comparison'],
+      ['Show category shares.', 'category_share'],
+      ['Rank contributors.', 'top_contributors'],
+      ['Explain concentration risks and recommendations.', null],
+      ['Show something unspecified.', null]
+    ]) {
+      await expect(generateRevenueChartType(question, options)).resolves.toBe(expected);
+    }
+    expect(fake.configurations).toHaveLength(0);
   });
 });

@@ -31,7 +31,7 @@ export function CustomerPrototypeProvider({ children }) {
 
   const addCartItem = (item) => {
     const key = item.kind === 'service'
-      ? `${item.id}:${item.bookingDate}:${item.startTime}`
+      ? item.requestKey || `${item.id}:${item.bookingDate}:${item.startTime}`
       : item.variantId ? `${item.id}:${item.variantId}` : item.id;
     setState((current) => {
       const existing = current.cart.find((entry) => entry.key === key);

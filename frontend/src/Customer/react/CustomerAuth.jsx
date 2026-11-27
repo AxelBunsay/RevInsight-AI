@@ -21,6 +21,7 @@ import {
   validateCustomerUsername
 } from '../../../../shared/customerUsername.mjs';
 import PasswordInput from '../../components/PasswordInput';
+import CustomerPasswordRecovery from './CustomerPasswordRecovery';
 import '../styles/auth.css';
 
 export function CustomerLogin() {
@@ -34,6 +35,7 @@ export function CustomerLogin() {
   }));
   const [rememberMe, setRememberMe] = useState(DEFAULT_REMEMBER_ME);
   const [loginStep, setLoginStep] = useState('credentials');
+  const [resetMessage, setResetMessage] = useState('');
   const [loginOtp, setLoginOtp] = useState('');
   const [resendCooldown, setResendCooldown] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -131,18 +133,35 @@ export function CustomerLogin() {
     setError('');
   };
 
+  const recoveryParams = new URLSearchParams(searchParams);
+  recoveryParams.set('recover', '1');
+  if (searchParams.get('recover') === '1') {
+    const returnParams = new URLSearchParams(searchParams);
+    returnParams.delete('recover');
+    const returnTo = { pathname: '/customer/login', search: returnParams.toString() };
+    return <CustomerPasswordRecovery returnTo={returnTo} onComplete={(message) => {
+      setCredentials(previous => ({ ...previous, password: '' }));
+      goBackToCredentials();
+      setResetMessage(message);
+      navigate(returnTo, { replace: true, state: location.state });
+    }} />;
+  }
   return <>
     <div className="customer-auth-heading">
       <h2>{loginStep === 'otp' ? 'Check your email' : 'Welcome back!'}</h2>
       <p>{loginStep === 'otp' ? 'Enter the 6-digit code we sent to your email.' : 'Sign in to your customer account'}</p>
     </div>
     {signInMessage && <p className="customer-auth-action-message" role="status">{signInMessage}</p>}
+    {resetMessage && <p role="status">{resetMessage}</p>}
     {loginStep === 'credentials' ? (
       <form className="customer-auth-form" onSubmit={submitLogin}>
         {error && <p className="customer-error" role="alert">{error}</p>}
         <label>Username or email<input type="text" required autoComplete="username" placeholder="Username or email" value={credentials.identifier} onChange={(event) => setCredentials({ ...credentials, identifier: event.target.value })} /></label>
         <label>Password<PasswordInput required placeholder="********" value={credentials.password} onChange={(event) => setCredentials({ ...credentials, password: event.target.value })} /></label>
-        <label className="customer-auth-remember"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
+        <div className="customer-login-options">
+          <label className="customer-auth-remember"><input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} /><span>Remember me</span></label>
+          <Link to={{ search: recoveryParams.toString() }} state={location.state}>Forgot password?</Link>
+        </div>
         <button type="submit" disabled={isSubmitting}>{isSubmitting && <span className="customer-auth-spinner" aria-hidden="true" />}{isSubmitting ? 'Signing in...' : 'Sign In'}</button>
       </form>
     ) : (

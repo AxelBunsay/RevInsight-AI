@@ -1,3 +1,7 @@
+const { getQuarterReview } = require('../../services/revenueReviewService');
+const { applyQuarterReviewCoverage } = require('../../utils/revenueReviewCoverage');
+const { auditSnapshot, recordAuditChange } = require('../../utils/adminAudit');
+const { buildScopedRevenue } = require('../../utils/revenueScope');
 const Order = require('../../models/orderingModels/order');
 const mongoose = require('mongoose');
 const Product = require('../../models/product');
@@ -29,6 +33,7 @@ const {
   getManilaDateParts
 } = require('../../utils/revenue');
 const { buildServiceRevenueReport } = require('../../utils/serviceRevenue');
+const { summarizeSalesMix } = require('../../utils/historicalMerchandise');
 const { normalizeServiceCategory } = require('../../utils/serviceCategories');
 const { getAvailableStock, isLowStock } = require('../../utils/inventory');
 const { evaluateLowStockAlert } = require('../../utils/lowStockAlerts');
@@ -61,6 +66,18 @@ const getRevenueChartEntries = async (_req, res) => {
   }
 };
 
+const getScopedRevenue = async (req, res) => {
+  try {
+    const data = buildScopedRevenue(await loadRevenueEntries(), req.query);
+    if (data.scope.mode === 'selectedQuarter') {
+      applyQuarterReviewCoverage(data, await getQuarterReview(req.query.selectedQuarter));
+    }
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({ success: false, message: error.statusCode === 400 ? error.message : 'Failed to load scoped revenue.' });
+  }
+};
+
 const getRevenueConcentration = async (req, res) => {
   try {
     const [entries, quarters] = await Promise.all([
@@ -69,7 +86,9 @@ const getRevenueConcentration = async (req, res) => {
     ]);
     const data = calculateRevenueRisk(entries, quarters);
     const topOneShare = data.indicators.topContributorShare.value || 0;
-    const topThreeShare = data.contributors.slice(0, 3).reduce((sum, item) => sum + item.share, 0);
+    const analyzedRevenue = data.totalRevenue - data.uncategorized.revenue;
+    const topThreeShare = analyzedRevenue
+      ? Number((data.contributors.slice(0, 3).reduce((sum, item) => sum + item.revenue, 0) / analyzedRevenue * 100).toFixed(2)) : 0;
     const hhi = data.indicators.concentrationHhi.value || 0;
     const concentrationLevel = data.completedQuarterCount < REVENUE_RISK_THRESHOLDS.minimumCompletedQuarters
       ? 'Not enough data'
@@ -82,6 +101,7 @@ const getRevenueConcentration = async (req, res) => {
       success: true,
       data: {
         totalRevenue: data.totalRevenue,
+        salesMix: summarizeSalesMix(entries, data.totalRevenue),
         analyzedRevenue: data.totalRevenue - data.uncategorized.revenue,
         uncategorized: data.uncategorized,
         contributors: data.contributors,
@@ -650,49 +670,52 @@ const getTransactionById = async (req, res) => {
 
 // Update Transaction
 const updateTransaction = async (req, res) => {
+  let session;
   try {
     const allowedStatuses = ['pending', 'completed', 'cancelled', 'Paid'];
     const status = req.body?.status;
     if (typeof status !== 'string' || !allowedStatuses.includes(status)) {
       return res.status(400).json({ success: false, message: 'A valid transaction status is required.' });
     }
-    const transaction = await Order.findOneAndUpdate(
-      { _id: req.params.id, code: { $exists: false } },
-      { $set: { status } },
-      { new: true, runValidators: true }
-    );
-
-    if (!transaction) {
-      return res.status(404).json({ success: false, message: 'Transaction not found' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Transaction updated successfully',
-      data: transaction
+    session = await mongoose.startSession();
+    let transaction;
+    await session.withTransaction(async () => {
+      transaction = await Order.findOne({ _id: req.params.id, code: { $exists: false } }).session(session);
+      if (!transaction) throw Object.assign(new Error('Transaction not found'), { status: 404 });
+      if (transaction.status === status) return;
+      const before = auditSnapshot(transaction);
+      transaction.status = status;
+      await transaction.save({ session });
+      await recordAuditChange({ req, session, recordType: 'order', before, after: transaction,
+        action: ['completed', 'Paid'].includes(before.status) ? 'completed_sale_corrected' : status === 'cancelled' ? 'sale_cancelled' : 'sale_status_changed' });
     });
+    res.json({ success: true, message: 'Transaction updated successfully', data: transaction });
   } catch (error) {
-    console.error('[updateTransaction] error', error);
-    res.status(500).json({ success: false, message: 'Failed to update transaction. Please try again.' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to update transaction. Please try again.' });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
 // Delete Transaction
 const deleteTransaction = async (req, res) => {
+  let session;
   try {
-    const transaction = await Order.findOneAndDelete({ _id: req.params.id, code: { $exists: false } });
-
-    if (!transaction) {
-      return res.status(404).json({ success: false, message: 'Transaction not found' });
-    }
-
-    res.json({
-      success: true,
-      message: 'Transaction deleted successfully'
+    session = await mongoose.startSession();
+    await session.withTransaction(async () => {
+      const transaction = await Order.findOne({ _id: req.params.id, code: { $exists: false } }).session(session);
+      if (!transaction) throw Object.assign(new Error('Transaction not found'), { status: 404 });
+      const before = auditSnapshot(transaction);
+      await Order.deleteOne({ _id: transaction._id, code: { $exists: false } }, { session });
+      await recordAuditChange({ req, session, recordType: 'order', before,
+        after: { ...before, _id: transaction._id, status: 'deleted' },
+        action: ['completed', 'Paid'].includes(before.status) ? 'completed_sale_deleted' : 'sale_deleted' });
     });
+    res.json({ success: true, message: 'Transaction deleted successfully' });
   } catch (error) {
-    console.error('[deleteTransaction] error', error);
-    res.status(500).json({ success: false, message: 'Failed to delete transaction. Please try again.' });
+    res.status(error.status || 500).json({ success: false, message: error.status ? error.message : 'Failed to delete transaction. Please try again.' });
+  } finally {
+    if (session) await session.endSession();
   }
 };
 
@@ -1048,6 +1071,7 @@ module.exports = {
   getDailyData,
   getRevenueRisk,
   getRevenueConcentration,
+  getScopedRevenue,
   getProjectedRevenue,
   getBusinessRecords,
   getAllTransactions,

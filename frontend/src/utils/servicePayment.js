@@ -12,6 +12,10 @@ export function calculateServicePayment(total, percent) {
 
 export function getServicePaymentSummary(booking = {}) {
   const totalAmount = Number(booking.totalAmount ?? booking.estimatedPrice ?? 0);
+  if (booking.walkInId) {
+    const amountPaid = Number(booking.amountPaid || 0);
+    return { totalAmount, amountPaid, balanceDue: Math.max(0, totalAmount - amountPaid) };
+  }
   const hasSnapshot = booking.downPaymentAmount !== undefined
     && booking.downPaymentAmount !== null
     && booking.balanceDue !== undefined
@@ -36,6 +40,15 @@ export function getServicePaymentSummary(booking = {}) {
 }
 
 export function getServiceBookingStatus(booking = {}) {
+  if (booking.status === 'in-progress') return 'In progress';
+  if (booking.queueKey && !['completed','cancelled','declined'].includes(booking.status) && booking.quoteCheckout !== 'awaiting' && booking.paymentStatus === 'Payment Pending' && booking.paymentMethod === 'Cash') return 'Pending cash payment';
+  if ((booking.walkInId || booking.queueKey) && !booking.quoteStatus && ['pending','accepted','assigned','confirmed'].includes(booking.status)) return 'Waiting';
+  if (booking.quoteStatus === 'accepted') {
+    if (['cancelled','completed','declined'].includes(booking.status)) return booking.status[0].toUpperCase()+booking.status.slice(1);
+    if (booking.status === 'in-progress') return 'In progress';
+    if (booking.quoteCheckout === 'awaiting') return 'Awaiting checkout';
+    if (booking.status === 'confirmed') return 'Confirmed';
+  }
   const quoteStatuses = {
     quote_requested: 'Awaiting quote',
     quoted: 'Quote ready',

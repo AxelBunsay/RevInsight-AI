@@ -1,4 +1,5 @@
 const User = require('../../models/user');
+const { validCustomerPassword } = require('../../utils/customerPassword');
 const PendingUser = require('../../models/pendingUser');
 const Reservation = require('../../models/orderingModels/reservation');
 const ServiceRequest = require('../../models/serviceRequest');
@@ -182,7 +183,7 @@ const maskEmail = (email) => {
 };
 
 const customerLoginResponse = (user, rememberMe) => {
-  const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET, {
+  const token = jwt.sign({ userId: user._id, role: user.role, sessionVersion: user.sessionVersion || 0 }, process.env.JWT_SECRET, {
     expiresIn: rememberMe === true ? '30d' : '1d'
   });
   return {
@@ -360,7 +361,8 @@ const verifyOtp = async (req, res) => {
     const token = jwt.sign(
       {
         userId: user._id,
-        role: user.role
+        role: user.role,
+        sessionVersion: user.sessionVersion || 0
       },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
@@ -497,6 +499,7 @@ const login = async (req, res) => {
     if (user.twoFactorEnabled === true) {
       const code = createLoginCode();
       user.loginChallenge = {
+        sessionVersion: user.sessionVersion || 0,
         codeHash: hashLoginCode(code),
         expiresAt: loginChallengeExpiry(),
         attempts: 0,
@@ -535,7 +538,8 @@ const verifyLoginOtp = async (req, res) => {
     }
 
     const user = await resolveUserByIdentifier(identifier);
-    if (!user || user.isDeleted || user.isActive === false || !user.twoFactorEnabled || !user.loginChallenge) {
+    if (!user || user.isDeleted || user.isActive === false || !user.twoFactorEnabled || !user.loginChallenge
+      || (user.loginChallenge.sessionVersion ?? 0) !== (user.sessionVersion ?? 0)) {
       return res.status(401).json({ message: 'No active login code was found. Sign in again to request a new code.' });
     }
     if (user.loginChallenge.attempts >= 5) {
@@ -578,6 +582,9 @@ const resendLoginOtp = async (req, res) => {
     }
 
     const lastSentAt = user.loginChallenge?.lastSentAt;
+    if (!user.loginChallenge || (user.loginChallenge.sessionVersion ?? 0) !== (user.sessionVersion ?? 0)) {
+      return res.status(401).json({ message: 'Sign in again to request a new login code.' });
+    }
     if (lastSentAt && Date.now() - lastSentAt.getTime() < LOGIN_OTP_RESEND_COOLDOWN_MS) {
       const secondsRemaining = Math.ceil((LOGIN_OTP_RESEND_COOLDOWN_MS - (Date.now() - lastSentAt.getTime())) / 1000);
       return res.status(429).json({
@@ -590,6 +597,7 @@ const resendLoginOtp = async (req, res) => {
     const rememberMe = user.loginChallenge?.rememberMe === true;
     const previousLoginChallenge = user.loginChallenge?.toObject?.() || user.loginChallenge;
     user.loginChallenge = {
+      sessionVersion: user.sessionVersion || 0,
       codeHash: hashLoginCode(code),
       expiresAt: loginChallengeExpiry(),
       attempts: 0,
@@ -760,7 +768,7 @@ const changePassword = async (req, res) => {
     ) {
       return res.status(400).json({ message: 'Current password, new password, and confirmation are required.' });
     }
-    if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+    if (!validCustomerPassword(newPassword)) {
       return res.status(400).json({ message: 'New password must be at least 8 characters and include a letter and a number.' });
     }
     if (newPassword !== confirmPassword) {

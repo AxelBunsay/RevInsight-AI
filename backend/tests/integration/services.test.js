@@ -60,8 +60,7 @@ let adminToken;
 function booking(serviceId, { date = serviceDate, startTime = '10:00', ...overrides } = {}) {
   return {
     serviceId: String(serviceId),
-    date,
-    startTime,
+    requestKey: crypto.randomUUID(),
     vehicle: 'Integration motorcycle',
     partsSource: 'shop',
     notes: 'Integration booking',
@@ -253,7 +252,7 @@ describe('service booking business flow integration', () => {
     expect(await ServiceRequest.countDocuments()).toBe(0);
   });
 
-  it('allows a booking for a busy mechanic', async () => {
+  it('rejects a queue request assigned to a busy mechanic', async () => {
     await Mechanic.updateOne(
       { _id: fixtures.mechanic._id },
       { $set: { availabilityStatus: 'busy' } }
@@ -264,9 +263,8 @@ describe('service booking business flow integration', () => {
     ]);
 
     expect(response.status).toBe(200);
-    expect(response.body.results[0].ok).toBe(true);
-    expect(String(response.body.results[0].serviceRequest.mechanic)).toBe(String(fixtures.mechanic._id));
-    expect(String(response.body.results[0].serviceRequest.mechanicId)).toBe(String(fixtures.mechanic._id));
+    expect(response.body.results[0]).toMatchObject({ ok: false, status: 409 });
+    expect(await ServiceRequest.countDocuments()).toBe(0);
   });
 
   it('returns only safe mechanic fields, ordered by availability, and treats missing status as available', async () => {
@@ -678,7 +676,7 @@ describe('service booking business flow integration', () => {
         estimatedPrice: 200,
         laborFee: 50,
         durationMinutes: 60,
-        endTime: '11:00'
+        endTime: null
       });
       expect(second).toMatchObject({
         units: 2,
@@ -690,7 +688,7 @@ describe('service booking business flow integration', () => {
         estimatedPrice: 400,
         laborFee: 100,
         durationMinutes: 120,
-        endTime: '14:00'
+        endTime: null
       });
   });
 
@@ -742,11 +740,11 @@ describe('service booking business flow integration', () => {
       mechanicFeeTotal: 90,
       estimatedPrice: 390,
       durationMinutes: 45,
-      endTime: '10:45'
+      endTime: null
     });
   });
 
-  it('uses scaled duration for slot availability and prevents overlapping capacity bookings', async () => {
+  it('retains historical slot estimates while new requests enter the queue', async () => {
       const service = await Service.create({
         name: 'Long Wheel Service',
         price: 150,
@@ -771,10 +769,10 @@ describe('service booking business flow integration', () => {
       ]);
 
       expect(first.body.results[0].ok).toBe(true);
-      expect(overlapping.body.results[0]).toMatchObject({ ok: false, status: 409 });
+      expect(overlapping.body.results[0]).toMatchObject({ ok: true, serviceRequest: { scheduledDate: null, startTime: null } });
   });
 
-  it('rejects a second booking when the selected slot is at capacity', async () => {
+  it('holds separate queue positions for two customers', async () => {
     const first = await createBookings(customerToken, [booking(fixtures.service._id)]);
     expect(first.body.results[0].ok).toBe(true);
 
@@ -782,13 +780,11 @@ describe('service booking business flow integration', () => {
 
     expect(second.status).toBe(200);
     expect(second.body.results[0]).toMatchObject({
-      ok: false,
-      status: 409,
-      message: 'That time was just booked. Please choose another.'
+      ok: true, serviceRequest: { scheduledDate: null }
     });
   });
 
-  it('creates a single booking on a free slot', async () => {
+  it('creates a single unscheduled queue request', async () => {
     const response = await createBookings(customerToken, [booking(fixtures.service._id)]);
 
     expect(response.status).toBe(200);
@@ -797,7 +793,7 @@ describe('service booking business flow integration', () => {
     expect(await ServiceRequest.countDocuments({
       user: fixtures.customer._id,
       serviceId: fixtures.service._id,
-      startTime: '10:00'
+      startTime: null
     })).toBe(1);
   });
 
@@ -845,8 +841,7 @@ describe('service booking business flow integration', () => {
       recordId: response.body.results[0].serviceRequest._id
     }).lean();
     expect(notification.message).toContain(fixtures.service.name);
-    expect(notification.message).toContain(serviceDate);
-    expect(notification.message).toContain('10:00 AM');
+    expect(notification.message).toContain('Service queue');
     expect(notification.message).toContain(`${fixtures.customer.firstName} ${fixtures.customer.lastName}`);
     expect(notification.message).toContain(`Labor-only: ${laborOnly}`);
   });
@@ -862,23 +857,11 @@ describe('service booking business flow integration', () => {
     expect(await ServiceRequest.exists({ _id: response.body.results[0].serviceRequest._id })).not.toBeNull();
   });
 
-  it('rejects a closed day and a time that has already passed', async () => {
-    const closedDay = await createBookings(customerToken, [
-      booking(fixtures.service._id, { date: nextSundayDate(), startTime: '10:00' })
-    ]);
-    const settings = await ReservationSettings.getDefaults();
-    settings.openDays = [...settings.openDays, 'Sun'];
-    settings.openTime = '00:00';
-    settings.closeTime = '23:00';
-    await settings.save();
-    const pastTime = await createBookings(secondCustomerToken, [
-      booking(fixtures.service._id, { date: dateOffset(0), startTime: '00:00' })
-    ]);
-
-    expect(closedDay.body.results[0]).toMatchObject({ ok: false, status: 400 });
-    expect(closedDay.body.results[0].message).toContain('closed');
-    expect(pastTime.body.results[0]).toMatchObject({ ok: false, status: 400 });
-    expect(pastTime.body.results[0].message).toContain('available booking time');
+  it('rejects old appointment submissions with an instruction to refresh', async () => {
+    const response = await createBookings(customerToken, [{ ...booking(fixtures.service._id), date: serviceDate, startTime: '10:00' }]);
+    expect(response.body.results[0]).toMatchObject({ ok: false, status: 400 });
+    expect(response.body.results[0].message).toContain('service queue');
+    expect(await ServiceRequest.countDocuments()).toBe(0);
   });
 
   it('does not allow an unpaid booking to start or complete', async () => {
@@ -1059,7 +1042,7 @@ describe('service booking business flow integration', () => {
     expect(await BusinessRecord.countDocuments({ recordType: 'service', sourceId: requestId })).toBe(0);
   });
 
-  it('expires an unpaid booking and makes its slot available again', async () => {
+  it('expires an unpaid request and accepts a new queue request', async () => {
     const created = await createBookings(customerToken, [booking(fixtures.service._id)]);
     const requestId = created.body.results[0].serviceRequest._id;
     await ServiceRequest.updateOne(

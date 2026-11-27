@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const mongoose = require('mongoose');
 const ServiceRequest = require('../models/serviceRequest');
 const ReservationSettings = require('../models/reservationSettings');
+const AdminAudit = require('../models/adminAudit');
 const BusinessRecord = require('../models/businessRecord');
 const serviceRequests = require('../controllers/serviceRequestController');
 const { ensureCustomerUnpaidBookingLimit } = require('../controllers/customerServiceController');
@@ -13,6 +14,7 @@ const requestId = '507f1f77bcf86cd799439011';
 const mechanicId = '507f1f77bcf86cd799439012';
 
 const mockSession = () => ({
+  inTransaction: () => true,
   withTransaction: async (callback) => callback(),
   endSession: vi.fn().mockResolvedValue(undefined)
 });
@@ -83,6 +85,7 @@ describe('service booking hardening', () => {
     };
     vi.spyOn(mongoose, 'startSession').mockResolvedValue(session);
     vi.spyOn(ServiceRequest, 'findById').mockReturnValue({ session: async () => booking });
+    const audit = vi.spyOn(AdminAudit, 'create').mockResolvedValue([]);
     const deleteRecord = vi.spyOn(BusinessRecord, 'deleteOne').mockResolvedValue({ deletedCount: 1 });
     const response = makeResponse();
 
@@ -92,6 +95,7 @@ describe('service booking hardening', () => {
     }, response);
 
     expect(booking.status).toBe('cancelled');
+    expect(audit).toHaveBeenCalledWith([expect.objectContaining({actorRole:'admin',changes:expect.objectContaining({status:{from:'accepted',to:'cancelled'}})})],{session});
     expect(deleteRecord).toHaveBeenCalledWith(
       { recordType: 'service', sourceId: requestId },
       { session }

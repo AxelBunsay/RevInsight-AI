@@ -1,13 +1,16 @@
+import AdminAuditHistory from "../components/AdminAuditHistory";
 import { useEffect, useState } from "react";
 import { adminApi as api } from "../services/adminApi";
 import { AdminDialog, AdminPageFrame } from "./ManagementPageComponents";
 
 function ServiceRequests() {
+  const [queueView, setQueueView] = useState('waiting');
   const [requests, setRequests] = useState([]);
   const [mechanics, setMechanics] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [savingId, setSavingId] = useState("");
+  const [historyRequestId, setHistoryRequestId] = useState(null);
   const [transitionDraft, setTransitionDraft] = useState(null);
   const [transitionReason, setTransitionReason] = useState("");
   const [transitionRefund, setTransitionRefund] = useState("");
@@ -15,7 +18,7 @@ function ServiceRequests() {
   const loadRequests = () =>
     Promise.all([api.getAdminServiceRequests(), api.getMechanics()]).then(
       ([requestResponse, mechanicResponse]) => {
-        setRequests(requestResponse.requests || []);
+        setRequests((requestResponse.requests || []).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)));
         setMechanics(
           (mechanicResponse.mechanics || mechanicResponse.data || []).filter(
             (mechanic) => mechanic.isActive !== false,
@@ -78,7 +81,8 @@ function ServiceRequests() {
     setSavingId(request._id);
     setError("");
     try {
-      await api.markServicePaidAtShop(request._id);
+      if (request.queueKey && request.paymentMethod === 'Cash') await api.collectServiceDeposit(request._id);
+      else await api.markServicePaidAtShop(request._id);
       await loadRequests();
     } catch (saveError) {
       setError(saveError.message || "Failed to update booking payment");
@@ -86,6 +90,12 @@ function ServiceRequests() {
       setSavingId("");
     }
   };
+
+  const statusGroups = {
+    waiting: ['pending','assigned','accepted','confirmed'],
+    'in-progress': ['in-progress'], completed: ['completed'], cancelled: ['declined','cancelled']
+  };
+  const visibleRequests = requests.filter(request => statusGroups[queueView].includes(request.status));
 
   return (
     <AdminPageFrame>
@@ -97,14 +107,15 @@ function ServiceRequests() {
             </p>
           )}
           <div className="mechanics-header">
-            <h2>Service requests</h2>
+            <h2>Service queue</h2>
+            <label>Show requests <select value={queueView} onChange={e => setQueueView(e.target.value)}><option value="waiting">Waiting</option><option value="in-progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Canceled</option></select></label>
           </div>
           {isLoading ? (
             <p>Loading service requests...</p>
-          ) : !requests.length ? (
+          ) : !visibleRequests.length ? (
             <p>No service requests found.</p>
           ) : (
-            requests.map((request) => (
+            visibleRequests.map((request) => (
               <article className="mechanic-card" key={request._id}>
                 <div className="mechanic-header-row">
                   <div>
@@ -114,27 +125,29 @@ function ServiceRequests() {
                     <div className="mechanic-email">
                       {request.user
                         ? `${request.user.firstName || ""} ${request.user.lastName || ""}`.trim()
-                        : "Customer"}
+                        : request.walkInId ? "Walk-in Guest" : "Customer"}
                     </div>
                     <p>{request.description}</p>
                     <small>
                       {request.scheduledDate
                         ? `Scheduled ${new Date(request.scheduledDate).toLocaleDateString("en-PH")}`
-                        : "No date selected"}{" "}
+                        : "Service queue"}{" "}
                       · Customer price: ₱
                       {Number(request.estimatedPrice || 0).toLocaleString(
                         "en-PH",
                       )}{" "}
                       · Labor fee: ₱{Number(request.laborFee || 0).toLocaleString("en-PH", {
                         minimumFractionDigits: 2,
-                      })} · Payment: {request.paymentStatus || "Payment Pending"}
+                      })} · Payment: {request.paymentMethod === 'Cash' && request.paymentStatus === 'Payment Pending' ? 'Pending cash payment' : request.paymentStatus || 'Payment Pending'}
+                      {request.queueKey && request.paymentStatus === 'Payment Pending' && request.paymentDueAt && ' - due ' + new Date(request.paymentDueAt).toLocaleString('en-PH')}
                     </small>
                     {request.refundDecision && <small>Refund decision: {request.refundDecision}</small>}
                   </div>
                   <span className={`status-badge status-${request.status}`}>
-                    {request.status.replaceAll("-", " ")}
+                    {request.status === 'pending' ? 'Waiting' : request.status.replaceAll("-", " ")}
                   </span>
                 </div>
+                <button type="button" className="btn-small" onClick={() => setHistoryRequestId(request._id)}>View change history</button>
                 <div className="mechanic-actions">
                   <select
                     aria-label={`Assign mechanic for ${request.serviceType}`}
@@ -149,8 +162,9 @@ function ServiceRequests() {
                       <option
                         key={mechanic.id || mechanic._id}
                         value={mechanic.id || mechanic._id}
+                        disabled={['busy','on-leave'].includes(mechanic.availabilityStatus)}
                       >
-                        {mechanic.firstName} {mechanic.lastName}{mechanic.username ? ` (@${mechanic.username})` : ""}
+                        {mechanic.firstName} {mechanic.lastName} ? {({ busy: "Busy", "on-leave": "On leave" })[mechanic.availabilityStatus] || "Available"}{mechanic.username ? ` (@${mechanic.username})` : ""}
                       </option>
                     ))}
                   </select>
@@ -171,7 +185,7 @@ function ServiceRequests() {
                     <option value="declined">Declined</option>
                     <option value="cancelled">Cancelled</option>
                   </select>
-                  {request.paymentStatus === "Payment Pending"
+                  {!request.walkInId && (!request.queueKey || request.paymentMethod === "Cash") && request.paymentStatus === "Payment Pending"
                     && !["completed", "declined", "cancelled"].includes(request.status)
                     && (
                       <button
@@ -180,7 +194,7 @@ function ServiceRequests() {
                         disabled={savingId === request._id}
                         onClick={() => markPaidAtShop(request)}
                       >
-                        Mark paid at shop
+                        {request.queueKey && request.paymentMethod === 'Cash' ? 'Record cash deposit received ? PHP ' + request.downPaymentAmount : 'Mark paid at shop'}
                       </button>
                     )}
                 </div>
@@ -189,6 +203,9 @@ function ServiceRequests() {
           )}
         </div>
       </section>
+      {historyRequestId && <AdminDialog title="Service change history" onClose={() => setHistoryRequestId(null)}>
+        <AdminAuditHistory key={historyRequestId} recordType="service" recordId={historyRequestId} />
+      </AdminDialog>}
       {transitionDraft && (
         <AdminDialog
           title={transitionDraft.status === "declined" ? "Decline service booking" : "Cancel service booking"}

@@ -1,4 +1,4 @@
-export const ADMIN_DRAWER_BREAKPOINT = 1024;
+export const ADMIN_DRAWER_BREAKPOINT = 1100;
 export const ADMIN_DRAWER_MEDIA_QUERY = `(max-width: ${ADMIN_DRAWER_BREAKPOINT}px)`;
 
 export function lockDocumentScroll(documentRef) {
