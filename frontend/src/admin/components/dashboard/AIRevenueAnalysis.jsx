@@ -828,7 +828,7 @@ function AIRevenueAnalysis({ dashboardData }) {
   return <>
   <section className="ai-revenue-analysis" aria-labelledby="ai-revenue-title">
     <div className="ai-revenue-analysis__header">
-      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Concentration: {scopeLabel}; trend and forecast: all-records history</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
+      <div className="ai-revenue-analysis__title"><span className="ai-revenue-analysis__mark">✦</span><div><h2 id="ai-revenue-title">Revenue Analysis</h2><p>Revenue trends, concentration risk, and forecasts</p>{dataUpdatedAt && <small className="ai-revenue-analysis__updated">Updated {dataUpdatedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</small>}{refreshError && <small className="ai-revenue-analysis__refresh-error" role="status">Could not refresh</small>}</div></div>
       <div className="ai-revenue-toolbar">
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => setSettingsOpen(true)}>ⓘ Risk thresholds</button>
         <button type="button" className="ai-revenue-toolbar__action" onClick={() => { setReportCardPage(1); setReportOpen(true); }}>⬇ Export report</button>
@@ -855,9 +855,12 @@ function AIRevenueAnalysis({ dashboardData }) {
         {overallRisk.level === 'Not enough data' ? 'Unrated' : overallRisk.level}
       </span>
       <p className="ai-revenue-overall-risk__why">{overallRiskWhy}</p>
-      <ContributorList concentration={analysis.concentration} />
+      <ContributorList key={revenueScope + ':' + selectedQuarterKey} concentration={analysis.concentration} />
       {contributorCoverage && <p className="ai-revenue-overall-risk__why">By known contributor · {contributorCoverage}</p>}
-      <ProductRevenueSummary concentration={concentration} />
+      {concentration?.salesMix && <details className="ai-revenue-breakdown">
+        <summary>Product mix and data coverage</summary>
+        <ProductRevenueSummary concentration={concentration} />
+      </details>}
     </div>
 
     {analysis.quarters.length > 0 && (
@@ -910,11 +913,14 @@ function AIRevenueAnalysis({ dashboardData }) {
             </div>
           </>}
     {!isLoading && !loadError && analysis.quarters.length > 0 && <>
-            <div className="ai-revenue-collected-row">
-              <div><span>Collected · all records</span><strong>{peso.format(collectedAmount)}</strong></div>
-              <div><span>Outstanding · all records</span><strong>{peso.format(outstandingAmount)}</strong></div>
-              <div><span>Collection</span><strong>{collectedAmount + outstandingAmount ? Math.round(collectedAmount / (collectedAmount + outstandingAmount) * 100) : 0}%</strong></div>
-            </div>
+            <details className="ai-revenue-collection-details">
+              <summary>Collection status · all records</summary>
+              <div className="ai-revenue-collected-row">
+                <div><span>Collected · all records</span><strong>{peso.format(collectedAmount)}</strong></div>
+                <div><span>Outstanding · all records</span><strong>{peso.format(outstandingAmount)}</strong></div>
+                <div><span>Collection</span><strong>{collectedAmount + outstandingAmount ? Math.round(collectedAmount / (collectedAmount + outstandingAmount) * 100) : 0}%</strong></div>
+              </div>
+            </details>
             <div className="ai-revenue-insights-toolbar">
               <span role="status">
                 {cardSourceLabel}
